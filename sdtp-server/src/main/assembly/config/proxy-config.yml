@@ -1,5 +1,5 @@
 # ============================================================================
-# MySQL Proxy 配置文件
+# SDTP 配置文件
 # ============================================================================
 # 修改此文件后重启 Proxy:  ./bin/start.sh restart   或   bin\start.bat stop && bin\start.bat start
 # 也可通过环境变量指定其他配置文件:  export PROXY_CONFIG=/path/to/other-config.yml
@@ -23,15 +23,15 @@ target:
   # MySQL:       jdbc:mysql://主机:3306/数据库名
   # Oracle:      jdbc:oracle:thin:@主机:1521:SID
   # SQL Server:  jdbc:sqlserver://主机:1433;databaseName=数据库名
-  jdbc-url: jdbc:postgresql://localhost:5432/mydb
+  jdbc-url: jdbc:highgo://10.110.60.187:5866/highgo?useUnicode=true&characterEncoding=utf8&currentSchema=meta_data_center
 
   # 目标数据库账密
-  username: pg_user
-  password: pg_password
+  username: highgo
+  password: Highgo@12345
 
   # 连接池配置
-  max-pool-size: 20     # 最大连接数
-  min-idle: 2           # 最小空闲连接数
+  max-pool-size: 20 # 最大连接数
+  min-idle: 2 # 最小空闲连接数
 
 # ============================================================================
 # SQL 翻译配置（源 MySQL 方言 → 目标方言，仅当 dialect ≠ MYSQL 时生效）

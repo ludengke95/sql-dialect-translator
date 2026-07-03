@@ -172,13 +172,20 @@ public final class ResultSetEncoder {
         return buf;
     }
 
-    // ==================== EOF Builder ====================
-
+    /**
+     * 构造结果集结束包（OK_Packet，适配 CLIENT_DEPRECATE_EOF）。
+     * <p>MySQL 5.7+ 废弃了 EOF_Packet，改用 header=0xFE 的 OK_Packet。
+     * <pre>
+     *   0xFE | lenenc(affected_rows) | lenenc(last_insert_id) | status(2) | warnings(2)
+     * </pre>
+     */
     private static ByteBuf buildEof(ChannelHandlerContext ctx) {
-        ByteBuf buf = ctx.alloc().buffer(5);
-        buf.writeByte(0xFE); // EOF header
-        buf.writeShortLE(0); // warnings
-        buf.writeShortLE(ServerStatus.SERVER_STATUS_AUTOCOMMIT);
+        ByteBuf buf = ctx.alloc().buffer(16);
+        buf.writeByte(0xFE);                                    // OK header (EOF replacement)
+        BufferUtils.writeLengthEncodedInt(buf, 0);              // affected_rows = 0
+        BufferUtils.writeLengthEncodedInt(buf, 0);              // last_insert_id = 0
+        buf.writeShortLE(ServerStatus.SERVER_STATUS_AUTOCOMMIT);// status_flags
+        buf.writeShortLE(0);                                    // warnings = 0
         return buf;
     }
 
