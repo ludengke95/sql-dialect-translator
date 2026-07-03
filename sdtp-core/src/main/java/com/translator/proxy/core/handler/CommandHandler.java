@@ -163,64 +163,45 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
 
     private void writeInterceptedResult(ChannelHandlerContext ctx,
                                          SystemVariableInterceptor.InterceptResult ir) {
-        if (ir.twoColumns) {
-            writeTwoColumnResult(ctx, ir.colName1, ir.colName2, ir.value1, ir.value2);
-        } else {
-            writeOneColumnResult(ctx, ir.colName1, ir.value1);
-        }
-    }
+        int colCount = ir.twoColumns ? 2 : (ir.colName3 != null ? 3 : 1);
+        boolean isEmpty = ir.empty;
 
-    private void writeOneColumnResult(ChannelHandlerContext ctx, String colName, String value) {
-        // Column Count Packet (1列)
-        ByteBuf colCount = ctx.alloc().buffer(1);
-        colCount.writeByte(1);
-        ctx.write(new MySQLPacketEncoder.OutgoingPacket(colCount, (byte) 1));
+        // Column Count Packet
+        ByteBuf colCountBuf = ctx.alloc().buffer(2);
+        BufferUtils.writeLengthEncodedInt(colCountBuf, colCount);
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(colCountBuf, (byte) 1));
 
-        // Column Definition Packet
-        ByteBuf colDef = buildColumnDef(ctx.alloc(), "def", "", colName, colName,
-                255, 15, 33); // VARCHAR, charset utf8mb4
-        ctx.write(new MySQLPacketEncoder.OutgoingPacket(colDef, (byte) 2));
-
-        // EOF (column def end) — with CLIENT_DEPRECATE_EOF, send OK instead
-        // 为简单起见，发送 EOF
-        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx.alloc()), (byte) 3));
-
-        // Row Packet (1 行)
-        ByteBuf row = buildTextRow(ctx.alloc(), new String[]{value});
-        ctx.write(new MySQLPacketEncoder.OutgoingPacket(row, (byte) 4));
-
-        // Final EOF
-        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx.alloc()), (byte) 5));
-
-        ctx.flush();
-    }
-
-    private void writeTwoColumnResult(ChannelHandlerContext ctx,
-                                       String col1, String col2, String val1, String val2) {
-        // Column Count
-        ByteBuf colCount = ctx.alloc().buffer(1);
-        colCount.writeByte(2);
-        ctx.write(new MySQLPacketEncoder.OutgoingPacket(colCount, (byte) 1));
-
+        byte seq = 2;
         // Column Def 1
-        ByteBuf colDef1 = buildColumnDef(ctx.alloc(), "def", "", col1, col1,
-                255, 15, 33);
-        ctx.write(new MySQLPacketEncoder.OutgoingPacket(colDef1, (byte) 2));
-
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(
+                buildColumnDef(ctx.alloc(), "def", "", ir.colName1, ir.colName1, 255, 15, 33), seq++));
         // Column Def 2
-        ByteBuf colDef2 = buildColumnDef(ctx.alloc(), "def", "", col2, col2,
-                255, 15, 33);
-        ctx.write(new MySQLPacketEncoder.OutgoingPacket(colDef2, (byte) 3));
+        if (ir.twoColumns || ir.colName3 != null) {
+            ctx.write(new MySQLPacketEncoder.OutgoingPacket(
+                    buildColumnDef(ctx.alloc(), "def", "", ir.colName2, ir.colName2, 255, 15, 33), seq++));
+        }
+        // Column Def 3 (SHOW WARNINGS 三列)
+        if (ir.colName3 != null) {
+            ctx.write(new MySQLPacketEncoder.OutgoingPacket(
+                    buildColumnDef(ctx.alloc(), "def", "", ir.colName3, ir.colName3, 255, 15, 33), seq++));
+        }
 
-        // EOF
-        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx.alloc()), (byte) 4));
+        // EOF (after columns)
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx.alloc()), seq++));
 
-        // Row
-        ByteBuf row = buildTextRow(ctx.alloc(), new String[]{val1, val2});
-        ctx.write(new MySQLPacketEncoder.OutgoingPacket(row, (byte) 5));
+        // Row (skip if empty)
+        if (!isEmpty) {
+            if (ir.twoColumns) {
+                ByteBuf row = buildTextRow(ctx.alloc(), new String[]{ir.value1, ir.value2});
+                ctx.write(new MySQLPacketEncoder.OutgoingPacket(row, seq++));
+            } else {
+                ByteBuf row = buildTextRow(ctx.alloc(), new String[]{ir.value1});
+                ctx.write(new MySQLPacketEncoder.OutgoingPacket(row, seq++));
+            }
+        }
 
         // Final EOF
-        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx.alloc()), (byte) 6));
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx.alloc()), seq));
 
         ctx.flush();
     }
@@ -266,16 +247,11 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
         return buf;
     }
 
-    /**
-     * 构造结果集结束包（OK_Packet，适配 CLIENT_DEPRECATE_EOF）。
-     */
     static ByteBuf buildEof(ByteBufAllocator alloc) {
-        ByteBuf buf = alloc.buffer(16);
-        buf.writeByte(0xFE);                                    // OK header
-        BufferUtils.writeLengthEncodedInt(buf, 0);              // affected_rows = 0
-        BufferUtils.writeLengthEncodedInt(buf, 0);              // last_insert_id = 0
+        ByteBuf buf = alloc.buffer(5);
+        buf.writeByte(0xFE);                                    // EOF header
+        buf.writeShortLE(0);                                    // warnings
         buf.writeShortLE(ServerStatus.SERVER_STATUS_AUTOCOMMIT);// status_flags
-        buf.writeShortLE(0);                                    // warnings = 0
         return buf;
     }
 

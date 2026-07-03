@@ -49,41 +49,48 @@ public final class ResultSetEncoder {
         ResultSetMetaData meta = rs.getMetaData();
         int columnCount = meta.getColumnCount();
 
-        log.debug("Encoding ResultSet: {} columns", columnCount);
+        log.info("Encoding ResultSet: {} columns", columnCount);
 
         // 1. Column Count Packet [seq=1]
-        ByteBuf colCount = ctx.alloc().buffer(2);
+        ByteBuf colCount = ctx.alloc().buffer(9);
         BufferUtils.writeLengthEncodedInt(colCount, columnCount);
+        log.debug("ColumnCount packet: {} bytes (seq={})", colCount.readableBytes(), seqGen.peek());
         ctx.write(new MySQLPacketEncoder.OutgoingPacket(colCount, seqGen.next()));
 
-        // 2. Column Definition Packets [seq=2, 3, ...]
+        // 2. Column Definition Packets
         for (int i = 1; i <= columnCount; i++) {
             ByteBuf colDef = buildColumnDef(ctx, meta, i);
+            log.debug("ColDef[{}] packet: {} bytes (seq={})",
+                    meta.getColumnLabel(i), colDef.readableBytes(), seqGen.peek());
             ctx.write(new MySQLPacketEncoder.OutgoingPacket(colDef, seqGen.next()));
         }
 
-        // 3. EOF (column def end) [seq=N]
-        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx), seqGen.next()));
+        // 3. EOF after columns
+        ByteBuf eof1 = buildEof(ctx);
+        log.debug("EOF(after columns): {} bytes (seq={})", eof1.readableBytes(), seqGen.peek());
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(eof1, seqGen.next()));
 
-        // 4. Row Packets [seq=N+1, N+2, ...]
+        // 4. Row Packets
         int rowCount = 0;
         while (rs.next()) {
-            ByteBuf row = buildTextRow(ctx, rs, columnCount);
+            ByteBuf row = buildTextRow(ctx, rs, columnCount, meta);
+            if (rowCount == 0) {
+                log.debug("First row packet: {} bytes (seq={})", row.readableBytes(), seqGen.peek());
+            }
             ctx.write(new MySQLPacketEncoder.OutgoingPacket(row, seqGen.next()));
             rowCount++;
-
-            // 分批 flush，避免单次 flush 数据量太大
             if (rowCount % FLUSH_BATCH_SIZE == 0) {
                 ctx.flush();
             }
         }
 
-        log.debug("Encoded {} rows", rowCount);
+        log.info("Encoded {} rows", rowCount);
 
-        // 5. Final EOF/OK [seq=last]
-        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx), seqGen.next()));
+        // 5. Final EOF
+        ByteBuf eof2 = buildEof(ctx);
+        log.debug("EOF(after rows): {} bytes (seq={})", eof2.readableBytes(), seqGen.peek());
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(eof2, seqGen.next()));
 
-        // 最终 flush
         ctx.flush();
     }
 
@@ -152,16 +159,17 @@ public final class ResultSetEncoder {
     // ==================== Text Row Builder ====================
 
     private static ByteBuf buildTextRow(ChannelHandlerContext ctx,
-                                         ResultSet rs, int columnCount)
+                                         ResultSet rs, int columnCount,
+                                         ResultSetMetaData meta)
             throws SQLException {
         ByteBuf buf = ctx.alloc().buffer(256);
 
         for (int i = 1; i <= columnCount; i++) {
             String value = rs.getString(i);
+            boolean wasNull = rs.wasNull();
 
-            if (value == null) {
-                // NULL marker
-                buf.writeByte(0xFB);
+            if (wasNull || value == null) {
+                buf.writeByte(0xFB); // NULL marker
             } else {
                 byte[] bytes = value.getBytes(java.nio.charset.StandardCharsets.UTF_8);
                 BufferUtils.writeLengthEncodedInt(buf, bytes.length);
@@ -172,20 +180,11 @@ public final class ResultSetEncoder {
         return buf;
     }
 
-    /**
-     * 构造结果集结束包（OK_Packet，适配 CLIENT_DEPRECATE_EOF）。
-     * <p>MySQL 5.7+ 废弃了 EOF_Packet，改用 header=0xFE 的 OK_Packet。
-     * <pre>
-     *   0xFE | lenenc(affected_rows) | lenenc(last_insert_id) | status(2) | warnings(2)
-     * </pre>
-     */
     private static ByteBuf buildEof(ChannelHandlerContext ctx) {
-        ByteBuf buf = ctx.alloc().buffer(16);
-        buf.writeByte(0xFE);                                    // OK header (EOF replacement)
-        BufferUtils.writeLengthEncodedInt(buf, 0);              // affected_rows = 0
-        BufferUtils.writeLengthEncodedInt(buf, 0);              // last_insert_id = 0
+        ByteBuf buf = ctx.alloc().buffer(5);
+        buf.writeByte(0xFE);                                    // EOF header
+        buf.writeShortLE(0);                                    // warnings
         buf.writeShortLE(ServerStatus.SERVER_STATUS_AUTOCOMMIT);// status_flags
-        buf.writeShortLE(0);                                    // warnings = 0
         return buf;
     }
 
@@ -203,6 +202,11 @@ public final class ResultSetEncoder {
 
         public byte next() {
             return (byte) ((seq++) & 0xFF);
+        }
+
+        /** 查看下一个 seq 值（不递增），用于调试日志 */
+        public byte peek() {
+            return (byte) (seq & 0xFF);
         }
     }
 }

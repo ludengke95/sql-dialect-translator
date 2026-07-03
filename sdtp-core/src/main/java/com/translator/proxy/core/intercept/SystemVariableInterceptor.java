@@ -30,6 +30,11 @@ public final class SystemVariableInterceptor {
             "^\\s*SELECT\\s+DATABASE\\s*\\(\\s*\\)\\s*$",
             Pattern.CASE_INSENSITIVE);
 
+    /** SHOW WARNINGS — mysql CLI 常用，目标库可能不支持 */
+    private static final Pattern SHOW_WARNINGS = Pattern.compile(
+            "^\\s*SHOW\\s+WARNINGS\\s*$",
+            Pattern.CASE_INSENSITIVE);
+
     /** 预定义的系统变量值 */
     private static final Map<String, String> SYSTEM_VARIABLES = new LinkedHashMap<>();
 
@@ -99,6 +104,13 @@ public final class SystemVariableInterceptor {
             return new InterceptResult("DATABASE()", db);
         }
 
+        // SHOW WARNINGS — 返回空结果集（始终无警告）
+        m = SHOW_WARNINGS.matcher(trimmed);
+        if (m.find()) {
+            // 双列结果，但 0 行 —— 通过特殊标记返回空数据集
+            return InterceptResult.emptyTwoColumn("Level", "Code", "Message");
+        }
+
         return null;
     }
 
@@ -131,30 +143,48 @@ public final class SystemVariableInterceptor {
         /** 列名（单列模式）或 Variable_name（双列模式） */
         public final String colName1;
         /** 列值或 Variable_value（可能为 null） */
-        public final String colName2;
+        public String colName2;
+        /** 第三个列名（三列模式，如 SHOW WARNINGS） */
+        public String colName3;
         /** 值 */
         public final String value1;
         /** 第二个值（双列模式） */
         public final String value2;
         /** 是否为双列模式 */
-        public final boolean twoColumns;
+        public boolean twoColumns;
+        /** 是否无数据行（只返回列定义） */
+        public boolean empty;
 
         /** 单列结果（如 SELECT @@version） */
         InterceptResult(String colName, String value) {
             this.colName1 = colName;
             this.value1 = value;
             this.colName2 = null;
+            this.colName3 = null;
             this.value2 = null;
             this.twoColumns = false;
+            this.empty = false;
         }
 
         /** 双列结果（如 SHOW VARIABLES LIKE） */
         InterceptResult(String colName1, String colName2, String value1, String value2) {
             this.colName1 = colName1;
             this.colName2 = colName2;
+            this.colName3 = null;
             this.value1 = value1;
             this.value2 = value2;
             this.twoColumns = true;
+            this.empty = false;
+        }
+
+        /** 三列空结果（如 SHOW WARNINGS，有列名无数据行） */
+        static InterceptResult emptyTwoColumn(String col1, String col2, String col3) {
+            InterceptResult r = new InterceptResult(col1, null);
+            r.colName2 = col2;
+            r.colName3 = col3;
+            r.twoColumns = false;
+            r.empty = true;
+            return r;
         }
     }
 }

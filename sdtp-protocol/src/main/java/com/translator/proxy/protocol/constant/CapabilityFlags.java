@@ -48,6 +48,6 @@ public final class CapabilityFlags {
             | CLIENT_MULTI_RESULTS
             | CLIENT_PS_MULTI_RESULTS
             | CLIENT_PLUGIN_AUTH
-            | CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA
-            | CLIENT_DEPRECATE_EOF;
+            | CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA;
+            // 注意：不开启 CLIENT_DEPRECATE_EOF，使用传统 EOF 格式兼容所有客户端
 }
