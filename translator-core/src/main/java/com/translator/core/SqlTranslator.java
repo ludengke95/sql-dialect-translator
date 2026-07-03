@@ -1,0 +1,329 @@
+package com.translator.core;
+
+import com.translator.core.config.SqlDialectFactory;
+import com.translator.core.config.TranslationConfig;
+import com.translator.core.rewrite.SqlRewriteEngine;
+import org.apache.calcite.sql.SqlDialect;
+import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.parser.SqlParseException;
+import org.apache.calcite.sql.parser.SqlParser;
+import org.apache.calcite.sql.pretty.SqlPrettyWriter;
+import org.apache.calcite.sql.validate.SqlConformanceEnum;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * SQL 方言翻译器。
+ * 核心入口：解析源 SQL → AST 改写 → 生成目标方言 SQL。
+ */
+public class SqlTranslator {
+
+    private static final Logger log = LoggerFactory.getLogger(SqlTranslator.class);
+
+    private final DialectType sourceDialect;
+    private final DialectType targetDialect;
+    private final SqlDialect targetSqlDialect;
+    private final SqlRewriteEngine rewriteEngine;
+    private final TranslationConfig config;
+
+    /** 默认构造器，使用 {@link TranslationConfig#DEFAULT}。 */
+    public SqlTranslator(DialectType sourceDialect, DialectType targetDialect) {
+        this(sourceDialect, targetDialect, TranslationConfig.DEFAULT);
+    }
+
+    /**
+     * 创建 SQL 翻译器。
+     *
+     * @param sourceDialect 源方言类型
+     * @param targetDialect 目标方言类型
+     * @param config        翻译配置（大小写策略），null 时使用默认配置
+     */
+    public SqlTranslator(DialectType sourceDialect, DialectType targetDialect, TranslationConfig config) {
+        if (sourceDialect == null || targetDialect == null) {
+            throw new IllegalArgumentException("源方言和目标方言不能为 null");
+        }
+        this.sourceDialect = sourceDialect;
+        this.targetDialect = targetDialect;
+        this.targetSqlDialect = SqlDialectFactory.getDialect(targetDialect);
+        this.rewriteEngine = new SqlRewriteEngine(sourceDialect, targetDialect);
+        this.config = config != null ? config : TranslationConfig.DEFAULT;
+    }
+
+    /**
+     * 翻译 SQL 语句。
+     *
+     * @param sql 源方言的 SQL 语句
+     * @return 目标方言的 SQL 语句
+     * @throws SqlTranslationException 如果 SQL 解析或转换失败
+     */
+    public String translate(String sql) {
+        if (sql == null || sql.trim().isEmpty()) {
+            return sql;
+        }
+
+        if (SqlDialectFactory.isSameDialect(sourceDialect, targetDialect)) {
+            log.debug("源方言和目标方言相同，无需转换: {}", sql);
+            return sql;
+        }
+
+        long start = System.nanoTime();
+        try {
+            // 1. 解析 SQL → AST (SqlNode)
+            SqlNode parsed = parseSql(sql);
+
+            // 2. 改写 AST
+            SqlNode rewritten = rewriteEngine.rewrite(parsed);
+
+            // 3. 使用目标方言生成 SQL（按配置控制关键词大小写）
+            String result;
+            if (config.getKeywordCase() == TranslationConfig.KeywordCase.LOWER) {
+                result = rewritten.toSqlString(
+                        c -> c.withDialect(targetSqlDialect)
+                              .withKeywordsLowerCase(true)
+                              .withQuoteAllIdentifiers(true)).getSql();
+            } else {
+                result = rewritten.toSqlString(c -> c.withDialect(targetSqlDialect)
+                        .withQuoteAllIdentifiers(true)).getSql();
+            }
+
+            long elapsed = (System.nanoTime() - start) / 1_000_000;
+            log.debug("SQL 翻译完成 ({}ms): [{}] → [{}]", elapsed, sql, result);
+
+            return result;
+        } catch (SqlParseException e) {
+            throw new SqlTranslationException("SQL 解析失败: " + sql, e);
+        } catch (Exception e) {
+            throw new SqlTranslationException("SQL 翻译失败: [" + sql + "] "
+                    + sourceDialect + " → " + targetDialect, e);
+        }
+    }
+
+    /**
+     * 使用 Calcite SqlParser 解析 SQL。
+     * 根据源方言做预处理（标识符引用转换），然后解析。
+     */
+    private SqlNode parseSql(String sql) throws SqlParseException {
+        // 预处理：将源方言的特殊标识符引用转换为标准双引号引用
+        String normalizedSql = normalizeIdentifierQuoting(sql, sourceDialect, config.getIdentifierCase());
+
+        SqlParser.Config config = SqlParser.config()
+                .withCaseSensitive(true)
+                .withConformance(getConformanceForSource(sourceDialect));
+        SqlParser parser = SqlParser.create(normalizedSql, config);
+        return parser.parseStmt();
+    }
+
+    /**
+     * 根据源方言类型选择合适的 Calcite SQL conformance 级别。
+     * 不同方言使用不同的非标准语法，需要对应的 conformance 才能正确解析。
+     */
+    private static SqlConformanceEnum getConformanceForSource(DialectType sourceDialect) {
+        switch (sourceDialect) {
+            case MYSQL:
+                return SqlConformanceEnum.MYSQL_5;
+            case ORACLE:
+                return SqlConformanceEnum.ORACLE_12;
+            case POSTGRESQL:
+                return SqlConformanceEnum.DEFAULT;
+            case SQLSERVER:
+                return SqlConformanceEnum.SQL_SERVER_2008;
+            default:
+                return SqlConformanceEnum.DEFAULT;
+        }
+    }
+
+    /**
+     * 预处理 SQL 中的标识符引用和方言特殊语法。
+     * - MySQL 反引号 → 双引号
+     * - SQL Server 方括号 → 双引号
+     * - SQL Server TOP n → LIMIT n
+     */
+    private static String normalizeIdentifierQuoting(String sql, DialectType dialect,
+                                                      TranslationConfig.IdentifierCase identifierCase) {
+        if (sql == null || sql.isEmpty()) {
+            return sql;
+        }
+        String result = sql;
+        switch (dialect) {
+            case MYSQL:
+                // 将 `identifier` 转换为 "identifier"
+                result = result.replace('`', '"');
+                break;
+            case SQLSERVER:
+                // 将 [identifier] 转换为 "identifier"
+                result = result.replace('[', '"').replace(']', '"');
+                // 处理 SELECT TOP n → LIMIT n
+                result = normalizeSqlServerTop(result);
+                break;
+            default:
+                break;
+        }
+        // 将未引用的 alias.column、alias.* 以及独立标识符补上双引号，
+        // 并按配置转换大小写，防止 Calcite 在 unparse 时自动改变大小写。
+        result = normalizeUnquotedIdentifiers(result, identifierCase);
+        return result;
+    }
+
+    /**
+     * 将 SQL Server 的 SELECT TOP n 转换为标准 SQL LIMIT n。
+     * LIMIT 必须放在语句末尾（ORDER BY 之后）。
+     */
+    private static String normalizeSqlServerTop(String sql) {
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+                "(?i)\\bSELECT\\s+(TOP\\s+(\\d+)\\s+)");
+        java.util.regex.Matcher matcher = pattern.matcher(sql);
+        if (!matcher.find()) {
+            return sql;
+        }
+
+        String topClause = matcher.group(1); // e.g. "TOP 10 "
+        String topNum = matcher.group(2);     // e.g. "10"
+
+        // 去掉 "TOP n " 部分
+        sql = sql.substring(0, matcher.start(1)) + sql.substring(matcher.end(1));
+        // LIMIT n 放在末尾（Calcite parser 会正确处理 ORDER BY + LIMIT 的顺序）
+        sql = sql.trim() + " LIMIT " + topNum;
+        return sql;
+    }
+
+    /** SQL 保留关键字集合，用于预处理时跳过不引用。 */
+    private static final java.util.Set<String> SQL_KEYWORDS = new java.util.HashSet<>(
+            java.util.Arrays.asList(
+                    "SELECT", "FROM", "WHERE", "AND", "OR", "NOT", "IN", "AS", "ON",
+                    "JOIN", "LEFT", "RIGHT", "INNER", "OUTER", "CROSS", "FULL", "NATURAL",
+                    "ORDER", "BY", "GROUP", "HAVING", "DISTINCT", "UNION", "ALL", "ANY",
+                    "EXISTS", "BETWEEN", "LIKE", "IS", "NULL", "TRUE", "FALSE",
+                    "CASE", "WHEN", "THEN", "ELSE", "END", "ASC", "DESC",
+                    "LIMIT", "OFFSET", "SET", "INTO", "VALUES",
+                    "INSERT", "UPDATE", "DELETE", "CREATE", "TABLE", "DROP", "ALTER",
+                    "IF", "FOR", "SOME", "WITH", "USING",
+                    "PRIMARY", "KEY", "FOREIGN", "INDEX", "UNIQUE", "CHECK", "DEFAULT",
+                    "CONSTRAINT", "ADD", "COLUMN", "REFERENCES",
+                    "FETCH", "NEXT", "ROWS", "ONLY",
+                    "EXCEPT", "INTERSECT", "MINUS",
+                    // 聚合函数
+                    "COUNT", "SUM", "AVG", "MIN", "MAX",
+                    // 常用函数
+                    "COALESCE", "CAST", "CONVERT", "NULLIF",
+                    "IFNULL", "NVL", "ISNULL", "DECODE",
+                    "CONCAT", "SUBSTRING", "TRIM", "UPPER", "LOWER",
+                    "LENGTH", "REPLACE", "SUBSTR", "INSTR",
+                    "TO_CHAR", "TO_DATE", "TO_NUMBER", "TO_TIMESTAMP",
+                    "NOW", "SYSDATE", "GETDATE", "CURDATE", "CURTIME",
+                    "DATE_FORMAT", "DATE_ADD", "DATE_SUB", "DATEDIFF",
+                    "EXTRACT", "YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND",
+                    // 其他
+                    "CURRENT_TIMESTAMP", "CURRENT_DATE", "CURRENT_TIME",
+                    "CURRENT", "TIMESTAMP", "DATE", "TIME",
+                    "TOP", "BOTTOM",
+                    "BEGIN", "COMMIT", "ROLLBACK",
+                    "FUNCTION", "PROCEDURE", "LANGUAGE", "RETURNS",
+                    "CALL", "RETURNING", "DO", "WINDOW",
+                    "OVER", "PARTITION", "RANGE", "UNBOUNDED",
+                    "PRECEDING", "FOLLOWING", "TIES",
+                    "ROW", "ROWS", "GROUPS", "OTHERS"
+            ));
+
+    /**
+     * 将未引用或已引用的标识符按配置处理：补引号 + 大小写转换。
+     * <p>
+     * 处理三种模式：
+     * <ol>
+     *   <li>{@code alias.column} → {@code "ALIAS"."COLUMN"}（按 identifierCase 转大小写）</li>
+     *   <li>{@code alias.*} → {@code "ALIAS".*}</li>
+     *   <li>独立标识符（非 SQL 关键字） → {@code "IDENTIFIER"}</li>
+     * </ol>
+     * <p>
+     * 已加双引号的标识符不受影响（负向后瞻跳过）。
+     */
+    private static String normalizeUnquotedIdentifiers(String sql,
+                                                        TranslationConfig.IdentifierCase identifierCase) {
+        if (sql == null || sql.isEmpty()) {
+            return sql;
+        }
+        // 匹配 identifier.identifier、identifier.* 或 standalone identifier
+        // 负向后瞻排除已引用或数字开头的；负向前瞻排除函数调用（后跟括号）和已引用标识符
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+                "(?<![\\w\"`])([a-zA-Z_][a-zA-Z0-9_]*)" +
+                "(?:\\.(\\*|[a-zA-Z_][a-zA-Z0-9_]*))?" +
+                "(?![\\w\"`(])"
+        );
+        java.util.regex.Matcher matcher = pattern.matcher(sql);
+        StringBuilder sb = new StringBuilder(sql.length() + 64);
+        int lastEnd = 0;
+        while (matcher.find()) {
+            sb.append(sql, lastEnd, matcher.start());
+            String part1 = matcher.group(1);
+            String part2 = matcher.group(2);
+            if (part2 != null) {
+                // alias.column 或 alias.*
+                sb.append('"').append(identifierCase.apply(part1)).append('"');
+                if ("*".equals(part2)) {
+                    sb.append(".*");
+                } else {
+                    sb.append('.').append('"').append(identifierCase.apply(part2)).append('"');
+                }
+            } else {
+                // 独立标识符 — 跳过 SQL 关键字
+                if (SQL_KEYWORDS.contains(part1.toUpperCase(java.util.Locale.ROOT))) {
+                    sb.append(part1);
+                } else {
+                    sb.append('"').append(identifierCase.apply(part1)).append('"');
+                }
+            }
+            lastEnd = matcher.end();
+        }
+        sb.append(sql.substring(lastEnd));
+        return sb.toString();
+    }
+
+    // --- 便捷静态方法 ---
+
+    /**
+     * 便捷方法：直接翻译 SQL，使用默认配置。
+     *
+     * @param sql            源 SQL
+     * @param sourceDialect  源方言标识符
+     * @param targetDialect  目标方言标识符
+     * @return 翻译后的 SQL
+     */
+    public static String translate(String sql, String sourceDialect, String targetDialect) {
+        DialectType source = DialectType.fromIdentifier(sourceDialect);
+        DialectType target = DialectType.fromIdentifier(targetDialect);
+        return new SqlTranslator(source, target).translate(sql);
+    }
+
+    /**
+     * 便捷方法：直接翻译 SQL，使用默认配置。
+     *
+     * @param sql            源 SQL
+     * @param sourceDialect  源方言类型
+     * @param targetDialect  目标方言类型
+     * @return 翻译后的 SQL
+     */
+    public static String translate(String sql, DialectType sourceDialect, DialectType targetDialect) {
+        return new SqlTranslator(sourceDialect, targetDialect).translate(sql);
+    }
+
+    /**
+     * 便捷方法：直接翻译 SQL，使用指定配置。
+     *
+     * @param sql            源 SQL
+     * @param sourceDialect  源方言类型
+     * @param targetDialect  目标方言类型
+     * @param config         翻译配置（大小写策略）
+     * @return 翻译后的 SQL
+     */
+    public static String translate(String sql, DialectType sourceDialect,
+                                    DialectType targetDialect, TranslationConfig config) {
+        return new SqlTranslator(sourceDialect, targetDialect, config).translate(sql);
+    }
+
+    public DialectType getSourceDialect() {
+        return sourceDialect;
+    }
+
+    public DialectType getTargetDialect() {
+        return targetDialect;
+    }
+}
