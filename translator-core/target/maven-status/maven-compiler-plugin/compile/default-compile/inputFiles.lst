@@ -1,8 +1,0 @@
-D:\Code\java_workspace\sql-dialect-translator\translator-core\src\main\java\com\translator\core\rewrite\SqlRewriteEngine.java
-D:\Code\java_workspace\sql-dialect-translator\translator-core\src\main\java\com\translator\core\config\TranslationConfig.java
-D:\Code\java_workspace\sql-dialect-translator\translator-core\src\main\java\com\translator\core\SqlTranslationException.java
-D:\Code\java_workspace\sql-dialect-translator\translator-core\src\main\java\com\translator\core\rewrite\FunctionRewriteVisitor.java
-D:\Code\java_workspace\sql-dialect-translator\translator-core\src\main\java\com\translator\core\DialectType.java
-D:\Code\java_workspace\sql-dialect-translator\translator-core\src\main\java\com\translator\core\config\SqlDialectFactory.java
-D:\Code\java_workspace\sql-dialect-translator\translator-core\src\main\java\com\translator\core\SqlTranslator.java
-D:\Code\java_workspace\sql-dialect-translator\translator-core\src\main\java\com\translator\core\DialectRegistry.java
