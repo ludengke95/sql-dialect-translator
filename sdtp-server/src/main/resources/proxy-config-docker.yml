@@ -1,0 +1,20 @@
+# SDT Proxy — Docker Compose 环境配置
+proxy:
+  port: 3306
+  auth:
+    user: root
+    password: proxy_password
+
+target:
+  dialect: POSTGRESQL
+  # Docker Compose 网络中，服务名即主机名
+  jdbc-url: jdbc:postgresql://postgres:5432/mydb
+  username: pg_user
+  password: pg_password
+  max-pool-size: 20
+  min-idle: 2
+
+# SQL 翻译配置
+translation:
+  keyword-case: UPPER
+  identifier-case: LOWER

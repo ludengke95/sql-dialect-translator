@@ -19,16 +19,16 @@ services:
       timeout: 5s
       retries: 5
 
-  # ==================== MySQL Proxy 实例 ====================
-  proxy:
+  # ==================== SDT Proxy 实例 ====================
+  sdtp:
     build: .
-    container_name: mysql-proxy
+    container_name: sdtp-proxy
     ports:
       - "3306:3306"
     environment:
       JAVA_OPTS: "-Xms256m -Xmx512m -XX:+UseG1GC -Dproxy.config=/app/config/proxy-config-docker.yml"
     volumes:
-      - ./proxy-server/src/main/resources/proxy-config-docker.yml:/app/config/proxy-config-docker.yml
+      - ./sdtp-server/src/main/resources/proxy-config-docker.yml:/app/config/proxy-config-docker.yml
     depends_on:
       postgres:
         condition: service_healthy
