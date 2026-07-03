@@ -267,13 +267,15 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
     }
 
     /**
-     * 构造 EOF Packet（列定义结束/结果集结束）。
+     * 构造结果集结束包（OK_Packet，适配 CLIENT_DEPRECATE_EOF）。
      */
     static ByteBuf buildEof(ByteBufAllocator alloc) {
-        ByteBuf buf = alloc.buffer(5);
-        buf.writeByte(0xFE);                        // EOF header
-        buf.writeShortLE(0);                        // warnings
-        buf.writeShortLE(ServerStatus.SERVER_STATUS_AUTOCOMMIT); // status flags
+        ByteBuf buf = alloc.buffer(16);
+        buf.writeByte(0xFE);                                    // OK header
+        BufferUtils.writeLengthEncodedInt(buf, 0);              // affected_rows = 0
+        BufferUtils.writeLengthEncodedInt(buf, 0);              // last_insert_id = 0
+        buf.writeShortLE(ServerStatus.SERVER_STATUS_AUTOCOMMIT);// status_flags
+        buf.writeShortLE(0);                                    // warnings = 0
         return buf;
     }
 
@@ -290,8 +292,26 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        log.error("Exception in CommandHandler", cause);
+        if (isConnectionReset(cause)) {
+            // 客户端主动断开（RST），正常现象，DEBUG 级别
+            log.debug("Client {} disconnected: {}", ctx.channel().remoteAddress(),
+                    cause.getMessage() != null ? cause.getMessage() : "connection reset");
+        } else {
+            log.error("Exception in CommandHandler", cause);
+        }
         ctx.close();
+    }
+
+    /** 判断是否为客户端主动断连（非服务端异常） */
+    private static boolean isConnectionReset(Throwable cause) {
+        if (cause instanceof java.io.IOException) {
+            String msg = cause.getMessage();
+            return msg != null && (msg.contains("reset by peer")
+                    || msg.contains("connection reset")
+                    || msg.contains("中止了一个已建立的连接")
+                    || msg.contains("abort"));
+        }
+        return false;
     }
 
     // ==================== 查询处理器接口 ====================
