@@ -103,6 +103,8 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
 
     @Override
     public void process(ChannelHandlerContext ctx, String sql, FrontendSession session) {
+        log.info("SQL: {}", sql);
+        
         if (!enabled) {
             delegate.process(ctx, sql, session);
             return;
@@ -120,7 +122,7 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
         String translatedSql;
         try {
             translatedSql = translate(sql);
-            log.debug("Translated: {} → {}", sql, translatedSql);
+            log.info("Translated: {} → {}", sql, translatedSql);
         } catch (Exception e) {
             log.warn("Translation failed for SQL: {}. Falling back to original. Error: {}",
                     sql, e.getMessage());
