@@ -274,7 +274,55 @@ public class SqlTranslator {
             lastEnd = matcher.end();
         }
         sb.append(sql.substring(lastEnd));
+
+        // 第二遍：修复 DML 语句中紧跟 ( 的表名（如 INSERT INTO test(...)）
+        // 这些表名在第一遍被 (?![\\w\"\`(]) 跳过了
+        return quoteDmlTableNames(sb.toString(), identifierCase);
+    }
+
+    /**
+     * 为 DML 语句中紧跟 ( 的表名加引号（正则第一遍会被函数调用前瞻误排除）。
+     * 仅当表名前面是 INTO / FROM / UPDATE / JOIN / TABLE 等 DML 关键字时才处理。
+     */
+    private static String quoteDmlTableNames(String sql,
+                                              TranslationConfig.IdentifierCase identifierCase) {
+        java.util.regex.Pattern dmlPattern = java.util.regex.Pattern.compile(
+                "(?<![\\w\"`])([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\("
+        );
+        java.util.regex.Matcher m = dmlPattern.matcher(sql);
+        StringBuilder sb = new StringBuilder(sql.length() + 16);
+        int lastEnd = 0;
+        while (m.find()) {
+            String word = m.group(1);
+            // 只处理前面是 DML 关键字的，排除普通函数调用
+            if (!isDmlContextBefore(sql, m.start()) || SQL_KEYWORDS.contains(word.toUpperCase(java.util.Locale.ROOT))) {
+                continue;
+            }
+            sb.append(sql, lastEnd, m.start());
+            sb.append('"').append(identifierCase.apply(word)).append('"');
+            sb.append('(');
+            lastEnd = m.end();
+        }
+        sb.append(sql.substring(lastEnd));
         return sb.toString();
+    }
+
+    /** 检查标识符位置之前是否是 DML 上下文（INTO/FROM/UPDATE/JOIN/TABLE 等） */
+    private static boolean isDmlContextBefore(String sql, int pos) {
+        // 向前找最近的非空白 token
+        int i = pos - 1;
+        while (i >= 0 && Character.isWhitespace(sql.charAt(i))) {
+            i--;
+        }
+        if (i < 0) return false;
+        // 找到 token 开始位置
+        int tokenEnd = i + 1;
+        while (i >= 0 && Character.isLetterOrDigit(sql.charAt(i))) {
+            i--;
+        }
+        String token = sql.substring(i + 1, tokenEnd).toUpperCase(java.util.Locale.ROOT);
+        return "INTO".equals(token) || "FROM".equals(token) || "UPDATE".equals(token)
+                || "JOIN".equals(token) || "TABLE".equals(token) || "EXISTS".equals(token);
     }
 
     // --- 便捷静态方法 ---
