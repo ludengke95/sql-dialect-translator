@@ -1,0 +1,14 @@
+# MySQL Proxy 默认配置
+proxy:
+  port: 3306
+  auth:
+    user: root
+    password: proxy_password
+
+target:
+  dialect: POSTGRESQL
+  jdbc-url: jdbc:highgo://10.110.60.187:5866/highgo?useUnicode=true&characterEncoding=utf8&currentSchema=meta_data_center
+  username: highgo
+  password: Highgo@12345
+  max-pool-size: 20
+  min-idle: 2

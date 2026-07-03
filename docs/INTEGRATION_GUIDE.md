@@ -28,14 +28,14 @@
     <!-- 翻译引擎核心 -->
     <dependency>
         <groupId>com.draven.sql.translator</groupId>
-        <artifactId>translator-core</artifactId>
+        <artifactId>sdt-core</artifactId>
         <version>1.0.0-SNAPSHOT</version>
     </dependency>
 
     <!-- JDBC Wrapper 驱动（可选，仅 JDBC 方式需要） -->
     <dependency>
         <groupId>com.draven.sql.translator</groupId>
-        <artifactId>translator-jdbc</artifactId>
+        <artifactId>sdt-jdbc</artifactId>
         <version>1.0.0-SNAPSHOT</version>
     </dependency>
 </dependencies>
@@ -93,7 +93,7 @@ Oracle Thin 驱动支持多种连接格式，前缀统一为 `jdbc:oracle:thin:@
 
 ### 驱动注册
 
-驱动通过 SPI 自动注册。只需确保 `translator-jdbc.jar` 在 classpath 中，
+驱动通过 SPI 自动注册。只需确保 `sdt-jdbc.jar` 在 classpath 中，
 `DriverManager.getConnection()` 会自动识别以 `jdbc:translator:` 开头的 URL。
 
 如需手动注册：

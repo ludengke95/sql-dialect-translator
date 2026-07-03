@@ -9,17 +9,17 @@
     <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
-    <name>SQL Dialect Translator</name>
-    <description>SQL dialect transparent translation middleware (JDBC Wrapper Driver)</description>
+    <name>SDT — SQL Dialect Translator</name>
+    <description>SDT — SQL Dialect Translator: JDBC Wrapper Driver &amp; SDT Proxy</description>
 
     <modules>
-        <module>translator-core</module>
-        <module>translator-jdbc</module>
-        <module>translator-test</module>
-        <module>proxy-protocol</module>
-        <module>proxy-core</module>
-        <module>proxy-backend</module>
-        <module>proxy-server</module>
+        <module>sdt-core</module>
+        <module>sdt-jdbc</module>
+        <module>sdt-test</module>
+        <module>sdtp-protocol</module>
+        <module>sdtp-core</module>
+        <module>sdtp-backend</module>
+        <module>sdtp-server</module>
     </modules>
 
     <properties>
@@ -35,6 +35,7 @@
         <netty.version>4.1.100.Final</netty.version>
         <hikaricp.version>4.0.3</hikaricp.version>
         <snakeyaml.version>1.33</snakeyaml.version>
+        <logback.version>1.2.13</logback.version>
     </properties>
 
     <dependencyManagement>
@@ -120,6 +121,13 @@
                 <groupId>org.yaml</groupId>
                 <artifactId>snakeyaml</artifactId>
                 <version>${snakeyaml.version}</version>
+            </dependency>
+
+            <!-- Logback -->
+            <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-classic</artifactId>
+                <version>${logback.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
