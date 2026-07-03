@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  # ==================== PostgreSQL 目标库 ====================
+  postgres:
+    image: postgres:15-alpine
+    container_name: proxy-target-pg
+    environment:
+      POSTGRES_USER: pg_user
+      POSTGRES_PASSWORD: pg_password
+      POSTGRES_DB: mydb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pg_user -d mydb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ==================== MySQL Proxy 实例 ====================
+  proxy:
+    build: .
+    container_name: mysql-proxy
+    ports:
+      - "3306:3306"
+    environment:
+      JAVA_OPTS: "-Xms256m -Xmx512m -XX:+UseG1GC -Dproxy.config=/app/config/proxy-config-docker.yml"
+    volumes:
+      - ./proxy-server/src/main/resources/proxy-config-docker.yml:/app/config/proxy-config-docker.yml
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pg_data:

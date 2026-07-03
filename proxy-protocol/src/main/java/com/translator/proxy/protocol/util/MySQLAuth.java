@@ -1,0 +1,101 @@
+package com.translator.proxy.protocol.util;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+
+/**
+ * MySQL `mysql_native_password` 认证算法。
+ *
+ * <p>握手流程：
+ * <ol>
+ *   <li>服务端生成 20 字节随机数（scramble），连同 8 字节 Auth Plugin Data Part 1 一起发给客户端</li>
+ *   <li>客户端计算：SHA1(password) XOR SHA1(scramble + SHA1(SHA1(password)))</li>
+ *   <li>客户端将结果回传给服务端</li>
+ *   <li>服务端用自己存储的密码做同样计算，比对结果</li>
+ * </ol>
+ */
+public final class MySQLAuth {
+
+    private MySQLAuth() {}
+
+    /**
+     * 生成 20 字节随机 scramble（Auth Plugin Data）。
+     */
+    public static byte[] generateScramble() {
+        byte[] scramble = new byte[20];
+        for (int i = 0; i < 20; i++) {
+            // 避免出现 0x00，MySQL 协议要求 scramble 不含 NUL 字节
+            int b;
+            do {
+                b = (int) (Math.random() * 256);
+            } while (b == 0);
+            scramble[i] = (byte) b;
+        }
+        return scramble;
+    }
+
+    /**
+     * 服务端验证客户端发来的 token 是否正确。
+     *
+     * @param password     服务端存储的明文密码
+     * @param scramble     服务端发出去的 20 字节 scramble（Auth Plugin Data）
+     * @param clientToken  客户端回传的加密 token
+     * @return true 如果验证通过
+     */
+    public static boolean verify(String password, byte[] scramble, byte[] clientToken) {
+        if (password == null || scramble == null || clientToken == null) {
+            return false;
+        }
+        byte[] expected = scramble411(password, scramble);
+        if (expected.length != clientToken.length) {
+            return false;
+        }
+        for (int i = 0; i < expected.length; i++) {
+            if (expected[i] != clientToken[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 客户端计算 native_password 加密结果（用于测试验证）。
+     *
+     * @param password 明文密码
+     * @param scramble 服务端 scramble（20 字节）
+     * @return 加密后的 20 字节 token
+     */
+    public static byte[] scramble411(String password, byte[] scramble) {
+        if (password == null || scramble == null) {
+            return new byte[0];
+        }
+        try {
+            MessageDigest sha1 = MessageDigest.getInstance("SHA-1");
+
+            byte[] passwordBytes = password.getBytes(StandardCharsets.UTF_8);
+
+            // stage1 = SHA1(password)
+            byte[] stage1 = sha1.digest(passwordBytes);
+
+            // stage2 = SHA1(stage1) = SHA1(SHA1(password))
+            byte[] stage2 = sha1.digest(stage1);
+
+            // stage3 = SHA1(scramble + stage2)
+            sha1.reset();
+            sha1.update(scramble);
+            sha1.update(stage2);
+            byte[] stage3 = sha1.digest();
+
+            // result = stage1 XOR stage3
+            byte[] result = new byte[stage1.length];
+            for (int i = 0; i < result.length; i++) {
+                result[i] = (byte) (stage1[i] ^ stage3[i]);
+            }
+            return result;
+
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-1 algorithm not available", e);
+        }
+    }
+}
