@@ -1,0 +1,7 @@
+com\translator\jdbc\TranslatorPreparedStatement.class
+com\translator\jdbc\JdbcUrlParser.class
+com\translator\jdbc\TranslatorDriver.class
+com\translator\jdbc\TranslatorStatement.class
+com\translator\jdbc\JdbcUrlInfo.class
+com\translator\jdbc\TranslatorConnection.class
+com\translator\jdbc\TranslatorCallableStatement.class

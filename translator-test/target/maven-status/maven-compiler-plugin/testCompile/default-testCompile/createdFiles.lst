@@ -1,0 +1,5 @@
+com\translator\core\DialectTypeTest.class
+com\translator\jdbc\JdbcUrlParserTest.class
+com\translator\jdbc\TranslatorDriverIntegrationTest.class
+com\translator\core\DialectRegistryTest.class
+com\translator\core\SqlTranslatorTest.class
