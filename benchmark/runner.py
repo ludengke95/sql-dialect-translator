@@ -15,6 +15,7 @@ SDTP 基准测试执行器。
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -41,12 +42,16 @@ REPORT_TEMPLATE = """
 
 
 def read_queries(filepath):
-    """读取 SQL 文件，按 `-- END` 标记分割为独立查询块。"""
+    """读取 SQL 文件，按 `-- END` 标记分割为独立查询块。
+
+    用正则消耗整行 `-- END Q<x>` 标记，防止标签泄漏到下一块。
+    """
     queries = []
     with open(filepath, 'r', encoding='utf-8') as f:
         content = f.read()
 
-    blocks = content.split('-- END')
+    # 正则分割：消耗整行 -- END，包括尾部标签（如 Q22）
+    blocks = re.split(r'\n-- END\b[^\n]*', content)
     for block in blocks:
         block = block.strip()
         if not block:
@@ -57,14 +62,15 @@ def read_queries(filepath):
         for line in lines:
             stripped = line.strip()
             if stripped.startswith('--'):
-                if 'Q' in stripped or 'TPC' in stripped or '\u4e8b\u52a1' in stripped:
-                    name = stripped.lstrip('- ')
+                # 提取名称：\bQ\d+\b 匹配 Q1/Q2/Q22（TPC-H）或 "事务"（TPC-C）
+                if re.search(r'\bQ\d+\b', stripped) or '\u4e8b\u52a1' in stripped:
+                    # 去掉 -- 前缀，保留描述
+                    name = re.sub(r'^--\s*', '', stripped)
                 continue
             if stripped:
                 sql_lines.append(stripped)
         if sql_lines:
             combined = '\n'.join(sql_lines).strip().upper()
-            # 只保留真正以 SQL 关键字开头的查询（SELECT 后可跟空格或\n）
             if combined.startswith('SELECT') or combined.startswith('WITH') \
                or combined.startswith('INSERT') or combined.startswith('UPDATE') \
                or combined.startswith('DELETE'):
@@ -74,6 +80,9 @@ def read_queries(filepath):
                 })
     return queries
 
+
+# 以下其他函数（check_sdtp_logs, execute_python, execute_mysql_cli, 
+# run_benchmark, save_report, main）保持原样...
 
 def check_sdtp_logs(log_dir):
     """检查 SDTP 日志中是否有 ERROR 或 Exception 行。"""
@@ -299,7 +308,7 @@ def save_report(results, output_dir='.'):
             if not d['success']:
                 f.write(f"\n--- 失败 SQL [{d['name']}] ---\n")
                 f.write(f"{d['sql']}\n")
-                f.write(f"\u9519误: {d['result']}\n")
+                f.write(f"错误: {d['result']}\n")
         if results['sdtp_error']:
             f.write(f"\n--- SDTP 日志 ERROR ---\n")
             for err_line in results['sdtp_error_logs'][-50:]:
