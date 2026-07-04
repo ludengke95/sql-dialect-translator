@@ -5,7 +5,7 @@ TPC-C 数据生成器（1 Warehouse 小数据量）
 生成 TPC-C 标准 9 张表的数据并加载到 PostgreSQL。
 
 用法:
-    python data_gen.py --pg-host localhost --pg-port 5432 --pg-user pg_user --pg-password pg_password --pg-db mydb
+    python data_gen.py --pg-host localhost --pg-port 5432 --pg-user sdtpu --pg-password pg_password --pg-db mydb
     python data_gen.py --warehouses 1
 """
 
@@ -247,7 +247,7 @@ def main():
     parser = argparse.ArgumentParser(description='TPC-C 数据生成器')
     parser.add_argument('--pg-host', default='localhost')
     parser.add_argument('--pg-port', type=int, default=5432)
-    parser.add_argument('--pg-user', default='pg_user')
+    parser.add_argument('--pg-user', default='sdtpu')
     parser.add_argument('--pg-password', default='pg_password')
     parser.add_argument('--pg-db', default='mydb')
     parser.add_argument('--warehouses', type=int, default=1,

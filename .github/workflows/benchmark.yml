@@ -17,7 +17,7 @@ env:
   SDTP_PASSWORD: proxy_password
   SDTP_PORT: 3306
   # PostgreSQL 配置（SDTP 后端目标库）
-  PG_USER: pg_user
+  PG_USER: sdtpu
   PG_PASSWORD: pg_password
   PG_DB: mydb
   PG_PORT: 5432
@@ -31,13 +31,13 @@ jobs:
       postgres:
         image: postgres:15-alpine
         env:
-          POSTGRES_USER: pg_user
+          POSTGRES_USER: sdtpu
           POSTGRES_PASSWORD: pg_password
           POSTGRES_DB: mydb
         ports:
           - "5432:5432"
         options: >-
-          --health-cmd "pg_isready -U pg_user -d mydb"
+          --health-cmd "pg_isready -U sdtpu -d mydb"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -70,7 +70,7 @@ jobs:
           target:
             dialect: POSTGRESQL
             jdbc-url: jdbc:postgresql://host.docker.internal:5432/mydb
-            username: pg_user
+            username: sdtpu
             password: pg_password
             max-pool-size: 10
             min-idle: 2
@@ -118,7 +118,7 @@ jobs:
             -f benchmark/tpch/schema_pg.sql
         env:
           PGHOST: localhost
-          PGUSER: pg_user
+          PGUSER: sdtpu
 
       - name: Generate and load TPC-H data (SF=0.01)
         run: |
@@ -136,7 +136,7 @@ jobs:
             -f benchmark/tpcc/schema_pg.sql
         env:
           PGHOST: localhost
-          PGUSER: pg_user
+          PGUSER: sdtpu
 
       - name: Generate and load TPC-C data (1 warehouse)
         run: |

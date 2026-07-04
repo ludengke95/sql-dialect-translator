@@ -7,8 +7,8 @@ TPC-H 数据生成器（SF 0.01 小数据量）
 2. 若失败，回退到 Python 内置生成器
 
 用法:
-    python data_gen.py --pg-host localhost --pg-port 5432 --pg-user pg_user --pg-password pg_password --pg-db mydb
-    python data_gen.py --pg-host localhost --pg-port 5432 --pg-user pg_user --pg-password pg_password --pg-db mydb --scale 0.01
+    python data_gen.py --pg-host localhost --pg-port 5432 --pg-user sdtpu --pg-password pg_password --pg-db mydb
+    python data_gen.py --pg-host localhost --pg-port 5432 --pg-user sdtpu --pg-password pg_password --pg-db mydb --scale 0.01
 """
 
 import argparse
@@ -364,7 +364,7 @@ def main():
     parser = argparse.ArgumentParser(description='TPC-H 数据生成器')
     parser.add_argument('--pg-host', default='localhost')
     parser.add_argument('--pg-port', type=int, default=5432)
-    parser.add_argument('--pg-user', default='pg_user')
+    parser.add_argument('--pg-user', default='sdtpu')
     parser.add_argument('--pg-password', default='pg_password')
     parser.add_argument('--pg-db', default='mydb')
     parser.add_argument('--scale', type=float, default=SCALE_DEFAULT,

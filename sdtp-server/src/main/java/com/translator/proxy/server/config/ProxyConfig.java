@@ -66,7 +66,7 @@ public class ProxyConfig {
         private String jdbcUrl = "jdbc:postgresql://localhost:5432/mydb";
 
         /** 目标库用户名 */
-        private String username = "pg_user";
+        private String username = "sdtpu";
 
         /** 目标库密码 */
         private String password = "pg_password";
