@@ -1,6 +1,6 @@
 # SDT Proxy Docker Image
-# 基于 OpenJDK 8 运行，暴露 3306 端口
-FROM openjdk:8-jre-slim
+# 基于 Eclipse Temurin JRE 8 运行，暴露 3306 端口
+FROM eclipse-temurin:8-jre
 
 LABEL maintainer="sql-dialect-translator"
 LABEL description="SDT Proxy — MySQL protocol proxy, single target DB per instance"
