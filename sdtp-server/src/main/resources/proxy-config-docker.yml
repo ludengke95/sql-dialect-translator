@@ -9,7 +9,7 @@ target:
   dialect: POSTGRESQL
   # Docker Compose 网络中，服务名即主机名
   jdbc-url: jdbc:postgresql://postgres:5432/mydb
-  username: pg_user
+  username: sdtpu
   password: pg_password
   max-pool-size: 20
   min-idle: 2
