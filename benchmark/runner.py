@@ -62,10 +62,13 @@ def read_queries(filepath):
             if stripped:
                 sql_lines.append(stripped)
         if sql_lines:
-            queries.append({
-                'name': name.strip() if name else f"query_{len(queries)+1}",
-                'sql': '\n'.join(sql_lines),
-            })
+            combined = '\n'.join(sql_lines).strip().upper()
+            # 跳过纯标签残留行（如分割后的 "Q22"），只保留真正以 SQL 关键字开头的查询
+            if combined.startswith(('SELECT ', 'WITH ', 'INSERT ', 'UPDATE ', 'DELETE ')):
+                queries.append({
+                    'name': name.strip() if name else f"query_{len(queries)+1}",
+                    'sql': '\n'.join(sql_lines),
+                })
     return queries
 
 
