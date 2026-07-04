@@ -26,9 +26,10 @@ services:
     ports:
       - "3306:3306"
     environment:
-      JAVA_OPTS: "-Xms256m -Xmx512m -XX:+UseG1GC -Dproxy.config=/app/config/proxy-config-docker.yml"
+      JAVA_OPTS: "-Xms256m -Xmx512m -XX:+UseG1GC"
+      PROXY_CONFIG: /opt/sdtp/config/proxy-config-docker.yml
     volumes:
-      - ./sdtp-server/src/main/resources/proxy-config-docker.yml:/app/config/proxy-config-docker.yml
+      - ./sdtp-server/src/main/resources/proxy-config-docker.yml:/opt/sdtp/config/proxy-config-docker.yml
     depends_on:
       postgres:
         condition: service_healthy
