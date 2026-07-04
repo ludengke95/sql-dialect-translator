@@ -13,7 +13,7 @@
 
     <!-- 不包含基础目录层级 -->
     <includeBaseDirectory>true</includeBaseDirectory>
-    <baseDirectory>sdtp-${project.version}</baseDirectory>
+    <baseDirectory>sdtp-server-${project.version}</baseDirectory>
 
     <fileSets>
         <!-- ==================== bin 脚本 ==================== -->
