@@ -81,27 +81,43 @@ jobs:
 
       - name: Start SDTP container
         run: |
+          # 先清理旧容器（如果有）
+          docker rm -f sdtp 2>/dev/null || true
+
           docker run -d \
             --name sdtp \
             --add-host host.docker.internal:host-gateway \
             -p 3306:3306 \
             -v ${{ github.workspace }}/sdtp-proxy-config-ci.yml:/app/config/proxy-config.yml \
             sdtp:latest
+
           echo "等待 SDTP 启动..."
-          sleep 10
-          for i in $(seq 1 20); do
-            if docker logs sdtp 2>&1 | grep -q "started\|listening\|端口"; then
-              echo "SDTP 已启动"
+          sleep 8
+          for i in $(seq 1 30); do
+            if docker logs sdtp 2>&1 | grep -qi "started\|listening\|error\|Exception"; then
               break
             fi
-            echo "等待中... ($i/20)"
+            echo "等待中... ($i/30)"
             sleep 3
           done
 
-      - name: Verify SDTP is running
+      - name: Verify SDTP container status
+        if: always()
         run: |
-          docker ps | grep sdtp
-          docker logs sdtp --tail 20
+          echo "=== 所有容器 ==="
+          docker ps -a
+          echo ""
+          echo "=== SDTP 日志 ==="
+          docker logs sdtp --tail 50 || echo "(无日志)"
+          echo ""
+          echo "=== 容器状态 ==="
+          docker inspect sdtp --format '{{.State.Status}}' 2>/dev/null || echo "容器不存在"
+          if [ "$(docker inspect sdtp --format '{{.State.Status}}' 2>/dev/null)" = "running" ]; then
+            echo "✅ SDTP 运行中"
+          else
+            echo "❌ SDTP 未运行"
+            exit 1
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@v5

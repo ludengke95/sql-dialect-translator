@@ -7,8 +7,9 @@ LABEL description="SDT Proxy — MySQL protocol proxy, single target DB per inst
 
 WORKDIR /app
 
-# 复制构建产物（所有 jar 都在 lib/ 下）
+# 复制构建产物（所有 jar 都在 lib/ 下，JDBC 驱动在 jdbc/ 下）
 COPY sdtp-server/target/lib/ lib/
+COPY sdtp-server/target/jdbc/ jdbc/
 
 # 默认配置文件（可通过 volume 挂载覆盖）
 COPY sdtp-server/src/main/assembly/config/proxy-config.yml /app/config/proxy-config.yml
@@ -21,4 +22,4 @@ EXPOSE 3306
 # JVM 参数优化
 ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC -Dproxy.config=/app/config/proxy-config.yml -Dlog.dir=/app/logs"
 
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -cp 'lib/*' com.translator.proxy.server.ProxyBootstrap"]
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -cp 'lib/*:jdbc/*' com.translator.proxy.server.ProxyBootstrap"]
