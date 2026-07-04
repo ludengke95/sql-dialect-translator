@@ -1,5 +1,6 @@
 -- TPC-C 表结构（PostgreSQL DDL）
 -- 用于 SDTP 基准测试：直连 PostgreSQL 建表，MySQL 方言查询通过 SDTP 执行
+-- 注意：建表顺序按依赖关系排列（被外键引用的表先创建）
 
 -- 仓库表
 DROP TABLE IF EXISTS warehouse CASCADE;
@@ -62,6 +63,17 @@ CREATE TABLE customer (
     FOREIGN KEY (c_w_id, c_d_id) REFERENCES district(d_w_id, d_id)
 );
 
+-- 商品表（被 stock 和 order_line 引用，需在其之前创建）
+DROP TABLE IF EXISTS item CASCADE;
+CREATE TABLE item (
+    i_id     INTEGER NOT NULL,
+    i_im_id  INTEGER NOT NULL,
+    i_name   VARCHAR(24) NOT NULL,
+    i_price  NUMERIC(5,2) NOT NULL,
+    i_data   VARCHAR(50) NOT NULL,
+    PRIMARY KEY (i_id)
+);
+
 -- 历史表
 DROP TABLE IF EXISTS history CASCADE;
 CREATE TABLE history (
@@ -100,25 +112,7 @@ CREATE TABLE new_orders (
     FOREIGN KEY (no_w_id, no_d_id, no_o_id) REFERENCES orders(o_w_id, o_d_id, o_id)
 );
 
--- 订单详情表
-DROP TABLE IF EXISTS order_line CASCADE;
-CREATE TABLE order_line (
-    ol_o_id      INTEGER NOT NULL,
-    ol_d_id      INTEGER NOT NULL,
-    ol_w_id      INTEGER NOT NULL,
-    ol_number    INTEGER NOT NULL,
-    ol_i_id      INTEGER NOT NULL,
-    ol_supply_w_id INTEGER NOT NULL,
-    ol_delivery_d TIMESTAMP,
-    ol_quantity  INTEGER NOT NULL,
-    ol_amount    NUMERIC(6,2) NOT NULL,
-    ol_dist_info CHAR(24) NOT NULL,
-    PRIMARY KEY (ol_w_id, ol_d_id, ol_o_id, ol_number),
-    FOREIGN KEY (ol_w_id, ol_d_id, ol_o_id) REFERENCES orders(o_w_id, o_d_id, o_id),
-    FOREIGN KEY (ol_i_id) REFERENCES item(i_id)
-);
-
--- 库存表
+-- 库存表（引用 item）
 DROP TABLE IF EXISTS stock CASCADE;
 CREATE TABLE stock (
     s_i_id       INTEGER NOT NULL,
@@ -143,13 +137,20 @@ CREATE TABLE stock (
     FOREIGN KEY (s_i_id) REFERENCES item(i_id)
 );
 
--- 商品表
-DROP TABLE IF EXISTS item CASCADE;
-CREATE TABLE item (
-    i_id     INTEGER NOT NULL,
-    i_im_id  INTEGER NOT NULL,
-    i_name   VARCHAR(24) NOT NULL,
-    i_price  NUMERIC(5,2) NOT NULL,
-    i_data   VARCHAR(50) NOT NULL,
-    PRIMARY KEY (i_id)
+-- 订单详情表（引用 item 和 orders）
+DROP TABLE IF EXISTS order_line CASCADE;
+CREATE TABLE order_line (
+    ol_o_id      INTEGER NOT NULL,
+    ol_d_id      INTEGER NOT NULL,
+    ol_w_id      INTEGER NOT NULL,
+    ol_number    INTEGER NOT NULL,
+    ol_i_id      INTEGER NOT NULL,
+    ol_supply_w_id INTEGER NOT NULL,
+    ol_delivery_d TIMESTAMP,
+    ol_quantity  INTEGER NOT NULL,
+    ol_amount    NUMERIC(6,2) NOT NULL,
+    ol_dist_info CHAR(24) NOT NULL,
+    PRIMARY KEY (ol_w_id, ol_d_id, ol_o_id, ol_number),
+    FOREIGN KEY (ol_w_id, ol_d_id, ol_o_id) REFERENCES orders(o_w_id, o_d_id, o_id),
+    FOREIGN KEY (ol_i_id) REFERENCES item(i_id)
 );
