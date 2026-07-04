@@ -88,7 +88,7 @@ jobs:
             --name sdtp \
             --add-host host.docker.internal:host-gateway \
             -p 3306:3306 \
-            -v ${{ github.workspace }}/sdtp-proxy-config-ci.yml:/app/config/proxy-config.yml \
+            -v ${{ github.workspace }}/sdtp-proxy-config-ci.yml:/opt/sdtp/config/proxy-config.yml \
             sdtp:latest
 
           echo "等待 SDTP 启动..."
