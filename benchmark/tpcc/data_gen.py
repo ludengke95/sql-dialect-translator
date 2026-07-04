@@ -85,7 +85,7 @@ class TpccDataGenerator:
             s1, s2, city, state, zip_code = self._rand_address(rng)
             rows.append((
                 w_id,
-                f"Warehouse{w_id:04d}",
+                f"WHS{w_id:04d}",
                 s1, s2, city, state, zip_code,
                 round(rng.uniform(0.0, 0.2), 4),
                 300000.00,  # w_ytd

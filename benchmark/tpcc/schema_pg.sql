@@ -5,7 +5,7 @@
 DROP TABLE IF EXISTS warehouse CASCADE;
 CREATE TABLE warehouse (
     w_id        INTEGER NOT NULL,
-    w_name      VARCHAR(10) NOT NULL,
+    w_name      VARCHAR(16) NOT NULL,
     w_street_1  VARCHAR(20) NOT NULL,
     w_street_2  VARCHAR(20) NOT NULL,
     w_city      VARCHAR(20) NOT NULL,
