@@ -125,7 +125,7 @@ jobs:
 
       - name: Verify SDTP connectivity via MySQL protocol
         run: |
-          mysql -h localhost -P ${{ env.SDTP_PORT }} -u ${{ env.SDTP_USER }} -p${{ env.SDTP_PASSWORD }} ${{ env.PG_DB }} -e "SELECT 1 AS ping;"
+          mysql -h localhost -P ${{ env.SDTP_PORT }} --protocol TCP -u ${{ env.SDTP_USER }} -p${{ env.SDTP_PASSWORD }} ${{ env.PG_DB }} -e "SELECT 1 AS ping;"
 
       - name: Run TPC-H benchmark (mysql CLI mode)
         id: tpch
