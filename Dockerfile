@@ -7,9 +7,10 @@ LABEL description="SDT Proxy — MySQL protocol proxy, single target DB per inst
 
 WORKDIR /app
 
-# 复制构建产物（所有 jar 都在 lib/ 下，JDBC 驱动在 jdbc/ 下）
+# 复制构建产物（依赖 jar 在 lib/ 下，JDBC 驱动在 jdbc/ 下）
 COPY sdtp-server/target/lib/ lib/
 COPY sdtp-server/target/jdbc/ jdbc/
+COPY sdtp-server/target/sdtp-server-*.jar lib/sdtp-server.jar
 
 # 启动脚本
 COPY sdtp-server/src/main/assembly/bin/start.sh /app/bin/start.sh
