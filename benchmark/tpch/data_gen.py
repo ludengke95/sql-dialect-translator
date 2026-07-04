@@ -2,9 +2,7 @@
 """
 TPC-H 数据生成器（SF 0.01 小数据量）
 
-策略：
-1. 尝试使用标准 dbgen 工具（克隆 electrum/tpch-dbgen 并编译）
-2. 若失败，回退到 Python 内置生成器
+使用 Python 内置生成器加载 TPC-H 标准数据到 PostgreSQL。
 
 用法:
     python data_gen.py --pg-host localhost --pg-port 5432 --pg-user sdtpu --pg-password pg_password --pg-db mydb
@@ -14,10 +12,6 @@ TPC-H 数据生成器（SF 0.01 小数据量）
 import argparse
 import csv
 import io
-import os
-import subprocess
-import sys
-import tempfile
 import random
 import string
 from datetime import date, timedelta
@@ -286,7 +280,8 @@ def load_csv_to_pg(conn_kwargs, table_name, columns, rows, batch_size=1000):
 
 
 def load_tpch_data(conn_kwargs, scale):
-    """生成并加载 TPC-H 数据。"""
+    """生成并加载所有 TPC-H 表（表须已清空）。"""
+    # 生成并加载所有 TPC-H 表
     gen = TpchDataGenerator(scale)
     load_specs = [
         ('region', ['r_regionkey', 'r_name', 'r_comment'], gen.generate_region),
@@ -312,64 +307,6 @@ def load_tpch_data(conn_kwargs, scale):
         load_csv_to_pg(conn_kwargs, table, cols, rows)
 
 
-def try_dbgen(conn_kwargs, scale):
-    """尝试使用标准 dbgen 工具。"""
-    import psycopg2
-    dbgen_dir = tempfile.mkdtemp(prefix='tpch-dbgen-')
-    try:
-        # 克隆并编译 dbgen
-        subprocess.run(
-            ['git', 'clone', 'https://github.com/electrum/tpch-dbgen.git', dbgen_dir],
-            check=True, capture_output=True, timeout=60
-        )
-        subprocess.run(['make', '-C', dbgen_dir], check=True, capture_output=True, timeout=30)
-
-        # 生成数据
-        scale_str = str(scale)
-        subprocess.run(
-            [os.path.join(dbgen_dir, 'dbgen'), '-s', scale_str, '-f'],
-            cwd=dbgen_dir, check=True, capture_output=True, timeout=300
-        )
-
-        # 加载 CSV 到 PostgreSQL
-        tables_csv = [
-            ('region', 'region.tbl'),
-            ('nation', 'nation.tbl'),
-            ('supplier', 'supplier.tbl'),
-            ('part', 'part.tbl'),
-            ('partsupp', 'partsupp.tbl'),
-            ('customer', 'customer.tbl'),
-            ('orders', 'orders.tbl'),
-            ('lineitem', 'lineitem.tbl'),
-        ]
-        conn = psycopg2.connect(**conn_kwargs)
-        try:
-            for table, csv_file in tables_csv:
-                csv_path = os.path.join(dbgen_dir, csv_file)
-                if os.path.exists(csv_path):
-                    # dbgen .tbl 文件每行末尾多一个 '|' 分隔符，需去除
-                    buf = io.StringIO()
-                    with open(csv_path, 'r') as f_in:
-                        for line in f_in:
-                            buf.write(line.rstrip('|\n') + '\n')
-                    buf.seek(0)
-                    cur = conn.cursor()
-                    cur.copy_from(buf, table, sep='|', null='')
-                    conn.commit()
-                    buf.close()
-                    row_count = sum(1 for _ in open(csv_path))
-                    print(f"  [dbgen] 导入 {table}: {row_count} 行")
-        finally:
-            conn.close()
-        return True
-    except Exception as e:
-        print(f"  dbgen 工具不可用（{e}），回退到 Python 生成器...")
-        return False
-    finally:
-        import shutil
-        shutil.rmtree(dbgen_dir, ignore_errors=True)
-
-
 def main():
     parser = argparse.ArgumentParser(description='TPC-H 数据生成器')
     parser.add_argument('--pg-host', default='localhost')
@@ -392,16 +329,21 @@ def main():
     print(f"TPC-H 数据生成 (SF={args.scale})")
     print(f"  目标: {args.pg_host}:{args.pg_port}/{args.pg_db}")
 
-    # 先尝试 dbgen
-    if try_dbgen(conn_kwargs, args.scale):
-        print("  使用标准 dbgen 工具完成数据加载")
-    else:
-        print("  使用 Python 生成器加载数据...")
-        load_tpch_data(conn_kwargs, args.scale)
-        print("  Python 生成器加载完成")
+    # 清空所有 TPC-H 表（防止上次残留数据导致主键冲突）
+    import psycopg2
+    conn_clear = psycopg2.connect(**conn_kwargs)
+    cur_clear = conn_clear.cursor()
+    for t in ['lineitem', 'orders', 'customer', 'partsupp', 'part', 'supplier', 'nation', 'region']:
+        cur_clear.execute(f"DELETE FROM {t}")
+    conn_clear.commit()
+    conn_clear.close()
+
+    # 使用 Python 生成器加载数据
+    print("  使用 Python 生成器加载数据...")
+    load_tpch_data(conn_kwargs, args.scale)
+    print("  Python 生成器加载完成")
 
     # 验证数据量
-    import psycopg2
     conn = psycopg2.connect(**conn_kwargs)
     cur = conn.cursor()
     for table in ['region', 'nation', 'supplier', 'part', 'partsupp', 'customer', 'orders', 'lineitem']:
