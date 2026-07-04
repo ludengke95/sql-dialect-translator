@@ -66,3 +66,7 @@ logs/
 
 
 /.history
+
+# Python
+__pycache__/
+*.pyc
