@@ -11,15 +11,23 @@ WORKDIR /app
 COPY sdtp-server/target/lib/ lib/
 COPY sdtp-server/target/jdbc/ jdbc/
 
+# 启动脚本
+COPY sdtp-server/src/main/assembly/bin/start.sh /app/bin/start.sh
+RUN chmod +x /app/bin/start.sh
+
 # 默认配置文件（可通过 volume 挂载覆盖）
 COPY sdtp-server/src/main/assembly/config/proxy-config.yml /app/config/proxy-config.yml
 
 # 日志目录
 RUN mkdir -p /app/logs
 
+# 环境变量
+ENV PROXY_CONFIG=/app/config/proxy-config.yml
+ENV LOG_DIR=/app/logs
+
 EXPOSE 3306
 
 # JVM 参数优化
-ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC -Dproxy.config=/app/config/proxy-config.yml -Dlog.dir=/app/logs"
+ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC"
 
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -cp 'lib/*:jdbc/*' com.translator.proxy.server.ProxyBootstrap"]
+ENTRYPOINT ["/app/bin/start.sh", "start-fg"]
