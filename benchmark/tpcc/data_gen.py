@@ -236,7 +236,11 @@ def load_csv_to_pg(conn_kwargs, table_name, columns, rows, batch_size=500):
         for row in rows:
             writer.writerow(row)
         buf.seek(0)
-        cur.copy_from(buf, table_name, sep=',', null='', columns=columns)
+        columns_sql = ', '.join(columns)
+        cur.copy_expert(
+            f"COPY {table_name} ({columns_sql}) FROM STDIN WITH CSV NULL ''",
+            buf
+        )
         conn.commit()
         print(f"  导入 {table_name}: {len(rows)} 行")
     finally:

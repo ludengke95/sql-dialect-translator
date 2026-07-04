@@ -273,8 +273,12 @@ def load_csv_to_pg(conn_kwargs, table_name, columns, rows, batch_size=1000):
             writer.writerow(row)
         buf.seek(0)
 
-        # 使用 COPY FROM STDIN
-        cur.copy_from(buf, table_name, sep=',', null='', columns=columns)
+        # 使用 COPY FROM STDIN (CSV 格式，正确处理字段内的逗号引用)
+        columns_sql = ', '.join(columns)
+        cur.copy_expert(
+            f"COPY {table_name} ({columns_sql}) FROM STDIN WITH CSV NULL ''",
+            buf
+        )
         conn.commit()
         print(f"  导入 {table_name}: {len(rows)} 行")
     finally:
