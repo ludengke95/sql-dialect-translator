@@ -230,11 +230,16 @@ class TpchDataGenerator:
         return_flags = ['A', 'N', 'R']
         start_date = date(1992, 1, 1)
         end_date = date(1998, 12, 31)
-        for i in range(1, n + 1):
+        seen = set()
+        while len(rows) < n:
             ok = rng.randint(1, n_orders)
             pk = rng.randint(1, n_part)
             sk = rng.randint(1, n_supp)
             ln = rng.randint(1, 7)
+            key = (ok, ln)
+            if key in seen:
+                continue
+            seen.add(key)
             qty = rng.randint(1, 50)
             ep = round(qty * rng.uniform(10, 2000), 2)
             disc = round(rng.uniform(0, 0.1), 2)
