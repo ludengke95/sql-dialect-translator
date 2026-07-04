@@ -104,12 +104,13 @@ def execute_mysql_cli(sql_block, host, port, user, password, database):
 
     start = time.time()
     try:
-        result = subprocess.run(
-            ['mysql', '-h', host, '-P', str(port), '-u', user,
-             f'-p{password}', database, '-f', '--connect-timeout=10',
-             '-e', f'source {tmp.name}'],
-            capture_output=True, timeout=60,
-        )
+        with open(tmp.name, 'r', encoding='utf-8') as sql_file:
+            result = subprocess.run(
+                ['mysql', '-h', host, '-P', str(port), '-u', user,
+                 f'-p{password}', database, '-f', '--connect-timeout=10'],
+                stdin=sql_file,
+                capture_output=True, timeout=60,
+            )
         duration = time.time() - start
 
         if result.returncode == 0:
