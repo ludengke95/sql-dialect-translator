@@ -347,10 +347,16 @@ def try_dbgen(conn_kwargs, scale):
             for table, csv_file in tables_csv:
                 csv_path = os.path.join(dbgen_dir, csv_file)
                 if os.path.exists(csv_path):
+                    # dbgen .tbl 文件每行末尾多一个 '|' 分隔符，需去除
+                    buf = io.StringIO()
+                    with open(csv_path, 'r') as f_in:
+                        for line in f_in:
+                            buf.write(line.rstrip('|\n') + '\n')
+                    buf.seek(0)
                     cur = conn.cursor()
-                    with open(csv_path, 'r') as f:
-                        cur.copy_from(f, table, sep='|', null='')
+                    cur.copy_from(buf, table, sep='|', null='')
                     conn.commit()
+                    buf.close()
                     row_count = sum(1 for _ in open(csv_path))
                     print(f"  [dbgen] 导入 {table}: {row_count} 行")
         finally:
