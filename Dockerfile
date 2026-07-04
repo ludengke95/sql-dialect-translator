@@ -9,7 +9,7 @@ LABEL description="SDT Proxy — MySQL protocol proxy, single target DB per inst
 COPY sdtp-server/target/sdtp-server-*-dist.tar.gz /tmp/
 RUN tar xzf /tmp/sdtp-server-*-dist.tar.gz -C /opt/ \
     && rm /tmp/sdtp-server-*-dist.tar.gz \
-    && mv /opt/sdtp-* /opt/sdtp
+    && mv /opt/sdtp-server-* /opt/sdtp
 
 WORKDIR /opt/sdtp
 
