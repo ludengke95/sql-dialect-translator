@@ -1,47 +1,33 @@
 package com.translator.proxy.server.config;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * Proxy 配置模型 —— 单实例单目标库架构，启动时一次性加载。
+ * Proxy 配置模型 —— 支持多后端数据库实例。
+ *
+ * <p>客户端通过 JDBC URL 中的 database 名称或 &#64;64;USE db_name 选择后端。
+ * 启动时加载全部后端连接池，按 {@link TargetConfig#getName()} 索引。
  */
 public class ProxyConfig {
 
     private int port = 3306;
 
     private AuthConfig auth = new AuthConfig();
-    private TargetConfig target = new TargetConfig();
+    private List<TargetConfig> backends = new ArrayList<>();
     private TranslationConf translation = new TranslationConf();
 
-    public int getPort() {
-        return port;
-    }
+    public int getPort() { return port; }
+    public void setPort(int port) { this.port = port; }
 
-    public void setPort(int port) {
-        this.port = port;
-    }
+    public AuthConfig getAuth() { return auth; }
+    public void setAuth(AuthConfig auth) { this.auth = auth; }
 
-    public AuthConfig getAuth() {
-        return auth;
-    }
+    public List<TargetConfig> getBackends() { return backends; }
+    public void setBackends(List<TargetConfig> backends) { this.backends = backends; }
 
-    public void setAuth(AuthConfig auth) {
-        this.auth = auth;
-    }
-
-    public TargetConfig getTarget() {
-        return target;
-    }
-
-    public void setTarget(TargetConfig target) {
-        this.target = target;
-    }
-
-    public TranslationConf getTranslation() {
-        return translation;
-    }
-
-    public void setTranslation(TranslationConf translation) {
-        this.translation = translation;
-    }
+    public TranslationConf getTranslation() { return translation; }
+    public void setTranslation(TranslationConf translation) { this.translation = translation; }
 
     // ==================== 内嵌配置类 ====================
 
@@ -55,11 +41,15 @@ public class ProxyConfig {
         public void setPassword(String password) { this.password = password; }
     }
 
+    /**
+     * 单个后端数据库实例配置。
+     * name 字段对应客户端连接时指定的数据库名称。
+     */
     public static class TargetConfig {
-        /**
-         * 目标库方言类型，如 MYSQL, POSTGRESQL, ORACLE 等。
-         * 对应 translator-core 中的 DialectType。
-         */
+        /** 后端名称，客户端通过 USE {@literal <name>} 或 JDBC URL database 连接 */
+        private String name;
+
+        /** 目标库方言类型，如 MYSQL, POSTGRESQL, ORACLE 等 */
         private String dialect = "POSTGRESQL";
 
         /** 目标库 JDBC URL */
@@ -77,6 +67,8 @@ public class ProxyConfig {
         /** 连接池最小空闲连接数 */
         private int minIdle = 2;
 
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
         public String getDialect() { return dialect; }
         public void setDialect(String dialect) { this.dialect = dialect; }
         public String getJdbcUrl() { return jdbcUrl; }
@@ -92,21 +84,10 @@ public class ProxyConfig {
     }
 
     /**
-     * SQL 翻译配置 —— 控制翻译后 SQL 中关键词和标识符的大小写。
-     *
-     * <p>不同目标数据库推荐：
-     * <ul>
-     *   <li>PostgreSQL / HighGo / KingbaseES：keywordCase=UPPER, identifierCase=LOWER ✅ 默认</li>
-     *   <li>Oracle / DM（达梦）：keywordCase=UPPER, identifierCase=UPPER</li>
-     *   <li>MySQL：keywordCase=UPPER, identifierCase=UNCHANGED</li>
-     *   <li>SQL Server：keywordCase=UPPER, identifierCase=UNCHANGED</li>
-     * </ul>
+     * SQL 翻译配置。
      */
     public static class TranslationConf {
-        /** 关键词大小写：UPPER（默认）或 LOWER */
         private String keywordCase = "UPPER";
-
-        /** 标识符大小写：LOWER（默认）、UPPER 或 UNCHANGED */
         private String identifierCase = "LOWER";
 
         public String getKeywordCase() { return keywordCase; }

@@ -156,6 +156,13 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
     }
 
     /**
+     * 获取被包装的底层处理器（用于关闭连接池）。
+     */
+    public CommandHandler.QueryProcessor getDelegate() {
+        return delegate;
+    }
+
+    /**
      * 翻译单条 SQL。
      */
     private String translate(String sql) {

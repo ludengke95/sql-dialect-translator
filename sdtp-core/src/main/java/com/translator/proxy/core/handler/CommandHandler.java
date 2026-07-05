@@ -37,11 +37,21 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(CommandHandler.class);
 
-    /** 后端查询处理器（Phase 4 中由 proxy-backend 模块注入） */
+    /** 后端路由器（多后端模式下按数据库名路由） */
+    private static volatile BackendRouter backendRouter = null;
+
+    /** 默认后端查询处理器（向后兼容：无路由器时使用） */
     private static volatile QueryProcessor queryProcessor = QueryProcessor.NOOP;
 
     /**
-     * 设置全局查询处理器（启动时由 proxy-server 注入）。
+     * 设置后端路由器（多后端模式）。
+     */
+    public static void setBackendRouter(BackendRouter router) {
+        backendRouter = router;
+    }
+
+    /**
+     * 设置全局查询处理器（单后端模式，兼容旧版）。
      */
     public static void setQueryProcessor(QueryProcessor processor) {
         queryProcessor = processor != null ? processor : QueryProcessor.NOOP;
@@ -123,8 +133,19 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
             return;
         }
 
-        // 4. 否则委托给后端查询处理器
-        queryProcessor.process(ctx, sql, session);
+        // 4. 根据会话 database 选择后端处理器并执行
+        QueryProcessor processor = resolveProcessor(session);
+        processor.process(ctx, sql, session);
+    }
+
+    /**
+     * 根据会话信息解析出应使用的后端处理器。
+     */
+    private QueryProcessor resolveProcessor(FrontendSession session) {
+        if (backendRouter != null) {
+            return backendRouter.resolve(session);
+        }
+        return queryProcessor;
     }
 
     // ==================== COM_PING / COM_QUIT ====================
@@ -143,6 +164,9 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
     private void handleInitDb(ChannelHandlerContext ctx, ByteBuf payload, FrontendSession session) {
         String dbName = BufferUtils.readNullTerminatedString(payload);
         log.debug("COM_INIT_DB: {}", dbName);
+
+        // 多后端模式下验证该数据库名是否有对应的后端
+        // 即使没有匹配的后端，也允许设置，SQL 执行时会解析到默认后端
         session.setDatabase(dbName);
         writeOk(ctx, 0, 0, "");
     }
