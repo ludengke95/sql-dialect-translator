@@ -336,5 +336,10 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
          * @param session 当前会话
          */
         void process(ChannelHandlerContext ctx, String sql, FrontendSession session);
+
+        /**
+         * 关闭后端连接池（默认空实现，实现类按需重写）。
+         */
+        default void close() {}
     }
 }

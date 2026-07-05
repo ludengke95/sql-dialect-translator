@@ -112,21 +112,7 @@ public class BackendPoolManager implements BackendRouter {
      */
     public void close() {
         for (CommandHandler.QueryProcessor processor : processorMap.values()) {
-            if (processor instanceof JdbcBackendQueryProcessor) {
-                ((JdbcBackendQueryProcessor) processor).close();
-            } else if (processor instanceof TranslationQueryProcessor) {
-                // 通过反射获取 delegate，因为 getDelegate() 返回 QueryProcessor 接口无 close()
-                try {
-                    java.lang.reflect.Field delegateField = TranslationQueryProcessor.class.getDeclaredField("delegate");
-                    delegateField.setAccessible(true);
-                    Object delegate = delegateField.get(processor);
-                    if (delegate instanceof JdbcBackendQueryProcessor) {
-                        ((JdbcBackendQueryProcessor) delegate).close();
-                    }
-                } catch (Exception e) {
-                    log.warn("Failed to close backend processor", e);
-                }
-            }
+            processor.close();
         }
         log.info("All backend pools closed");
     }
