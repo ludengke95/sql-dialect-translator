@@ -24,15 +24,15 @@ CREATE TABLE nation (
 -- 供应商表
 DROP TABLE IF EXISTS supplier CASCADE;
 CREATE TABLE supplier (
-    su_suppkey   INTEGER NOT NULL,
-    su_name      CHAR(25) NOT NULL,
-    su_address   VARCHAR(40) NOT NULL,
-    su_nationkey INTEGER NOT NULL,
-    su_phone     CHAR(15) NOT NULL,
-    su_acctbal   NUMERIC(12,2) NOT NULL,
-    su_comment   VARCHAR(101) NOT NULL,
-    PRIMARY KEY (su_suppkey),
-    FOREIGN KEY (su_nationkey) REFERENCES nation(n_nationkey)
+    s_suppkey   INTEGER NOT NULL,
+    s_name      CHAR(25) NOT NULL,
+    s_address   VARCHAR(40) NOT NULL,
+    s_nationkey INTEGER NOT NULL,
+    s_phone     CHAR(15) NOT NULL,
+    s_acctbal   NUMERIC(12,2) NOT NULL,
+    s_comment   VARCHAR(101) NOT NULL,
+    PRIMARY KEY (s_suppkey),
+    FOREIGN KEY (s_nationkey) REFERENCES nation(n_nationkey)
 );
 
 -- 零件表
@@ -60,7 +60,7 @@ CREATE TABLE partsupp (
     ps_comment    VARCHAR(199) NOT NULL,
     PRIMARY KEY (ps_partkey, ps_suppkey),
     FOREIGN KEY (ps_partkey) REFERENCES part(p_partkey),
-    FOREIGN KEY (ps_suppkey) REFERENCES supplier(su_suppkey)
+    FOREIGN KEY (ps_suppkey) REFERENCES supplier(s_suppkey)
 );
 
 -- 客户表
@@ -116,5 +116,5 @@ CREATE TABLE lineitem (
     PRIMARY KEY (l_orderkey, l_linenumber),
     FOREIGN KEY (l_orderkey) REFERENCES orders(o_orderkey),
     FOREIGN KEY (l_partkey) REFERENCES part(p_partkey),
-    FOREIGN KEY (l_suppkey) REFERENCES supplier(su_suppkey)
+    FOREIGN KEY (l_suppkey) REFERENCES supplier(s_suppkey)
 );

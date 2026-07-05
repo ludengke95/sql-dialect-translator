@@ -29,8 +29,9 @@ SELECT i_price, i_name, i_data FROM item WHERE i_id = 10;
 SELECT s_quantity, s_dist_01, s_ytd FROM stock
 WHERE s_i_id = 1 AND s_w_id = 1;
 
--- T1-f: 更新库存
-UPDATE stock SET s_quantity = s_quantity - 1 WHERE s_i_id = 1 AND s_w_id = 1;
+-- T1-f: 更新库存（s_quantity 减订单数量，s_ytd 累加，s_order_cnt +1）
+UPDATE stock SET s_quantity = s_quantity - 5, s_ytd = s_ytd + 5, s_order_cnt = s_order_cnt + 1
+WHERE s_i_id = 1 AND s_w_id = 1;
 
 -- T1-g: 更新区域下一订单号
 UPDATE district SET d_next_o_id = d_next_o_id + 1 WHERE d_w_id = 1 AND d_id = 1;
