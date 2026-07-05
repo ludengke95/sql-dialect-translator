@@ -15,7 +15,7 @@ public class ProxyConfig {
 
     private AuthConfig auth = new AuthConfig();
     private List<TargetConfig> backends = new ArrayList<>();
-    private TranslationConf translation = new TranslationConf();
+    private TranslationConf translation = new TranslationConf(); // 全局默认值
 
     public int getPort() { return port; }
     public void setPort(int port) { this.port = port; }
@@ -67,6 +67,9 @@ public class ProxyConfig {
         /** 连接池最小空闲连接数 */
         private int minIdle = 2;
 
+        /** 翻译配置（可选，不设置时使用全局默认值） */
+        private TranslationConf translation;
+
         public String getName() { return name; }
         public void setName(String name) { this.name = name; }
         public String getDialect() { return dialect; }
@@ -81,6 +84,8 @@ public class ProxyConfig {
         public void setMaxPoolSize(int maxPoolSize) { this.maxPoolSize = maxPoolSize; }
         public int getMinIdle() { return minIdle; }
         public void setMinIdle(int minIdle) { this.minIdle = minIdle; }
+        public TranslationConf getTranslation() { return translation; }
+        public void setTranslation(TranslationConf translation) { this.translation = translation; }
     }
 
     /**
