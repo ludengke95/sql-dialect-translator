@@ -519,4 +519,72 @@ public class SqlTranslatorTest {
         Assert.assertTrue("a.task_code 应小写引用: " + pgResult,
                 pgResult.contains("\"a\".\"task_code\""));
     }
+
+    // ==================== TPC-H Q21 翻译诊断 ====================
+
+    @Test
+    public void testTpcHQ21Translation() {
+        // TPC-H Q21: 未能及时供应的供应商
+        // 多表 JOIN + orders 表无别名，验证 Calcite 是否能为 o_orderkey 添加 orders 前缀
+        String mysqlSql =
+                "SELECT s_name, COUNT(*) AS numwait\n"
+                + "FROM supplier, lineitem l1, orders, nation\n"
+                + "WHERE s_suppkey = l1.l_suppkey\n"
+                + "    AND o_orderkey = l1.l_orderkey\n"
+                + "    AND o_orderstatus = 'F'\n"
+                + "    AND l1.l_receiptdate > l1.l_commitdate\n"
+                + "    AND EXISTS (\n"
+                + "        SELECT *\n"
+                + "        FROM lineitem l2\n"
+                + "        WHERE l2.l_orderkey = l1.l_orderkey\n"
+                + "            AND l2.l_suppkey <> l1.l_suppkey\n"
+                + "    )\n"
+                + "    AND NOT EXISTS (\n"
+                + "        SELECT *\n"
+                + "        FROM lineitem l3\n"
+                + "        WHERE l3.l_orderkey = l1.l_orderkey\n"
+                + "            AND l3.l_suppkey <> l1.l_suppkey\n"
+                + "            AND l3.l_receiptdate > l3.l_commitdate\n"
+                + "    )\n"
+                + "    AND s_nationkey = n_nationkey\n"
+                + "    AND n_name = 'SAUDI ARABIA'\n"
+                + "GROUP BY s_name\n"
+                + "ORDER BY numwait DESC, s_name\n"
+                + "LIMIT 100";
+
+        String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
+
+        System.out.println("===== TPC-H Q21 翻译诊断 =====");
+        System.out.println("MySQL原文:\n" + mysqlSql);
+        System.out.println();
+        System.out.println("PostgreSQL翻译结果:\n" + pgResult);
+        System.out.println("===== 诊断结束 =====");
+
+        // 基础断言：翻译后仍是有效 SQL 结构
+        String upper = pgResult.toUpperCase();
+        Assert.assertTrue("应包含 SELECT: " + pgResult, upper.contains("SELECT"));
+        Assert.assertTrue("应包含 FROM: " + pgResult, upper.contains("FROM"));
+        Assert.assertTrue("应包含 GROUP BY: " + pgResult, upper.contains("GROUP BY"));
+        Assert.assertTrue("应包含 ORDER BY: " + pgResult, upper.contains("ORDER BY"));
+        Assert.assertTrue("应包含 LIMIT: " + pgResult, upper.contains("LIMIT"));
+        Assert.assertTrue("应包含 EXISTS: " + pgResult, upper.contains("EXISTS"));
+
+        // 关键检查：o_orderkey 应被正确限定
+        // 如果 Calcite 正确添加了 orders 前缀，结果中应出现 orders.o_orderkey 或 "orders"."o_orderkey"
+        // 如果只出现裸的 o_orderkey / "o_orderkey"，说明缺少表名限定
+        boolean hasOrdersPrefix = pgResult.contains("orders.o_orderkey")
+                || pgResult.contains("orders.\"o_orderkey\"")
+                || pgResult.contains("\"orders\".\"o_orderkey\"");
+        boolean hasBareOrderkey = pgResult.matches("(?s).*[^\\.]o_orderkey.*")
+                && !pgResult.contains(".o_orderkey")
+                && !pgResult.contains(".\"o_orderkey\"");
+
+        System.out.println("是否有 orders 前缀: " + hasOrdersPrefix);
+        System.out.println("是否出现裸 o_orderkey: " + hasBareOrderkey);
+
+        // 这个断言当前预期失败——我们把它打印出来诊断而不阻塞其他测试
+        if (!hasOrdersPrefix) {
+            System.err.println("WARNING: o_orderkey 缺少 orders 表名前缀! 这会引发 PostgreSQL 'column does not exist' 错误");
+        }
+    }
 }

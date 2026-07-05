@@ -12,19 +12,22 @@ import java.util.regex.Pattern;
  * <p>Connects to SDTP Proxy via MySQL JDBC driver, executes MySQL-dialect
  * queries, and verifies translation + protocol compatibility.
  *
+ * <p>Supports both single-file (-- END block split) and directory mode
+ * (each *.sql file is one query, sorted by filename).
+ *
  * <p>Usage:
  * <pre>
  *   javac -cp mysql-connector-java-8.0.33.jar JavaJdbcTest.java
  *   java -cp .:mysql-connector-java-8.0.33.jar JavaJdbcTest \
  *       --host localhost --port 3306 --user root --password proxy_password \
- *       --database mydb
+ *       --database mydb \
+ *       --tpch-queries benchmark/tpch/queries   # directory mode
+ *       --tpcc-queries benchmark/tpcc/queries   # directory mode
  * </pre>
  */
 public class JavaJdbcTest {
 
     private static final Pattern END_MARKER = Pattern.compile("\n-- END\\b[^\\n]*");
-    private static final Pattern NAME_MARKER = Pattern.compile("--\\s*(.+)");
-    private static final Pattern Q_NAME = Pattern.compile("\\bQ\\d+\\b");
 
     private final String host;
     private final int port;
@@ -48,10 +51,44 @@ public class JavaJdbcTest {
         this.outputDir = outputDir;
     }
 
-    // ==================== Query File Parsing ====================
+    // ==================== Query Loading ====================
 
-    static List<QueryBlock> readQueries(String filepath) throws IOException {
-        String content = new String(Files.readAllBytes(Paths.get(filepath)), StandardCharsets.UTF_8);
+    /**
+     * Load queries from a path. If it's a directory, scan *.sql files sorted by name.
+     * If it's a file, use END_MARKER splitting (legacy single-file format).
+     */
+    static List<QueryBlock> loadQueries(String path) throws IOException {
+        File f = new File(path);
+        if (!f.exists()) return Collections.emptyList();
+
+        if (f.isDirectory()) {
+            List<QueryBlock> result = new ArrayList<>();
+            File[] files = f.listFiles((dir, name) -> name.endsWith(".sql"));
+            if (files != null) {
+                Arrays.sort(files);  // sorted by name: q01.sql, q02.sql, ...
+                for (File file : files) {
+                    String content = new String(Files.readAllBytes(file.toPath()),
+                            StandardCharsets.UTF_8).trim();
+                    if (content.isEmpty()) continue;
+
+                    // Extract name from filename (q01, t1_new_order, a1_order_stats)
+                    String name = file.getName();
+                    int dot = name.lastIndexOf('.');
+                    if (dot > 0) name = name.substring(0, dot);
+
+                    result.add(new QueryBlock(name, content));
+                }
+            }
+            return result;
+        } else {
+            // Single file — split by -- END markers (legacy)
+            return readQueriesFromFile(f);
+        }
+    }
+
+    /** Legacy single-file parser with -- END block splitting */
+    static List<QueryBlock> readQueriesFromFile(File file) throws IOException {
+        String content = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
         String[] blocks = END_MARKER.split(content);
         List<QueryBlock> result = new ArrayList<>();
 
@@ -66,10 +103,10 @@ public class JavaJdbcTest {
             for (String line : lines) {
                 String stripped = line.trim();
                 if (stripped.startsWith("--")) {
-                    Matcher m = Q_NAME.matcher(stripped);
-                    String cnName = "事务";
-                    if (m.find() || stripped.contains(cnName)) {
-                        Matcher nm = NAME_MARKER.matcher(stripped);
+                    // Try to extract query name from comment
+                    Matcher m = Pattern.compile("\\bQ\\d+\\b").matcher(stripped);
+                    if (m.find() || stripped.contains("\u4e8b\u52a1")) {
+                        Matcher nm = Pattern.compile("--\\s*(.+)").matcher(stripped);
                         if (nm.matches()) {
                             name = nm.group(1).trim();
                         }
@@ -82,16 +119,21 @@ public class JavaJdbcTest {
                 }
             }
 
-            String sql = sqlBuilder.toString().trim().toUpperCase();
+            String sql = sqlBuilder.toString().trim();
             if (sql.isEmpty()) continue;
-            if (!sql.startsWith("SELECT") && !sql.startsWith("WITH")
-                    && !sql.startsWith("INSERT") && !sql.startsWith("UPDATE")
-                    && !sql.startsWith("DELETE")) {
+
+            // Check it's a valid query type
+            String upper = sql.toUpperCase();
+            if (!upper.startsWith("SELECT") && !upper.startsWith("WITH")
+                    && !upper.startsWith("INSERT") && !upper.startsWith("UPDATE")
+                    && !upper.startsWith("DELETE")) {
                 continue;
             }
 
-            String rawName = name.isEmpty() ? "query_" + (result.size() + 1) : name;
-            result.add(new QueryBlock(rawName, sqlBuilder.toString().trim()));
+            if (name.isEmpty()) {
+                name = "query_" + (result.size() + 1);
+            }
+            result.add(new QueryBlock(name, sql));
         }
         return result;
     }
@@ -149,27 +191,22 @@ public class JavaJdbcTest {
     // ==================== Execution ====================
 
     static Detail execute(Connection conn, QueryBlock q) {
-        String[] statements = q.sql.split("\n");
         long start = System.nanoTime();
         try {
-            for (String stmt : statements) {
-                stmt = stmt.trim();
-                if (stmt.isEmpty()) continue;
-                try (Statement s = conn.createStatement()) {
-                    boolean isResultSet;
-                    try {
-                        isResultSet = s.execute(stmt);
-                    } catch (SQLException e) {
-                        if (stmt.endsWith(";")) {
-                            isResultSet = s.execute(stmt.substring(0, stmt.length() - 1));
-                        } else {
-                            throw e;
-                        }
+            try (Statement s = conn.createStatement()) {
+                boolean isResultSet;
+                try {
+                    isResultSet = s.execute(q.sql);
+                } catch (SQLException e) {
+                    if (q.sql.trim().endsWith(";")) {
+                        isResultSet = s.execute(q.sql.trim().substring(0, q.sql.trim().length() - 1));
+                    } else {
+                        throw e;
                     }
-                    if (isResultSet) {
-                        try (ResultSet rs = s.getResultSet()) {
-                            while (rs.next()) { /* consume all rows */ }
-                        }
+                }
+                if (isResultSet) {
+                    try (ResultSet rs = s.getResultSet()) {
+                        while (rs.next()) { /* consume all rows */ }
                     }
                 }
             }
@@ -304,8 +341,8 @@ public class JavaJdbcTest {
         String user = "root";
         String password = "proxy_password";
         String database = "mydb";
-        String tpchQueries = "benchmark/tpch/queries_mysql.sql";
-        String tpccQueries = "benchmark/tpcc/queries_mysql.sql";
+        String tpchQueries = "benchmark/tpch/queries";
+        String tpccQueries = "benchmark/tpcc/queries";
         String outputDir = ".";
 
         for (int i = 0; i < args.length; i++) {
@@ -330,18 +367,18 @@ public class JavaJdbcTest {
 
         List<Report> allReports = new ArrayList<>();
 
-        if (new File(tpchQueries).exists()) {
-            List<QueryBlock> list = readQueries(tpchQueries);
-            System.out.println("\nRead TPC-H queries: " + list.size() + " blocks");
-            Report r = test.runBenchmark(list, "TPC-H");
+        List<QueryBlock> tpchList = loadQueries(tpchQueries);
+        if (!tpchList.isEmpty()) {
+            System.out.println("\nLoaded TPC-H queries: " + tpchList.size() + " blocks");
+            Report r = test.runBenchmark(tpchList, "TPC-H");
             saveReport(r, outputDir);
             allReports.add(r);
         }
 
-        if (new File(tpccQueries).exists()) {
-            List<QueryBlock> list = readQueries(tpccQueries);
-            System.out.println("\nRead TPC-C queries: " + list.size() + " blocks");
-            Report r = test.runBenchmark(list, "TPC-C");
+        List<QueryBlock> tpccList = loadQueries(tpccQueries);
+        if (!tpccList.isEmpty()) {
+            System.out.println("\nLoaded TPC-C queries: " + tpccList.size() + " blocks");
+            Report r = test.runBenchmark(tpccList, "TPC-C");
             saveReport(r, outputDir);
             allReports.add(r);
         }
@@ -367,7 +404,7 @@ public class JavaJdbcTest {
     }
 
     static void printUsage() {
-        System.out.println("JavaJdbcTest — Java JDBC TPC-C/TPC-H integration test");
+        System.out.println("JavaJdbcTest \u2014 Java JDBC TPC-C/TPC-H integration test");
         System.out.println();
         System.out.println("Options:");
         System.out.println("  --host <host>           SDTP Proxy host (default: localhost)");
@@ -375,8 +412,8 @@ public class JavaJdbcTest {
         System.out.println("  --user <user>           SDTP auth user (default: root)");
         System.out.println("  --password <password>   SDTP auth password (default: proxy_password)");
         System.out.println("  --database <database>   Target database (default: mydb)");
-        System.out.println("  --tpch-queries <file>   TPC-H queries file (default: benchmark/tpch/queries_mysql.sql)");
-        System.out.println("  --tpcc-queries <file>   TPC-C queries file (default: benchmark/tpcc/queries_mysql.sql)");
+        System.out.println("  --tpch-queries <dir>    TPC-H queries dir or file (default: benchmark/tpch/queries)");
+        System.out.println("  --tpcc-queries <dir>    TPC-C queries dir or file (default: benchmark/tpcc/queries)");
         System.out.println("  --output-dir <dir>      Report output directory (default: .)");
     }
 
