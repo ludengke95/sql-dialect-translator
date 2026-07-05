@@ -16,6 +16,10 @@ public class BackendEntry {
     private int maxPoolSize = 20;
     private int minIdle = 2;
 
+    /** 翻译配置（可选，不设置时使用全局默认值） */
+    private String keywordCase;
+    private String identifierCase;
+
     public BackendEntry() {}
 
     public BackendEntry(String name, String dialect, String jdbcUrl,
@@ -28,6 +32,18 @@ public class BackendEntry {
         this.password = password;
         this.maxPoolSize = maxPoolSize;
         this.minIdle = minIdle;
+    }
+
+    /**
+     * 全参构造（含翻译配置）。
+     */
+    public BackendEntry(String name, String dialect, String jdbcUrl,
+                         String username, String password,
+                         int maxPoolSize, int minIdle,
+                         String keywordCase, String identifierCase) {
+        this(name, dialect, jdbcUrl, username, password, maxPoolSize, minIdle);
+        this.keywordCase = keywordCase;
+        this.identifierCase = identifierCase;
     }
 
     public String getName() { return name; }
@@ -50,4 +66,10 @@ public class BackendEntry {
 
     public int getMinIdle() { return minIdle; }
     public void setMinIdle(int minIdle) { this.minIdle = minIdle; }
+
+    public String getKeywordCase() { return keywordCase; }
+    public void setKeywordCase(String keywordCase) { this.keywordCase = keywordCase; }
+
+    public String getIdentifierCase() { return identifierCase; }
+    public void setIdentifierCase(String identifierCase) { this.identifierCase = identifierCase; }
 }

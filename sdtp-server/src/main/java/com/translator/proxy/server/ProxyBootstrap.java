@@ -48,25 +48,34 @@ public class ProxyBootstrap {
         bossGroup = new NioEventLoopGroup(1);
         workerGroup = new NioEventLoopGroup();
 
-        int bizThreads = Math.max(16, 4);
+        int bizThreads = 4;
+        for (ProxyConfig.TargetConfig tcBackend : config.getBackends()) {
+            bizThreads = Math.max(bizThreads, tcBackend.getMaxPoolSize());
+        }
         bizExecutorGroup = new DefaultEventExecutorGroup(bizThreads);
 
         String cachedAuthUser = config.getAuth().getUser();
         String cachedAuthPassword = config.getAuth().getPassword();
 
-        // 构建翻译配置
+        // 构建翻译配置（全局默认）
         ProxyConfig.TranslationConf trc = config.getTranslation();
-        TranslationConfig translationConfig = new TranslationConfig()
+        TranslationConfig defaultTranslationConfig = new TranslationConfig()
                 .withKeywordCase(TranslationConfig.KeywordCase.valueOf(trc.getKeywordCase()))
                 .withIdentifierCase(TranslationConfig.IdentifierCase.valueOf(trc.getIdentifierCase()));
 
         // 将 ProxyConfig.TargetConfig 转换为 BackendEntry 列表
         List<BackendEntry> backends = new ArrayList<>();
         for (ProxyConfig.TargetConfig tc : config.getBackends()) {
-            backends.add(new BackendEntry(
+            BackendEntry be = new BackendEntry(
                     tc.getName(), tc.getDialect(), tc.getJdbcUrl(),
                     tc.getUsername(), tc.getPassword(),
-                    tc.getMaxPoolSize(), tc.getMinIdle()));
+                    tc.getMaxPoolSize(), tc.getMinIdle());
+            // 如果后端自带翻译配置，覆盖全局默认
+            if (tc.getTranslation() != null) {
+                be.setKeywordCase(tc.getTranslation().getKeywordCase());
+                be.setIdentifierCase(tc.getTranslation().getIdentifierCase());
+            }
+            backends.add(be);
         }
 
         // 初始化多后端连接池管理器
