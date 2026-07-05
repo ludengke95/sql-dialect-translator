@@ -107,8 +107,8 @@ public final class SystemVariableInterceptor {
         // SHOW WARNINGS — 返回空结果集（始终无警告）
         m = SHOW_WARNINGS.matcher(trimmed);
         if (m.find()) {
-            // 双列结果，但 0 行 —— 通过特殊标记返回空数据集
-            return InterceptResult.emptyTwoColumn("Level", "Code", "Message");
+            // 三列空结果集（SHOW WARNINGS 有三列但始终无数据行）
+            return InterceptResult.emptyThreeColumn("Level", "Code", "Message");
         }
 
         return null;
@@ -177,8 +177,8 @@ public final class SystemVariableInterceptor {
             this.empty = false;
         }
 
-        /** 三列空结果（如 SHOW WARNINGS，有列名无数据行） */
-        static InterceptResult emptyTwoColumn(String col1, String col2, String col3) {
+        /** 三列空结果集（如 SHOW WARNINGS，有列名无数据行） */
+        static InterceptResult emptyThreeColumn(String col1, String col2, String col3) {
             InterceptResult r = new InterceptResult(col1, null);
             r.colName2 = col2;
             r.colName3 = col3;

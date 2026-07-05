@@ -196,18 +196,19 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
         ctx.write(new MySQLPacketEncoder.OutgoingPacket(colCountBuf, (byte) 1));
 
         byte seq = 2;
-        // Column Def 1
+        // Column Def 1 — 使用 FIELD_TYPE_VAR_STRING (0xFD) 而非 FIELD_TYPE_VARCHAR (0x0F)
+        // Python 客户端（如 mysql-connector-python）对 columnType 校验严格，0x0F 会导致 "Malformed packet"
         ctx.write(new MySQLPacketEncoder.OutgoingPacket(
-                buildColumnDef(ctx.alloc(), "def", "", ir.colName1, ir.colName1, 255, 15, 33), seq++));
+                buildColumnDef(ctx.alloc(), "def", "", ir.colName1, ir.colName1, 255, 0xFD, 33), seq++));
         // Column Def 2
         if (ir.twoColumns || ir.colName3 != null) {
             ctx.write(new MySQLPacketEncoder.OutgoingPacket(
-                    buildColumnDef(ctx.alloc(), "def", "", ir.colName2, ir.colName2, 255, 15, 33), seq++));
+                    buildColumnDef(ctx.alloc(), "def", "", ir.colName2, ir.colName2, 255, 0xFD, 33), seq++));
         }
         // Column Def 3 (SHOW WARNINGS 三列)
         if (ir.colName3 != null) {
             ctx.write(new MySQLPacketEncoder.OutgoingPacket(
-                    buildColumnDef(ctx.alloc(), "def", "", ir.colName3, ir.colName3, 255, 15, 33), seq++));
+                    buildColumnDef(ctx.alloc(), "def", "", ir.colName3, ir.colName3, 255, 0xFD, 33), seq++));
         }
 
         // EOF (after columns)
