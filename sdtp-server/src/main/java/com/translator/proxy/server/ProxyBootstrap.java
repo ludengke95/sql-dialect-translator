@@ -1,8 +1,9 @@
 package com.translator.proxy.server;
 
 import com.translator.core.config.TranslationConfig;
-import com.translator.proxy.backend.JdbcBackendQueryProcessor;
-import com.translator.proxy.backend.TranslationQueryProcessor;
+import com.translator.proxy.backend.BackendEntry;
+import com.translator.proxy.backend.BackendPoolManager;
+import com.translator.proxy.core.handler.BackendRouter;
 import com.translator.proxy.core.handler.CommandHandler;
 import com.translator.proxy.core.handler.HandshakeHandler;
 import com.translator.proxy.protocol.codec.MySQLPacketDecoder;
@@ -19,21 +20,14 @@ import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * MySQL Proxy 启动引导类。
+ * MySQL Proxy 启动引导类（多后端版）。
  *
- * <p>Netty Pipeline 架构：
- * <pre>
- *   IO Thread (EventLoop):
- *     [MySQLPacketDecoder → MySQLPacketEncoder]
- *
- *   IO Thread (EventLoop) — 握手阶段:
- *     [HandshakeHandler → AuthHandler]
- *
- *   Biz Thread (DefaultEventExecutorGroup) — 命令阶段:
- *     [CommandHandler]
- *     (JDBC 阻塞调用在 CommandHandler 内部进一步委托到独立线程池)
- * </pre>
+ * <p>启动时初始化 {@link BackendPoolManager} 管理多个后端连接池，
+ * 将 {@link BackendRouter} 注入 {@link CommandHandler} 实现按数据库名路由。
  */
 public class ProxyBootstrap {
 
@@ -43,37 +37,22 @@ public class ProxyBootstrap {
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
     private DefaultEventExecutorGroup bizExecutorGroup;
-    /** 后端查询处理器 */
-    private JdbcBackendQueryProcessor backendProcessor;
-    /** 内嵌账密 snapshots（在 start() 时设置，供 ChannelInitializer 闭包使用） */
-    private String cachedAuthUser;
-    private String cachedAuthPassword;
+    /** 多后端管理器 */
+    private BackendPoolManager backendPoolManager;
 
     public ProxyBootstrap(ProxyConfig config) {
         this.config = config;
     }
 
-    /**
-     * 启动 Proxy 服务。
-     */
     public void start() throws InterruptedException {
         bossGroup = new NioEventLoopGroup(1);
         workerGroup = new NioEventLoopGroup();
 
-        // 业务线程池：用于运行 CommandHandler，避免阻塞 IO 线程
-        int bizThreads = Math.max(config.getTarget().getMaxPoolSize(), 4);
+        int bizThreads = Math.max(16, 4);
         bizExecutorGroup = new DefaultEventExecutorGroup(bizThreads);
 
-        // 快照配置
-        cachedAuthUser = config.getAuth().getUser();
-        cachedAuthPassword = config.getAuth().getPassword();
-
-        // 初始化后端查询处理器（HikariCP 连接池）
-        ProxyConfig.TargetConfig tc = config.getTarget();
-        JdbcBackendQueryProcessor jdbcProcessor = JdbcBackendQueryProcessor.create(
-                tc.getJdbcUrl(), tc.getUsername(), tc.getPassword(),
-                tc.getMaxPoolSize(), tc.getMinIdle());
-        backendProcessor = jdbcProcessor;
+        String cachedAuthUser = config.getAuth().getUser();
+        String cachedAuthPassword = config.getAuth().getPassword();
 
         // 构建翻译配置
         ProxyConfig.TranslationConf trc = config.getTranslation();
@@ -81,10 +60,21 @@ public class ProxyBootstrap {
                 .withKeywordCase(TranslationConfig.KeywordCase.valueOf(trc.getKeywordCase()))
                 .withIdentifierCase(TranslationConfig.IdentifierCase.valueOf(trc.getIdentifierCase()));
 
-        // 包装翻译装饰器（当源 MySQL ≠ 目标方言时生效）
-        CommandHandler.QueryProcessor processor = new TranslationQueryProcessor(
-                jdbcProcessor, tc.getDialect(), translationConfig);
-        CommandHandler.setQueryProcessor(processor);
+        // 将 ProxyConfig.TargetConfig 转换为 BackendEntry 列表
+        List<BackendEntry> backends = new ArrayList<>();
+        for (ProxyConfig.TargetConfig tc : config.getBackends()) {
+            backends.add(new BackendEntry(
+                    tc.getName(), tc.getDialect(), tc.getJdbcUrl(),
+                    tc.getUsername(), tc.getPassword(),
+                    tc.getMaxPoolSize(), tc.getMinIdle()));
+        }
+
+        // 初始化多后端连接池管理器
+        BackendPoolManager bpm = new BackendPoolManager(backends, translationConfig);
+        backendPoolManager = bpm;
+
+        // 将路由器注入 CommandHandler
+        CommandHandler.setBackendRouter(bpm);
 
         try {
             ServerBootstrap bootstrap = new ServerBootstrap();
@@ -98,15 +88,12 @@ public class ProxyBootstrap {
                         protected void initChannel(SocketChannel ch) {
                             ChannelPipeline pipeline = ch.pipeline();
 
-                            // IO 层：协议编解码器
                             pipeline.addLast("decoder", new MySQLPacketDecoder());
                             pipeline.addLast("encoder", new MySQLPacketEncoder());
 
-                            // 连接空闲超时（8 小时无读写则断开，与 MySQL 默认 wait_timeout 一致）
                             pipeline.addLast("idleHandler",
                                     new IdleStateHandler(28800, 28800, 0));
 
-                            // IO 层：握手处理器（使用配置的账密）
                             pipeline.addLast("handshakeHandler",
                                     new HandshakeHandler(cachedAuthUser, cachedAuthPassword));
                         }
@@ -115,7 +102,10 @@ public class ProxyBootstrap {
             ChannelFuture future = bootstrap.bind(config.getPort()).sync();
             log.info("========================================");
             log.info("  MySQL Proxy started on port {}", config.getPort());
-            log.info("  Target: {} ({})", config.getTarget().getJdbcUrl(), config.getTarget().getDialect());
+            log.info("  Backends: {} configured", backendPoolManager.getBackendNames().size());
+            for (String name : backendPoolManager.getBackendNames()) {
+                log.info("    - {}", name);
+            }
             log.info("  Auth: user={}", config.getAuth().getUser());
             log.info("  Biz threads: {}", bizThreads);
             log.info("========================================");
@@ -126,12 +116,9 @@ public class ProxyBootstrap {
         }
     }
 
-    /**
-     * 关闭 Proxy 服务。
-     */
     public void shutdown() {
-        if (backendProcessor != null) {
-            backendProcessor.close();
+        if (backendPoolManager != null) {
+            backendPoolManager.close();
         }
         if (bizExecutorGroup != null) {
             bizExecutorGroup.shutdownGracefully();
@@ -144,8 +131,6 @@ public class ProxyBootstrap {
         }
         log.info("MySQL Proxy stopped.");
     }
-
-    // ==================== main 入口 ====================
 
     public static void main(String[] args) throws Exception {
         ProxyConfig config = ConfigLoader.load();

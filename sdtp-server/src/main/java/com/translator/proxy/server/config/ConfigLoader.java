@@ -3,16 +3,22 @@ package com.translator.proxy.server.config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yaml.snakeyaml.Yaml;
-import org.yaml.snakeyaml.constructor.Constructor;
-import org.yaml.snakeyaml.introspector.BeanAccess;
 
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /**
  * YAML 配置文件加载器。
+ *
+ * <p>支持新旧两种配置格式：
+ * <ul>
+ *   <li>新格式：backends 列表（每个后端含 name、dialect、jdbc-url、账密、连接池参数）</li>
+ *   <li>旧格式：单 target（自动转换为 backends 列表）</li>
+ * </ul>
  *
  * <p>查找顺序：
  * <ol>
@@ -27,17 +33,12 @@ public final class ConfigLoader {
 
     private ConfigLoader() {}
 
-    /**
-     * 加载配置。
-     */
     public static ProxyConfig load() {
         String configPath = System.getProperty("proxy.config");
-
         if (configPath != null) {
             return loadFromFile(configPath);
         }
 
-        // 尝试 classpath
         InputStream classpathStream = ConfigLoader.class.getClassLoader()
                 .getResourceAsStream("proxy-config.yml");
         if (classpathStream != null) {
@@ -45,7 +46,6 @@ public final class ConfigLoader {
             return loadFromStream(classpathStream);
         }
 
-        // 尝试当前目录
         try {
             return loadFromFile("proxy-config.yml");
         } catch (Exception e) {
@@ -72,7 +72,7 @@ public final class ConfigLoader {
 
         ProxyConfig config = new ProxyConfig();
 
-        // proxy 段
+        // === proxy 段 ===
         Map<String, Object> proxy = (Map<String, Object>) root.get("proxy");
         if (proxy != null) {
             if (proxy.get("port") != null) {
@@ -90,31 +90,39 @@ public final class ConfigLoader {
             }
         }
 
-        // target 段
-        Map<String, Object> target = (Map<String, Object>) root.get("target");
-        if (target != null) {
-            ProxyConfig.TargetConfig tc = config.getTarget();
-            if (target.get("dialect") != null) {
-                tc.setDialect((String) target.get("dialect"));
+        // === backends 列表（新格式） ===
+        List<Map<String, Object>> backendsList = (List<Map<String, Object>>) root.get("backends");
+        if (backendsList != null && !backendsList.isEmpty()) {
+            for (Map<String, Object> bm : backendsList) {
+                ProxyConfig.TargetConfig tc = parseTargetConfig(bm);
+                config.getBackends().add(tc);
             }
-            if (target.get("jdbc-url") != null) {
-                tc.setJdbcUrl((String) target.get("jdbc-url"));
-            }
-            if (target.get("username") != null) {
-                tc.setUsername((String) target.get("username"));
-            }
-            if (target.get("password") != null) {
-                tc.setPassword((String) target.get("password"));
-            }
-            if (target.get("max-pool-size") != null) {
-                tc.setMaxPoolSize(((Number) target.get("max-pool-size")).intValue());
-            }
-            if (target.get("min-idle") != null) {
-                tc.setMinIdle(((Number) target.get("min-idle")).intValue());
+            log.info("Loaded {} backends from config", config.getBackends().size());
+        }
+
+        // === target 段（旧格式，向后兼容） ===
+        if (config.getBackends().isEmpty()) {
+            Map<String, Object> target = (Map<String, Object>) root.get("target");
+            if (target != null) {
+                ProxyConfig.TargetConfig tc = parseTargetConfig(target);
+                if (tc.getName() == null) {
+                    // 旧格式无 name，用 jdbc-url 中的数据库名或默认值
+                    String url = tc.getJdbcUrl();
+                    if (url != null && url.contains("/")) {
+                        String dbName = url.substring(url.lastIndexOf('/') + 1);
+                        int paramIdx = dbName.indexOf('?');
+                        if (paramIdx > 0) dbName = dbName.substring(0, paramIdx);
+                        tc.setName(dbName);
+                    } else {
+                        tc.setName("mydb");
+                    }
+                }
+                config.getBackends().add(tc);
+                log.info("Loaded single target (backward compat) as backend '{}'", tc.getName());
             }
         }
 
-        // translation 段（顶层，与 proxy、target 并列）
+        // === translation 段 ===
         Map<String, Object> translation = (Map<String, Object>) root.get("translation");
         if (translation != null) {
             ProxyConfig.TranslationConf trc = config.getTranslation();
@@ -127,5 +135,18 @@ public final class ConfigLoader {
         }
 
         return config;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ProxyConfig.TargetConfig parseTargetConfig(Map<String, Object> map) {
+        ProxyConfig.TargetConfig tc = new ProxyConfig.TargetConfig();
+        if (map.get("name") != null) tc.setName((String) map.get("name"));
+        if (map.get("dialect") != null) tc.setDialect((String) map.get("dialect"));
+        if (map.get("jdbc-url") != null) tc.setJdbcUrl((String) map.get("jdbc-url"));
+        if (map.get("username") != null) tc.setUsername((String) map.get("username"));
+        if (map.get("password") != null) tc.setPassword((String) map.get("password"));
+        if (map.get("max-pool-size") != null) tc.setMaxPoolSize(((Number) map.get("max-pool-size")).intValue());
+        if (map.get("min-idle") != null) tc.setMinIdle(((Number) map.get("min-idle")).intValue());
+        return tc;
     }
 }
