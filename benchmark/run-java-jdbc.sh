@@ -44,8 +44,8 @@ run_benchmark() {
 
     compile
 
-    local tpch_file="$BASE_DIR/benchmark/tpch/queries_mysql.sql"
-    local tpcc_file="$BASE_DIR/benchmark/tpcc/queries_mysql.sql"
+    local tpch_file="$BASE_DIR/benchmark/tpch/queries"
+    local tpcc_file="$BASE_DIR/benchmark/tpcc/queries"
 
     case "$mode" in
         tpch)

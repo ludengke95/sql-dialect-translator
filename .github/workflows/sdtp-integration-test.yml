@@ -529,6 +529,10 @@ jobs:
           java-version: '8'
           distribution: 'temurin'
 
+      - name: Set up Python and install dependencies
+        run: |
+          pip install psycopg2-binary
+
       - name: Create TPC-H tables and load data
         run: |
           PGPASSWORD=${{ env.PG_PASSWORD }} psql -h localhost -U ${{ env.PG_USER }} -d ${{ env.PG_DB }} -f benchmark/tpch/schema_pg.sql
@@ -564,7 +568,7 @@ jobs:
             --host localhost --port ${{ env.SDTP_PORT }} \
             --user ${{ env.SDTP_USER }} --password ${{ env.SDTP_PASSWORD }} \
             --database ${{ env.PG_DB }} \
-            --tpch-queries benchmark/tpch/queries_mysql.sql \
+            --tpch-queries benchmark/tpch/queries \
             --tpcc-queries "" \
             --output-dir benchmark/reports
 
@@ -581,7 +585,7 @@ jobs:
             --host localhost --port ${{ env.SDTP_PORT }} \
             --user ${{ env.SDTP_USER }} --password ${{ env.SDTP_PASSWORD }} \
             --database ${{ env.PG_DB }} \
-            --tpcc-queries benchmark/tpcc/queries_mysql.sql \
+            --tpcc-queries benchmark/tpcc/queries \
             --tpch-queries "" \
             --output-dir benchmark/reports
 

@@ -42,10 +42,26 @@ REPORT_TEMPLATE = """
 
 
 def read_queries(filepath):
-    """读取 SQL 文件，按 `-- END` 标记分割为独立查询块。
+    """读取 SQL 查询。
 
-    用正则消耗整行 `-- END Q<x>` 标记，防止标签泄漏到下一块。
+    如果 filepath 是目录，读取目录下所有 *.sql 文件（按文件名排序），
+    每个文件作为一个独立查询块。
+    如果 filepath 是文件，按 `-- END` 标记分割为独立查询块（旧格式兼容）。
     """
+    if os.path.isdir(filepath):
+        queries = []
+        files = sorted([f for f in os.listdir(filepath) if f.endswith('.sql')])
+        for fname in files:
+            file_full = os.path.join(filepath, fname)
+            with open(file_full, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+            if not content:
+                continue
+            name = fname[:-4]  # remove .sql
+            queries.append({'name': name, 'sql': content})
+        return queries
+
+    # 旧格式：单个文件 -- END 分割
     queries = []
     with open(filepath, 'r', encoding='utf-8') as f:
         content = f.read()
