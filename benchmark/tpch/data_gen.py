@@ -132,6 +132,7 @@ class TpchDataGenerator:
                   'white', 'yellow']
         types1 = ['STANDARD', 'SMALL', 'MEDIUM', 'LARGE', 'ECONOMY', 'PROMO']
         types2 = ['ANODIZED', 'BURNISHED', 'PLATED', 'POLISHED', 'BRUSHED']
+        types3 = ['TIN', 'NICKEL', 'BRASS', 'STEEL', 'COPPER']
         containers = ['SMALL BOX', 'SMALL PKG', 'SMALL PACK', 'MED BOX', 'MED PKG', 'MED PACK',
                       'LG BOX', 'LG PKG', 'LG PACK', 'JUMBO BOX', 'JUMBO PKG', 'JUMBO PACK',
                       'WRAP BOX', 'WRAP PKG', 'WRAP PACK', 'JAR', 'DRUM', 'CAN', 'BAG', 'CASE']
@@ -139,12 +140,13 @@ class TpchDataGenerator:
             color = rng.choice(colors)
             type1 = rng.choice(types1)
             type2 = rng.choice(types2)
+            type3 = rng.choice(types3)
             rows.append((
                 i,
-                f"bisque {color} {type1} {type2}",
+                f"{color} {type1} {type2}",
                 f"Manufacturer#{rng.randint(1, 5)}",
                 f"Brand#{rng.randint(11, 55)}",
-                f"{type1} {type2} {color}",
+                f"{type1} {type2} {type3}",
                 rng.randint(1, 50),
                 rng.choice(containers),
                 round(rng.uniform(1, 2000), 2),
@@ -291,8 +293,8 @@ def load_tpch_data(conn_kwargs, scale):
     load_specs = [
         ('region', ['r_regionkey', 'r_name', 'r_comment'], gen.generate_region),
         ('nation', ['n_nationkey', 'n_name', 'n_regionkey', 'n_comment'], gen.generate_nation),
-        ('supplier', ['su_suppkey', 'su_name', 'su_address', 'su_nationkey', 'su_phone',
-                       'su_acctbal', 'su_comment'], gen.generate_supplier),
+        ('supplier', ['s_suppkey', 's_name', 's_address', 's_nationkey', 's_phone',
+                       's_acctbal', 's_comment'], gen.generate_supplier),
         ('part', ['p_partkey', 'p_name', 'p_mfgr', 'p_brand', 'p_type', 'p_size',
                    'p_container', 'p_retailprice', 'p_comment'], gen.generate_part),
         ('partsupp', ['ps_partkey', 'ps_suppkey', 'ps_availqty', 'ps_supplycost', 'ps_comment'],
