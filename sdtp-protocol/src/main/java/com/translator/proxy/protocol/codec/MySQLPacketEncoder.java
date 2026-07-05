@@ -31,6 +31,9 @@ public class MySQLPacketEncoder extends MessageToByteEncoder<MySQLPacketEncoder.
         // 写入 payload
         out.writeBytes(payload);
 
+        // 释放 payload（MessageToByteEncoder 只释放 OutgoingPacket 对象本身，不释放其持有的 ByteBuf）
+        payload.release();
+
         if (log.isTraceEnabled()) {
             log.trace("Encoded packet: seq={}, payloadLen={}", sequenceId, payloadLen);
         }
