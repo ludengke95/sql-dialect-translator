@@ -1,0 +1,442 @@
+# =============================================================================
+# SDTP Python / MySQL CLI Integration Test (TPC-C / TPC-H)
+#
+# 分为三个 job：
+#   1. build         — 构建 Maven + Docker，产出共享 artifact
+#   2. python-test   — 独立 PostgreSQL + SDTP，通过 Python mysql.connector 执行
+#   3. mysql-cli-test — 独立 PostgreSQL + SDTP，通过 mysql CLI 执行
+#
+# 两个测试 job 各自拥有独立的数据库和代理实例，互不干扰。
+# =============================================================================
+
+name: SDTP Integration Test (TPC-C / TPC-H)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SDTP_USER: root
+  SDTP_PASSWORD: proxy_password
+  SDTP_PORT: 3306
+  PG_USER: sdtpu
+  PG_PASSWORD: pg_password
+  PG_DB: mydb
+  PG_PORT: 5432
+
+# ============================================================================
+# Job 1: 构建 Maven 和 Docker 镜像，产出供后续 job 复用
+# ============================================================================
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build SDTP with Maven
+        run: mvn clean package -DskipTests -B
+
+      - name: Build SDTP Docker image
+        run: docker build -t sdtp:latest .
+
+      - name: Save Docker image as artifact
+        run: |
+          docker save sdtp:latest | gzip > /tmp/sdtp-image.tar.gz
+
+      - name: Upload Docker image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdtp-docker-image
+          path: /tmp/sdtp-image.tar.gz
+          retention-days: 1
+
+      - name: Upload Maven tarball for reference (optional)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdtp-server-dist
+          path: sdtp-server/target/sdtp-server-*.tar.gz
+          retention-days: 1
+
+  # ==========================================================================
+  # Job 2: Python mysql.connector 集成测试（独立 PostgreSQL + SDTP）
+  # ==========================================================================
+  python-test:
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: sdtpu
+          POSTGRES_PASSWORD: pg_password
+          POSTGRES_DB: mydb
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U sdtpu -d mydb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sdtp-docker-image
+          path: /tmp/
+
+      - name: Load Docker image
+        run: |
+          gunzip -c /tmp/sdtp-image.tar.gz | docker load
+
+      - name: Create SDTP config for CI
+        run: |
+          cat > sdtp-proxy-config-ci.yml << 'YAML'
+          proxy:
+            port: 3306
+            auth:
+              user: root
+              password: proxy_password
+          target:
+            dialect: POSTGRESQL
+            jdbc-url: jdbc:postgresql://host.docker.internal:5432/mydb
+            username: sdtpu
+            password: pg_password
+            max-pool-size: 10
+            min-idle: 2
+          translation:
+            keyword-case: UPPER
+            identifier-case: LOWER
+          YAML
+
+      - name: Start SDTP container
+        run: |
+          docker rm -f sdtp 2>/dev/null || true
+          docker run -d \
+            --name sdtp \
+            --add-host host.docker.internal:host-gateway \
+            -p 3306:3306 \
+            -v ${{ github.workspace }}/sdtp-proxy-config-ci.yml:/opt/sdtp/config/proxy-config.yml \
+            sdtp:latest
+          echo "Waiting for SDTP to start..."
+          sleep 8
+          for i in $(seq 1 30); do
+            if docker logs sdtp 2>&1 | grep -qi "started\|listening"; then
+              echo "SDTP is ready (attempt $i)"
+              break
+            fi
+            sleep 3
+          done
+
+      - name: Verify SDTP container status
+        if: always()
+        run: |
+          docker ps -a
+          docker inspect sdtp --format '{{.State.Status}}' 2>/dev/null || exit 1
+          echo "SDTP is running"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Python dependencies
+        run: |
+          pip install mysql-connector-python psycopg2-binary
+
+      - name: Create TPC-H tables and load data
+        run: |
+          PGPASSWORD=${{ env.PG_PASSWORD }} psql -h localhost -U ${{ env.PG_USER }} -d ${{ env.PG_DB }} -f benchmark/tpch/schema_pg.sql
+          python benchmark/tpch/data_gen.py \
+            --pg-host localhost --pg-port ${{ env.PG_PORT }} \
+            --pg-user ${{ env.PG_USER }} --pg-password ${{ env.PG_PASSWORD }} \
+            --pg-db ${{ env.PG_DB }} --scale 0.01
+
+      - name: Create TPC-C tables and load data
+        run: |
+          PGPASSWORD=${{ env.PG_PASSWORD }} psql -h localhost -U ${{ env.PG_USER }} -d ${{ env.PG_DB }} -f benchmark/tpcc/schema_pg.sql
+          python benchmark/tpcc/data_gen.py \
+            --pg-host localhost --pg-port ${{ env.PG_PORT }} \
+            --pg-user ${{ env.PG_USER }} --pg-password ${{ env.PG_PASSWORD }} \
+            --pg-db ${{ env.PG_DB }} --warehouses 1
+
+      - name: Verify SDTP connectivity via Python mysql.connector
+        run: |
+          python3 -c "
+          import mysql.connector
+          conn = mysql.connector.connect(
+              host='localhost', port=${{ env.SDTP_PORT }},
+              user='${{ env.SDTP_USER }}', password='${{ env.SDTP_PASSWORD }}',
+              database='${{ env.PG_DB }}', charset='utf8', autocommit=True
+          )
+          cur = conn.cursor()
+          cur.execute('SELECT 1 AS ping')
+          row = cur.fetchone()
+          print(f'✅ SDTP reachable via Python: {row}')
+          cur.close()
+          conn.close()
+          "
+
+      - name: Run TPC-H integration test (Python mode)
+        id: tpch
+        run: |
+          python benchmark/runner.py \
+            --mode python \
+            --sdtp-host localhost \
+            --sdtp-port ${{ env.SDTP_PORT }} \
+            --sdtp-user ${{ env.SDTP_USER }} \
+            --sdtp-password ${{ env.SDTP_PASSWORD }} \
+            --sdtp-database ${{ env.PG_DB }} \
+            --benchmark tpch \
+            --output-dir benchmark/reports \
+            --sdtp-logs-dir /tmp/sdtp-logs
+
+      - name: Collect SDTP logs (after TPC-H)
+        if: always()
+        run: |
+          mkdir -p /tmp/sdtp-logs
+          docker logs sdtp --tail 200 > /tmp/sdtp-logs/sdtp-after-tpch.log 2>&1 || true
+
+      - name: Run TPC-C integration test (Python mode)
+        id: tpcc
+        run: |
+          python benchmark/runner.py \
+            --mode python \
+            --sdtp-host localhost \
+            --sdtp-port ${{ env.SDTP_PORT }} \
+            --sdtp-user ${{ env.SDTP_USER }} \
+            --sdtp-password ${{ env.SDTP_PASSWORD }} \
+            --sdtp-database ${{ env.PG_DB }} \
+            --benchmark tpcc \
+            --output-dir benchmark/reports \
+            --sdtp-logs-dir /tmp/sdtp-logs
+
+      - name: Collect SDTP logs (final)
+        if: always()
+        run: |
+          docker logs sdtp --tail 200 > /tmp/sdtp-logs/sdtp-final.log 2>&1 || true
+
+      - name: Upload Python test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-integration-reports
+          path: |
+            benchmark/reports/
+            /tmp/sdtp-logs/
+
+      - name: Print Python test summary
+        if: always()
+        run: |
+          {
+            echo "## Python Integration Test Results"
+            echo ""
+            for report in benchmark/reports/report_*.txt; do
+              if [ -f "$report" ]; then
+                echo '```'
+                cat "$report"
+                echo '```'
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ==========================================================================
+  # Job 3: mysql CLI 集成测试（独立 PostgreSQL + SDTP）
+  # ==========================================================================
+  mysql-cli-test:
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: sdtpu
+          POSTGRES_PASSWORD: pg_password
+          POSTGRES_DB: mydb
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U sdtpu -d mydb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sdtp-docker-image
+          path: /tmp/
+
+      - name: Load Docker image
+        run: |
+          gunzip -c /tmp/sdtp-image.tar.gz | docker load
+
+      - name: Create SDTP config for CI
+        run: |
+          cat > sdtp-proxy-config-ci.yml << 'YAML'
+          proxy:
+            port: 3306
+            auth:
+              user: root
+              password: proxy_password
+          target:
+            dialect: POSTGRESQL
+            jdbc-url: jdbc:postgresql://host.docker.internal:5432/mydb
+            username: sdtpu
+            password: pg_password
+            max-pool-size: 10
+            min-idle: 2
+          translation:
+            keyword-case: UPPER
+            identifier-case: LOWER
+          YAML
+
+      - name: Start SDTP container
+        run: |
+          docker rm -f sdtp 2>/dev/null || true
+          docker run -d \
+            --name sdtp \
+            --add-host host.docker.internal:host-gateway \
+            -p 3306:3306 \
+            -v ${{ github.workspace }}/sdtp-proxy-config-ci.yml:/opt/sdtp/config/proxy-config.yml \
+            sdtp:latest
+          echo "Waiting for SDTP to start..."
+          sleep 8
+          for i in $(seq 1 30); do
+            if docker logs sdtp 2>&1 | grep -qi "started\|listening"; then
+              echo "SDTP is ready (attempt $i)"
+              break
+            fi
+            sleep 3
+          done
+
+      - name: Verify SDTP container status
+        if: always()
+        run: |
+          docker ps -a
+          docker inspect sdtp --format '{{.State.Status}}' 2>/dev/null || exit 1
+          echo "SDTP is running"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies (Python + mysql CLI)
+        run: |
+          pip install mysql-connector-python psycopg2-binary
+          sudo apt-get update -qq && sudo apt-get install -y -qq mysql-client
+          mysql --version
+
+      - name: Create TPC-H tables and load data
+        run: |
+          PGPASSWORD=${{ env.PG_PASSWORD }} psql -h localhost -U ${{ env.PG_USER }} -d ${{ env.PG_DB }} -f benchmark/tpch/schema_pg.sql
+          python benchmark/tpch/data_gen.py \
+            --pg-host localhost --pg-port ${{ env.PG_PORT }} \
+            --pg-user ${{ env.PG_USER }} --pg-password ${{ env.PG_PASSWORD }} \
+            --pg-db ${{ env.PG_DB }} --scale 0.01
+
+      - name: Create TPC-C tables and load data
+        run: |
+          PGPASSWORD=${{ env.PG_PASSWORD }} psql -h localhost -U ${{ env.PG_USER }} -d ${{ env.PG_DB }} -f benchmark/tpcc/schema_pg.sql
+          python benchmark/tpcc/data_gen.py \
+            --pg-host localhost --pg-port ${{ env.PG_PORT }} \
+            --pg-user ${{ env.PG_USER }} --pg-password ${{ env.PG_PASSWORD }} \
+            --pg-db ${{ env.PG_DB }} --warehouses 1
+
+      - name: Verify SDTP connectivity via MySQL CLI
+        run: |
+          mysql -h localhost -P ${{ env.SDTP_PORT }} --protocol TCP \
+            -u ${{ env.SDTP_USER }} -p${{ env.SDTP_PASSWORD }} \
+            ${{ env.PG_DB }} -e "SELECT 1 AS ping;"
+
+      - name: Run TPC-H integration test (mysql CLI mode)
+        id: tpch
+        run: |
+          python benchmark/runner.py \
+            --mode mysql-cli \
+            --sdtp-host localhost \
+            --sdtp-port ${{ env.SDTP_PORT }} \
+            --sdtp-user ${{ env.SDTP_USER }} \
+            --sdtp-password ${{ env.SDTP_PASSWORD }} \
+            --sdtp-database ${{ env.PG_DB }} \
+            --benchmark tpch \
+            --output-dir benchmark/reports \
+            --sdtp-logs-dir /tmp/sdtp-logs
+
+      - name: Collect SDTP logs (after TPC-H)
+        if: always()
+        run: |
+          mkdir -p /tmp/sdtp-logs
+          docker logs sdtp --tail 200 > /tmp/sdtp-logs/sdtp-after-tpch.log 2>&1 || true
+
+      - name: Run TPC-C integration test (mysql CLI mode)
+        id: tpcc
+        run: |
+          python benchmark/runner.py \
+            --mode mysql-cli \
+            --sdtp-host localhost \
+            --sdtp-port ${{ env.SDTP_PORT }} \
+            --sdtp-user ${{ env.SDTP_USER }} \
+            --sdtp-password ${{ env.SDTP_PASSWORD }} \
+            --sdtp-database ${{ env.PG_DB }} \
+            --benchmark tpcc \
+            --output-dir benchmark/reports \
+            --sdtp-logs-dir /tmp/sdtp-logs
+
+      - name: Collect SDTP logs (final)
+        if: always()
+        run: |
+          docker logs sdtp --tail 200 > /tmp/sdtp-logs/sdtp-final.log 2>&1 || true
+
+      - name: Upload mysql-cli test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mysql-cli-integration-reports
+          path: |
+            benchmark/reports/
+            /tmp/sdtp-logs/
+
+      - name: Print mysql-cli test summary
+        if: always()
+        run: |
+          {
+            echo "## MySQL CLI Integration Test Results"
+            echo ""
+            for report in benchmark/reports/report_*.txt; do
+              if [ -f "$report" ]; then
+                echo '```'
+                cat "$report"
+                echo '```'
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
