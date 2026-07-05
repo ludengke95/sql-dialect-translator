@@ -79,7 +79,7 @@ public class ProxyBootstrap {
         }
 
         // 初始化多后端连接池管理器
-        BackendPoolManager bpm = new BackendPoolManager(backends, translationConfig);
+        BackendPoolManager bpm = new BackendPoolManager(backends, defaultTranslationConfig);
         backendPoolManager = bpm;
 
         // 将路由器注入 CommandHandler

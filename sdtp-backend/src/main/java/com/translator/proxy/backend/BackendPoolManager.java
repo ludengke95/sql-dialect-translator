@@ -32,7 +32,7 @@ public class BackendPoolManager implements BackendRouter {
     /**
      * 创建管理器并初始化所有后端连接池。
      *
-     * @param backends          后端配置列表
+     * @param backends           后端配置列表
      * @param defaultTranslationConfig 全局默认翻译配置（后端未指定时使用）
      */
     public BackendPoolManager(List<BackendEntry> backends, TranslationConfig defaultTranslationConfig) {
@@ -115,7 +115,17 @@ public class BackendPoolManager implements BackendRouter {
             if (processor instanceof JdbcBackendQueryProcessor) {
                 ((JdbcBackendQueryProcessor) processor).close();
             } else if (processor instanceof TranslationQueryProcessor) {
-                ((TranslationQueryProcessor) processor).getDelegate().close();
+                // 通过反射获取 delegate，因为 getDelegate() 返回 QueryProcessor 接口无 close()
+                try {
+                    java.lang.reflect.Field delegateField = TranslationQueryProcessor.class.getDeclaredField("delegate");
+                    delegateField.setAccessible(true);
+                    Object delegate = delegateField.get(processor);
+                    if (delegate instanceof JdbcBackendQueryProcessor) {
+                        ((JdbcBackendQueryProcessor) delegate).close();
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to close backend processor", e);
+                }
             }
         }
         log.info("All backend pools closed");
