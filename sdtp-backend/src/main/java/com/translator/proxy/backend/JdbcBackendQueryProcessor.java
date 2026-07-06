@@ -65,6 +65,11 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
         hikariConfig.setReadOnly(true);
         hikariConfig.setAutoCommit(true);
 
+        // 设置连接池名称（用于 HikariMetricsTracker 的 pool_name label）
+        if (backendName != null) {
+            hikariConfig.setPoolName(backendName);
+        }
+
         // 注册 HikariCP MetricsTracker
         hikariConfig.setMetricsTrackerFactory(new com.translator.proxy.metrics.HikariMetricsTrackerFactory());
 

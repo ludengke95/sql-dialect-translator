@@ -63,7 +63,7 @@ public class BackendPoolManager implements BackendRouter {
             // 包装翻译装饰器
             CommandHandler.QueryProcessor processor;
             if (be.getDialect() != null && !be.getDialect().equalsIgnoreCase("MYSQL")) {
-                processor = new TranslationQueryProcessor(jdbcProcessor, be.getDialect(), tc);
+                processor = new TranslationQueryProcessor(jdbcProcessor, be.getDialect(), tc, name);
             } else {
                 processor = jdbcProcessor;
             }

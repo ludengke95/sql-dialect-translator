@@ -61,6 +61,9 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
     /** 目标方言 */
     private final DialectType targetDialect;
 
+    /** 后端名称（用于指标打点） */
+    private volatile String backendName = "unknown";
+
     /** 翻译配置 */
     private final TranslationConfig translationConfig;
 
@@ -75,7 +78,16 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
      */
     public TranslationQueryProcessor(CommandHandler.QueryProcessor delegate,
                                       String targetDialectId) {
-        this(delegate, targetDialectId, TranslationConfig.DEFAULT);
+        this(delegate, targetDialectId, TranslationConfig.DEFAULT, null);
+    }
+
+    /**
+     * 创建翻译处理器（带自定义大小写配置，不指定后端名）。
+     */
+    public TranslationQueryProcessor(CommandHandler.QueryProcessor delegate,
+                                      String targetDialectId,
+                                      TranslationConfig translationConfig) {
+        this(delegate, targetDialectId, translationConfig, null);
     }
 
     /**
@@ -84,21 +96,28 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
      * @param delegate          实际后端查询处理器
      * @param targetDialectId   目标方言标识符
      * @param translationConfig 翻译配置（关键词/标识符大小写策略）
+     * @param backendName       后端名称（用于指标打点），可为 null
      */
     public TranslationQueryProcessor(CommandHandler.QueryProcessor delegate,
                                       String targetDialectId,
-                                      TranslationConfig translationConfig) {
+                                      TranslationConfig translationConfig,
+                                      String backendName) {
         this.delegate = delegate;
         this.enabled = !SOURCE_DIALECT.getIdentifier().equalsIgnoreCase(targetDialectId);
         this.translationConfig = translationConfig != null ? translationConfig : TranslationConfig.DEFAULT;
+        if (backendName != null) {
+            this.backendName = backendName;
+        }
 
         if (enabled) {
             this.targetDialect = DialectType.fromIdentifier(targetDialectId);
-            log.info("SQL translation enabled: {} → {} (config: {})",
-                    SOURCE_DIALECT.getIdentifier(), targetDialect.getIdentifier(), this.translationConfig);
+            log.info("SQL translation enabled: {} → {} (config: {}, backend: {})",
+                    SOURCE_DIALECT.getIdentifier(), targetDialect.getIdentifier(),
+                    this.translationConfig, this.backendName);
         } else {
             this.targetDialect = SOURCE_DIALECT;
-            log.info("SQL translation disabled (source == target: {})", targetDialectId);
+            log.info("SQL translation disabled (source == target: {}, backend: {})",
+                    targetDialectId, this.backendName);
         }
     }
 
@@ -112,7 +131,7 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
             return;
         }
 
-        TranslationMetrics.recordRequest(targetDialect.getIdentifier());
+        TranslationMetrics.recordRequest(targetDialect.getIdentifier(), backendName);
 
         // 检查直通标记：-- direct / -- sdtp:direct / /* sdtp:direct */
         String stripped = stripDirectHint(sql);
@@ -130,7 +149,7 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
             translatedSql = translate(sql);
             double seconds = (System.nanoTime() - startNanos) / 1_000_000_000.0;
             TranslationMetrics.recordSuccess();
-            TranslationMetrics.recordDuration(targetDialect.getIdentifier(), seconds);
+            TranslationMetrics.recordDuration(targetDialect.getIdentifier(), backendName, seconds);
             log.info("Translated: {} → {}", sql, translatedSql);
         } catch (Exception e) {
             log.warn("Translation failed for SQL: {}. Falling back to original. Error: {}",
@@ -163,6 +182,13 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
         }
 
         return null;
+    }
+
+    /**
+     * 设置后端名称（用于指标打点）。
+     */
+    public void setBackendName(String backendName) {
+        this.backendName = backendName;
     }
 
     /**
