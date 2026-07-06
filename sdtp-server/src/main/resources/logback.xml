@@ -30,7 +30,7 @@
     <logger name="io.netty" level="WARN" />
 
     <!-- Proxy 日志：INFO -->
-    <logger name="com.translator.proxy" level="INFO" />
+    <logger name="com.translator.proxy" level="DEBUG" />
     <logger name="com.translator.core" level="INFO" />
 
     <!-- 根日志 -->

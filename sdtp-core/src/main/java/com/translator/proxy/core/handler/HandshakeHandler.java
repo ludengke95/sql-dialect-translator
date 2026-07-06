@@ -58,16 +58,24 @@ public class HandshakeHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
         long connectionId = CONNECTION_ID_GENERATOR.getAndIncrement();
-        byte[] scramble = MySQLAuth.generateScramble();
+
+        // 生成 20 字节随机 scramble，追加一个 NUL 凑成 21 字节
+        // JDBC 驱动（mysql-connector-java）使用 authDataLen 作为 seed 数组大小
+        // authDataLen=21（8+13），所以 seed 是 21 字节（含尾部 NUL）
+        byte[] scramble20 = MySQLAuth.generateScramble();
+        byte[] scramble21 = new byte[21];
+        System.arraycopy(scramble20, 0, scramble21, 0, 20);
+        // scramble21[20] = 0x00 (already default)
 
         // 创建会话并绑定到 channel 属性
-        FrontendSession session = FrontendSession.create(ctx.channel(), connectionId, scramble);
+        FrontendSession session = FrontendSession.create(ctx.channel(), connectionId, scramble21);
         ctx.channel().attr(SessionAttribute.SESSION_KEY).set(session);
 
         // 构造 HandshakeV10 包
-        ByteBuf handshake = buildHandshakeV10(ctx.alloc(), connectionId, scramble);
+        ByteBuf handshake = buildHandshakeV10(ctx.alloc(), connectionId, scramble20);
 
         log.info("Sending handshake to {} (connectionId={})", ctx.channel().remoteAddress(), connectionId);
+        log.debug("Handshake scramble (20 bytes): {}", MySQLAuth.bytesToHex(scramble20));
 
         // 注意：handshake 是连接发起的第一个包，sequenceId = 0
         // 但 Encoder 不负责管理 sequenceId，由调用者传入。这里固定 seq=0
@@ -113,13 +121,15 @@ public class HandshakeHandler extends ChannelInboundHandlerAdapter {
 
         // 10. length of auth-plugin-data
         // 总是 21（8+13，因为 CLIENT_SECURE_CONNECTION）
+        // 注意：某些 JDBC 驱动（如 mysql-connector-java）将此值用作 seed 数组大小
+        // 因此必须填 21 确保客户端解析正确
         buf.writeByte(21);
 
         // 11. reserved (10 bytes of 0x00)
         buf.writeZero(10);
 
-        // 12. auth-plugin-data-part-2 (at least 12 bytes, NUL-terminated)
-        // 需要填满到 13 字节（21-8=13），最后一个字节为 NUL
+        // 12. auth-plugin-data-part-2 (13 bytes, 最后一个是 NUL)
+        // scramble[8..19] 共 12 字节，再加 NUL terminator 凑成 13 字节
         buf.writeBytes(scramble, 8, 12);
         buf.writeByte(0x00);
 

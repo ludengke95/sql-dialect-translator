@@ -6,6 +6,7 @@ proxy:
     password: proxy_password
 
 target:
+  name: tes
   dialect: POSTGRESQL
   jdbc-url: jdbc:highgo://10.110.60.187:5866/highgo?useUnicode=true&characterEncoding=utf8&currentSchema=meta_data_center
   username: highgo
