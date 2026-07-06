@@ -3,7 +3,7 @@ package com.translator.proxy.backend;
 import com.translator.proxy.backend.mapper.ResultSetEncoder;
 import com.translator.proxy.core.handler.CommandHandler;
 import com.translator.proxy.core.session.FrontendSession;
-import com.translator.proxy.metrics.BackendMetrics;
+import com.translator.metrics.BackendMetrics;
 import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
 import com.translator.proxy.core.handler.AuthHandler;
 import com.zaxxer.hikari.HikariConfig;

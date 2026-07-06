@@ -1,5 +1,7 @@
 package com.translator.jdbc;
 
+import com.translator.metrics.BackendMetrics;
+import com.translator.metrics.TranslationMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,6 +25,9 @@ public class TranslatorStatement implements Statement {
         this.translatorConnection = translatorConnection;
     }
 
+    /** JDBC 驱动默认后端名 */
+    private static final String BACKEND_NAME = "jdbc";
+
     /**
      * 翻译 SQL 并返回翻译后的语句。
      */
@@ -30,25 +35,85 @@ public class TranslatorStatement implements Statement {
         return translatorConnection.translateSql(sql);
     }
 
+    /** 获取目标方言标识（用于指标打点） */
+    private String targetDialect() {
+        return translatorConnection.getTranslator().getTargetDialect().getIdentifier();
+    }
+
     @Override
     public ResultSet executeQuery(String sql) throws SQLException {
+        TranslationMetrics.recordRequest(targetDialect(), BACKEND_NAME);
+        long transStart = System.nanoTime();
         String translatedSql = translateSql(sql);
+        double transSec = (System.nanoTime() - transStart) / 1_000_000_000.0;
+        TranslationMetrics.recordSuccess();
+        TranslationMetrics.recordDuration(targetDialect(), BACKEND_NAME, transSec);
         log.debug("executeQuery: [{}] → [{}]", sql, translatedSql);
-        return realStatement.executeQuery(translatedSql);
+
+        BackendMetrics.recordQuery(BACKEND_NAME, BackendMetrics.classifyQueryType(sql));
+        long execStart = System.nanoTime();
+        try {
+            ResultSet rs = realStatement.executeQuery(translatedSql);
+            double execSec = (System.nanoTime() - execStart) / 1_000_000_000.0;
+            BackendMetrics.recordQueryDuration(BACKEND_NAME, execSec);
+            return rs;
+        } catch (SQLException e) {
+            BackendMetrics.recordError(BACKEND_NAME, e.getSQLState() != null ? e.getSQLState() : "HY000");
+            double execSec = (System.nanoTime() - execStart) / 1_000_000_000.0;
+            BackendMetrics.recordQueryDuration(BACKEND_NAME, execSec);
+            throw e;
+        }
     }
 
     @Override
     public int executeUpdate(String sql) throws SQLException {
+        TranslationMetrics.recordRequest(targetDialect(), BACKEND_NAME);
+        long transStart = System.nanoTime();
         String translatedSql = translateSql(sql);
+        double transSec = (System.nanoTime() - transStart) / 1_000_000_000.0;
+        TranslationMetrics.recordSuccess();
+        TranslationMetrics.recordDuration(targetDialect(), BACKEND_NAME, transSec);
         log.debug("executeUpdate: [{}] → [{}]", sql, translatedSql);
-        return realStatement.executeUpdate(translatedSql);
+
+        BackendMetrics.recordQuery(BACKEND_NAME, BackendMetrics.classifyQueryType(sql));
+        long execStart = System.nanoTime();
+        try {
+            int result = realStatement.executeUpdate(translatedSql);
+            double execSec = (System.nanoTime() - execStart) / 1_000_000_000.0;
+            BackendMetrics.recordQueryDuration(BACKEND_NAME, execSec);
+            BackendMetrics.observeAffectedRows(BACKEND_NAME, Math.max(result, 0));
+            return result;
+        } catch (SQLException e) {
+            BackendMetrics.recordError(BACKEND_NAME, e.getSQLState() != null ? e.getSQLState() : "HY000");
+            double execSec = (System.nanoTime() - execStart) / 1_000_000_000.0;
+            BackendMetrics.recordQueryDuration(BACKEND_NAME, execSec);
+            throw e;
+        }
     }
 
     @Override
     public boolean execute(String sql) throws SQLException {
+        TranslationMetrics.recordRequest(targetDialect(), BACKEND_NAME);
+        long transStart = System.nanoTime();
         String translatedSql = translateSql(sql);
+        double transSec = (System.nanoTime() - transStart) / 1_000_000_000.0;
+        TranslationMetrics.recordSuccess();
+        TranslationMetrics.recordDuration(targetDialect(), BACKEND_NAME, transSec);
         log.debug("execute: [{}] → [{}]", sql, translatedSql);
-        return realStatement.execute(translatedSql);
+
+        BackendMetrics.recordQuery(BACKEND_NAME, BackendMetrics.classifyQueryType(sql));
+        long execStart = System.nanoTime();
+        try {
+            boolean result = realStatement.execute(translatedSql);
+            double execSec = (System.nanoTime() - execStart) / 1_000_000_000.0;
+            BackendMetrics.recordQueryDuration(BACKEND_NAME, execSec);
+            return result;
+        } catch (SQLException e) {
+            BackendMetrics.recordError(BACKEND_NAME, e.getSQLState() != null ? e.getSQLState() : "HY000");
+            double execSec = (System.nanoTime() - execStart) / 1_000_000_000.0;
+            BackendMetrics.recordQueryDuration(BACKEND_NAME, execSec);
+            throw e;
+        }
     }
 
     @Override

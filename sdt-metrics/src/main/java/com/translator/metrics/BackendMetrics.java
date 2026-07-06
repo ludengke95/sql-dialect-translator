@@ -1,4 +1,4 @@
-package com.translator.proxy.metrics;
+package com.translator.metrics;
 
 import io.prometheus.client.Counter;
 import io.prometheus.client.Histogram;

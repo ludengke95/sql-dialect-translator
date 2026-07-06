@@ -1,5 +1,6 @@
 package com.translator.jdbc;
 
+import com.translator.metrics.ConnectionMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,6 +57,8 @@ public class TranslatorDriver implements Driver {
 
         log.info("成功创建翻译连接: {} → {}",
                 urlInfo.getSourceDialect(), urlInfo.getTargetDialect());
+
+        ConnectionMetrics.onConnect();
 
         return new TranslatorConnection(
                 realConnection,

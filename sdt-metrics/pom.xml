@@ -10,32 +10,33 @@
         <version>1.0.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>sdtp-metrics</artifactId>
+    <artifactId>sdt-metrics</artifactId>
     <packaging>jar</packaging>
-    <name>SDT Prometheus Metrics</name>
-    <description>Prometheus metrics exposition for SDT Proxy</description>
+    <name>SDT Shared Metrics</name>
+    <description>Shared Prometheus metrics for SDT JDBC driver and SDT Proxy</description>
 
     <dependencies>
-        <!-- Shared metrics module -->
         <dependency>
-            <groupId>com.draven.sql.translator</groupId>
-            <artifactId>sdt-metrics</artifactId>
-            <version>${project.version}</version>
+            <groupId>io.prometheus</groupId>
+            <artifactId>simpleclient</artifactId>
+            <version>0.16.0</version>
+        </dependency>
+        <dependency>
+            <groupId>io.prometheus</groupId>
+            <artifactId>simpleclient_httpserver</artifactId>
+            <version>0.16.0</version>
+        </dependency>
+        <dependency>
+            <groupId>io.prometheus</groupId>
+            <artifactId>simpleclient_hotspot</artifactId>
+            <version>0.16.0</version>
         </dependency>
 
-        <!-- HikariCP (for MetricsTracker) -->
-        <dependency>
-            <groupId>com.zaxxer</groupId>
-            <artifactId>HikariCP</artifactId>
-        </dependency>
-
-        <!-- SLF4J -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
         </dependency>
 
-        <!-- Test -->
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>

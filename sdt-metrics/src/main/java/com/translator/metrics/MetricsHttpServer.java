@@ -1,4 +1,4 @@
-package com.translator.proxy.metrics;
+package com.translator.metrics;
 
 import io.prometheus.client.exporter.HTTPServer;
 import org.slf4j.Logger;

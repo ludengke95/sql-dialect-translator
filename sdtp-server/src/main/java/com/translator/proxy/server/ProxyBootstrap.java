@@ -4,7 +4,7 @@ import com.translator.core.config.TranslationConfig;
 import com.translator.proxy.backend.BackendEntry;
 import com.translator.proxy.backend.BackendPoolManager;
 import com.translator.proxy.metrics.MetricsModule;
-import com.translator.proxy.metrics.MetricsConfig;
+import com.translator.metrics.MetricsConfig;
 import com.translator.proxy.core.handler.BackendRouter;
 import com.translator.proxy.core.handler.CommandHandler;
 import com.translator.proxy.core.handler.HandshakeHandler;

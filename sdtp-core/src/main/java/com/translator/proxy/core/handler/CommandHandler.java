@@ -3,7 +3,7 @@ package com.translator.proxy.core.handler;
 import com.translator.proxy.core.intercept.SystemVariableInterceptor;
 import com.translator.proxy.core.session.FrontendSession;
 import com.translator.proxy.metrics.CommandMetrics;
-import com.translator.proxy.metrics.ConnectionMetrics;
+import com.translator.metrics.ConnectionMetrics;
 import com.translator.proxy.metrics.NettyMetrics;
 import com.translator.proxy.protocol.codec.MySQLPacketDecoder;
 import com.translator.proxy.protocol.codec.MySQLPacketEncoder;

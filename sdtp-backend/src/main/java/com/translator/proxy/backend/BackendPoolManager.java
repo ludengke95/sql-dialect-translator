@@ -4,6 +4,7 @@ import com.translator.core.config.TranslationConfig;
 import com.translator.proxy.core.handler.BackendRouter;
 import com.translator.proxy.core.handler.CommandHandler;
 import com.translator.proxy.core.session.FrontendSession;
+import com.translator.proxy.metrics.ReloadMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -89,6 +90,8 @@ public class BackendPoolManager implements BackendRouter {
             log.warn("No backends configured, using NOOP processor");
             defaultProcessor = CommandHandler.QueryProcessor.NOOP;
         }
+        // 初始化后更新后端总数指标
+        ReloadMetrics.setBackendCount(processorMap.size());
     }
 
     // ==================== BackendRouter 接口 ====================

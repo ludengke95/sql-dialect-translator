@@ -6,7 +6,7 @@ import com.translator.core.SqlTranslator;
 import com.translator.core.config.TranslationConfig;
 import com.translator.proxy.core.handler.CommandHandler;
 import com.translator.proxy.core.session.FrontendSession;
-import com.translator.proxy.metrics.TranslationMetrics;
+import com.translator.metrics.TranslationMetrics;
 import io.netty.channel.ChannelHandlerContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

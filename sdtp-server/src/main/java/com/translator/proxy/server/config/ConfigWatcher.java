@@ -2,6 +2,7 @@ package com.translator.proxy.server.config;
 
 import com.translator.proxy.backend.BackendEntry;
 import com.translator.proxy.backend.BackendPoolManager;
+import com.translator.proxy.metrics.ReloadMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -180,11 +181,13 @@ public class ConfigWatcher implements Runnable {
      * 重新加载配置并与当前配置对比，分派变更。
      */
     private void reloadIfChanged() {
+        long startNanos = System.nanoTime();
         log.info("Reloading config from: {}", configFilePath);
 
         ProxyConfig newConfig = ConfigLoader.loadFromFileOrNull(configFilePath);
         if (newConfig == null) {
             log.error("Failed to load config, keeping current configuration");
+            ReloadMetrics.recordReloadFailure();
             return;
         }
 
@@ -207,6 +210,7 @@ public class ConfigWatcher implements Runnable {
                 BackendEntry be = toBackendEntry(entry.getValue());
                 if (poolManager.addBackend(be)) {
                     totalChanges++;
+                    ReloadMetrics.recordReload("add", name);
                 }
             }
         }
@@ -217,6 +221,7 @@ public class ConfigWatcher implements Runnable {
                 log.info("Backend removed: '{}'", name);
                 if (poolManager.removeBackend(name)) {
                     totalChanges++;
+                    ReloadMetrics.recordReload("remove", name);
                 }
             }
         }
@@ -233,16 +238,32 @@ public class ConfigWatcher implements Runnable {
                 BackendEntry be = toBackendEntry(newTc);
                 if (poolManager.reloadBackend(be)) {
                     totalChanges++;
+                    ReloadMetrics.recordReload("reload", name);
                 }
             }
         }
 
         if (totalChanges > 0) {
             log.info("Config reload complete: {} backends updated", totalChanges);
+            double seconds = (System.nanoTime() - startNanos) / 1_000_000_000.0;
+            for (String name : newBackends.keySet()) {
+                if (oldBackends.containsKey(name)) {
+                    if (!oldBackends.get(name).equals(newBackends.get(name))) {
+                        ReloadMetrics.observeDuration(name, "reload", seconds / Math.max(totalChanges, 1));
+                    }
+                } else {
+                    ReloadMetrics.observeDuration(name, "add", seconds);
+                }
+            }
+            // 被删除的后端
+            Set<String> removed = new java.util.HashSet<>(oldBackends.keySet());
+            removed.removeAll(newBackends.keySet());
+            for (String name : removed) {
+                ReloadMetrics.observeDuration(name, "remove", seconds);
+            }
             currentConfig = newConfig;
         } else {
             log.info("Config reload: no backend changes detected");
-            // 即使没有 backend 变化，也更新 currentConfig（可能有 reload 参数等变化）
             currentConfig = newConfig;
         }
     }

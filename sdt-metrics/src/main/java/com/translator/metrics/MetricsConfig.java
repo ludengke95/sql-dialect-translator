@@ -1,4 +1,4 @@
-package com.translator.proxy.metrics;
+package com.translator.metrics;
 
 /**
  * Prometheus 指标暴露配置。

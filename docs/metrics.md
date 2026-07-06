@@ -180,6 +180,17 @@ new io.prometheus.client.exporter.MetricsServlet(CollectorRegistry.defaultRegist
 | `sdt_netty_bytes_written_total` | Counter | — | Netty 写出字节总数 |
 | `sdt_netty_channels_active` | Gauge | — | 当前活跃 Channel 数 |
 
+### 配置热更新 (Config Reload)
+
+| 指标名 | 类型 | Label | 说明 |
+|--------|------|-------|------|
+| `sdt_config_reload_total` | Counter | `action` (add / remove / reload), `backend_name` | 后端变更次数 |
+| `sdt_config_reload_failures_total` | Counter | — | 配置文件解析失败次数 |
+| `sdt_config_reload_drain_total` | Counter | `backend_name`, `result` (ok / timeout) | reload drain 成功/超时次数 |
+| `sdt_config_reload_queue_rejections_total` | Counter | `backend_name`, `reason` (full / timeout) | reload 期间请求被拒绝次数 |
+| `sdt_config_reload_duration_seconds` | Histogram | `backend_name`, `action` | 单次 reload 耗时 |
+| `sdt_backend_count` | Gauge | — | 当前后端总数 |
+
 ### JVM（自动注入）
 
 通过 `simpleclient_hotspot` 自动注册，包括：
@@ -230,6 +241,10 @@ scrape_configs:
 | **后端错误率** | `rate(sdt_backend_errors_total[5m])` |
 | **直通比例** | `sdt_translation_direct_total / (sdt_translation_direct_total + sdt_translation_requests_total)` |
 | **JVM 堆使用率** | `jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"}` |
+| **后端变更速率** | `rate(sdt_config_reload_total[5m])` |
+| **Reload drain 超时率** | `rate(sdt_config_reload_drain_total{result="timeout"}[5m])` |
+| **Reload 拒绝率** | `rate(sdt_config_reload_queue_rejections_total[5m])` |
+| **后端数变化告警** | `delta(sdt_backend_count[5m]) < 0`（数值下降说明后端被移除） |
 
 ---
 

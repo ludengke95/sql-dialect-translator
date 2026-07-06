@@ -1,6 +1,6 @@
 # MySQL Proxy 默认配置
 proxy:
-  port: 3307
+  port: 3306
   auth:
     user: root
     password: proxy_password

@@ -5,7 +5,7 @@ import com.translator.proxy.protocol.constant.CapabilityFlags;
 import com.translator.proxy.protocol.util.BufferUtils;
 import com.translator.proxy.protocol.util.MySQLAuth;
 import com.translator.proxy.core.session.FrontendSession;
-import com.translator.proxy.metrics.ConnectionMetrics;
+import com.translator.metrics.ConnectionMetrics;
 import com.translator.proxy.metrics.NettyMetrics;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;

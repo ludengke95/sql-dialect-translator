@@ -3,6 +3,7 @@ package com.translator.proxy.backend;
 import com.translator.proxy.core.handler.AuthHandler;
 import com.translator.proxy.core.handler.CommandHandler;
 import com.translator.proxy.core.session.FrontendSession;
+import com.translator.proxy.metrics.ReloadMetrics;
 import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
@@ -159,6 +160,7 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
         boolean drained = inFlightCount.get() <= 0;
         log.info("Backend '{}': drain {} ({} remaining in-flight)",
                 backendName, drained ? "complete" : "timeout", inFlightCount.get());
+        ReloadMetrics.recordDrain(backendName, drained);
 
         // 关闭旧连接池
         CommandHandler.QueryProcessor old = delegate;
@@ -233,6 +235,7 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
         if (!pendingQueue.offer(pr)) {
             log.warn("Backend '{}': reload queue full (capacity={}), rejecting request",
                     backendName, pendingQueue.size() + pendingQueue.remainingCapacity());
+            ReloadMetrics.recordQueueRejection(backendName, "full");
             writeError(ctx, "Server shutdown in progress, backend '" + backendName
                     + "' is reloading, please retry later");
         } else {
@@ -253,6 +256,7 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
         }
         if (count > 0) {
             log.warn("Backend '{}': rejected {} queued requests due to drain timeout", backendName, count);
+            ReloadMetrics.recordQueueRejection(backendName, "timeout");
         }
     }
 

@@ -13,6 +13,7 @@
     <description>SDT — SQL Dialect Translator: JDBC Wrapper Driver &amp; SDT Proxy</description>
 
     <modules>
+        <module>sdt-metrics</module>
         <module>sdt-core</module>
         <module>sdt-jdbc</module>
         <module>sdt-test</module>

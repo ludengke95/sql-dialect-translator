@@ -3,6 +3,7 @@ package com.translator.jdbc;
 import com.translator.core.DialectType;
 import com.translator.core.SqlTranslator;
 import com.translator.core.config.TranslationConfig;
+import com.translator.metrics.ConnectionMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -188,6 +189,7 @@ public class TranslatorConnection implements Connection, AutoCloseable {
     @Override
     public void close() throws SQLException {
         realConnection.close();
+        ConnectionMetrics.onDisconnect();
     }
 
     @Override
