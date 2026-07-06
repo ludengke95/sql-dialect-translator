@@ -1,6 +1,6 @@
 # MySQL Proxy 默认配置
 proxy:
-  port: 3306
+  port: 3307
   auth:
     user: root
     password: proxy_password
@@ -13,3 +13,8 @@ target:
   password: Highgo@12345
   max-pool-size: 20
   min-idle: 2
+
+# Prometheus 指标暴露（可选，默认端口 = proxy.port + 10000）
+# metrics:
+#   enabled: true
+#   port: 13306          # 留空或不写则自动 = proxy.port + 10000

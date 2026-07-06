@@ -134,6 +134,18 @@ public final class ConfigLoader {
             }
         }
 
+        // === metrics 段 ===
+        Map<String, Object> metrics = (Map<String, Object>) root.get("metrics");
+        if (metrics != null) {
+            ProxyConfig.MetricsConf mc = config.getMetrics();
+            if (metrics.get("enabled") != null) {
+                mc.setEnabled((Boolean) metrics.get("enabled"));
+            }
+            if (metrics.get("port") != null) {
+                mc.setPort(((Number) metrics.get("port")).intValue());
+            }
+        }
+
         return config;
     }
 

@@ -43,9 +43,9 @@ public class BackendPoolManager implements BackendRouter {
                 continue;
             }
 
-            // 创建原始 JDBC 后端处理器
+            // 创建原始 JDBC 后端处理器（带后端名称用于指标打点）
             JdbcBackendQueryProcessor jdbcProcessor = JdbcBackendQueryProcessor.create(
-                    be.getJdbcUrl(), be.getUsername(), be.getPassword(),
+                    name, be.getJdbcUrl(), be.getUsername(), be.getPassword(),
                     be.getMaxPoolSize(), be.getMinIdle());
 
             // 确定此后端的翻译配置：优先使用后端自带的，否则使用全局默认

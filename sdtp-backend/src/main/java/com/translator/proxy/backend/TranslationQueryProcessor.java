@@ -6,6 +6,7 @@ import com.translator.core.SqlTranslator;
 import com.translator.core.config.TranslationConfig;
 import com.translator.proxy.core.handler.CommandHandler;
 import com.translator.proxy.core.session.FrontendSession;
+import com.translator.proxy.metrics.TranslationMetrics;
 import io.netty.channel.ChannelHandlerContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -106,26 +107,35 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
         log.info("SQL: {}", sql);
         
         if (!enabled) {
+            TranslationMetrics.recordDisabled();
             delegate.process(ctx, sql, session);
             return;
         }
+
+        TranslationMetrics.recordRequest(targetDialect.getIdentifier());
 
         // 检查直通标记：-- direct / -- sdtp:direct / /* sdtp:direct */
         String stripped = stripDirectHint(sql);
         if (stripped != null) {
             // 去掉标记注释后的 SQL 直通执行（不翻译）
             log.debug("Direct pass-through: {}", stripped);
+            TranslationMetrics.recordDirect();
             delegate.process(ctx, stripped, session);
             return;
         }
 
         String translatedSql;
         try {
+            long startNanos = System.nanoTime();
             translatedSql = translate(sql);
+            double seconds = (System.nanoTime() - startNanos) / 1_000_000_000.0;
+            TranslationMetrics.recordSuccess();
+            TranslationMetrics.recordDuration(targetDialect.getIdentifier(), seconds);
             log.info("Translated: {} → {}", sql, translatedSql);
         } catch (Exception e) {
             log.warn("Translation failed for SQL: {}. Falling back to original. Error: {}",
                     sql, e.getMessage());
+            TranslationMetrics.recordFallback();
             translatedSql = sql;
         }
 

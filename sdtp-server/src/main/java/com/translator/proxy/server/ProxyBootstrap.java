@@ -6,6 +6,8 @@ import com.translator.proxy.backend.BackendPoolManager;
 import com.translator.proxy.core.handler.BackendRouter;
 import com.translator.proxy.core.handler.CommandHandler;
 import com.translator.proxy.core.handler.HandshakeHandler;
+import com.translator.proxy.metrics.MetricsConfig;
+import com.translator.proxy.metrics.MetricsModule;
 import com.translator.proxy.protocol.codec.MySQLPacketDecoder;
 import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
 import com.translator.proxy.server.config.ConfigLoader;
@@ -39,6 +41,8 @@ public class ProxyBootstrap {
     private DefaultEventExecutorGroup bizExecutorGroup;
     /** 多后端管理器 */
     private BackendPoolManager backendPoolManager;
+    /** 指标模块 */
+    private MetricsModule metricsModule;
 
     public ProxyBootstrap(ProxyConfig config) {
         this.config = config;
@@ -85,6 +89,18 @@ public class ProxyBootstrap {
         // 将路由器注入 CommandHandler
         CommandHandler.setBackendRouter(bpm);
 
+        // 启动 Prometheus 指标模块（端口：显式配置 > 0 则用配置值，否则 proxy_port + 10000）
+        ProxyConfig.MetricsConf mc = config.getMetrics();
+        if (mc != null && mc.isEnabled()) {
+            int metricsPort = mc.getPort();
+            if (metricsPort <= 0) {
+                metricsPort = config.getPort() + 10000;
+            }
+            MetricsConfig metricsConfig = new MetricsConfig(mc.isEnabled(), metricsPort);
+            metricsModule = new MetricsModule(metricsConfig);
+            metricsModule.start();
+        }
+
         try {
             ServerBootstrap bootstrap = new ServerBootstrap();
             bootstrap.group(bossGroup, workerGroup)
@@ -126,6 +142,9 @@ public class ProxyBootstrap {
     }
 
     public void shutdown() {
+        if (metricsModule != null) {
+            metricsModule.stop();
+        }
         if (backendPoolManager != null) {
             backendPoolManager.close();
         }

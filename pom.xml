@@ -20,6 +20,7 @@
         <module>sdtp-core</module>
         <module>sdtp-backend</module>
         <module>sdtp-server</module>
+        <module>sdtp-metrics</module>
     </modules>
 
     <properties>

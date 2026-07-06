@@ -3,6 +3,7 @@ package com.translator.proxy.backend;
 import com.translator.proxy.backend.mapper.ResultSetEncoder;
 import com.translator.proxy.core.handler.CommandHandler;
 import com.translator.proxy.core.session.FrontendSession;
+import com.translator.proxy.metrics.BackendMetrics;
 import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
 import com.translator.proxy.core.handler.AuthHandler;
 import com.zaxxer.hikari.HikariConfig;
@@ -28,6 +29,9 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
 
     private final HikariDataSource dataSource;
 
+    /** 后端名称（用于指标打点） */
+    private volatile String backendName = "unknown";
+
     private JdbcBackendQueryProcessor(HikariDataSource dataSource) {
         this.dataSource = dataSource;
     }
@@ -38,6 +42,15 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
     public static JdbcBackendQueryProcessor create(String jdbcUrl, String username,
                                                     String password, int maxPoolSize,
                                                     int minIdle) {
+        return create(null, jdbcUrl, username, password, maxPoolSize, minIdle);
+    }
+
+    /**
+     * 工厂方法：根据配置创建处理器（带后端名称，用于指标打点）。
+     */
+    public static JdbcBackendQueryProcessor create(String backendName, String jdbcUrl,
+                                                    String username, String password,
+                                                    int maxPoolSize, int minIdle) {
         HikariConfig hikariConfig = new HikariConfig();
         hikariConfig.setJdbcUrl(jdbcUrl);
         hikariConfig.setUsername(username);
@@ -52,14 +65,26 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
         hikariConfig.setReadOnly(true);
         hikariConfig.setAutoCommit(true);
 
+        // 注册 HikariCP MetricsTracker
+        hikariConfig.setMetricsTrackerFactory(new com.translator.proxy.metrics.HikariMetricsTrackerFactory());
+
         HikariDataSource ds = new HikariDataSource(hikariConfig);
         log.info("HikariCP pool created: jdbcUrl={}, maxPoolSize={}", jdbcUrl, maxPoolSize);
 
-        return new JdbcBackendQueryProcessor(ds);
+        JdbcBackendQueryProcessor processor = new JdbcBackendQueryProcessor(ds);
+        if (backendName != null) {
+            processor.backendName = backendName;
+        }
+        return processor;
     }
 
     @Override
     public void process(ChannelHandlerContext ctx, String sql, FrontendSession session) {
+        String queryType = BackendMetrics.classifyQueryType(sql);
+        BackendMetrics.recordQuery(backendName, queryType);
+
+        long startNanos = System.nanoTime();
+
         // JDBC 操作在 CommandHandler 所在的业务线程执行
         // （CommandHandler 已通过 DefaultEventExecutorGroup 与 IO 线程解耦）
         try (Connection conn = dataSource.getConnection();
@@ -71,21 +96,39 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
 
             if (isResultSet) {
                 try (ResultSet rs = stmt.getResultSet()) {
-                    ResultSetEncoder.encodeAndWrite(ctx, rs, new ResultSetEncoder.SeqGenerator());
+                    ResultSetEncoder.encodeAndWrite(ctx, rs, new ResultSetEncoder.SeqGenerator(), backendName);
                 }
             } else {
                 // UPDATE/INSERT/DELETE 等
                 int updateCount = stmt.getUpdateCount();
                 ResultSetEncoder.encodeEmpty(ctx, Math.max(updateCount, 0), 0);
+                BackendMetrics.observeAffectedRows(backendName, Math.max(updateCount, 0));
             }
+
+            double elapsed = (System.nanoTime() - startNanos) / 1_000_000_000.0;
+            BackendMetrics.recordQueryDuration(backendName, elapsed);
 
         } catch (SQLException e) {
             log.error("SQL execution failed: {}", sql, e);
+            String sqlState = e.getSQLState() != null ? e.getSQLState() : "HY000";
+            BackendMetrics.recordError(backendName, sqlState);
+            double elapsed = (System.nanoTime() - startNanos) / 1_000_000_000.0;
+            BackendMetrics.recordQueryDuration(backendName, elapsed);
             writeError(ctx, e);
         } catch (Exception e) {
             log.error("Unexpected error executing SQL: {}", sql, e);
+            BackendMetrics.recordError(backendName, "HY000");
+            double elapsed = (System.nanoTime() - startNanos) / 1_000_000_000.0;
+            BackendMetrics.recordQueryDuration(backendName, elapsed);
             writeError(ctx, 1105, "HY000", e.getMessage());
         }
+    }
+
+    /**
+     * 设置后端名称（用于指标打点）。
+     */
+    public void setBackendName(String backendName) {
+        this.backendName = backendName;
     }
 
     /**

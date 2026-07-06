@@ -1,6 +1,7 @@
 package com.translator.proxy.backend.mapper;
 
 import com.translator.proxy.core.handler.CommandHandler;
+import com.translator.proxy.metrics.BackendMetrics;
 import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
 import com.translator.proxy.protocol.constant.ServerStatus;
 import com.translator.proxy.protocol.util.BufferUtils;
@@ -39,11 +40,13 @@ public final class ResultSetEncoder {
     /**
      * 将 ResultSet 流式编码并写入 Netty Channel。
      *
-     * @param ctx     Netty 上下文
-     * @param rs      JDBC 结果集
-     * @param seqGen  sequence ID 生成器（从包 1 开始，每次递增）
+     * @param ctx         Netty 上下文
+     * @param rs          JDBC 结果集
+     * @param seqGen      sequence ID 生成器（从包 1 开始，每次递增）
+     * @param backendName 后端名称（用于指标打点），可为 null
      */
-    public static void encodeAndWrite(ChannelHandlerContext ctx, ResultSet rs, SeqGenerator seqGen)
+    public static void encodeAndWrite(ChannelHandlerContext ctx, ResultSet rs, SeqGenerator seqGen,
+                                       String backendName)
             throws SQLException {
 
         ResultSetMetaData meta = rs.getMetaData();
@@ -86,12 +89,24 @@ public final class ResultSetEncoder {
 
         log.info("Encoded {} rows", rowCount);
 
+        if (backendName != null) {
+            BackendMetrics.observeResultRows(backendName, rowCount);
+        }
+
         // 5. Final EOF
         ByteBuf eof2 = buildEof(ctx);
         log.debug("EOF(after rows): {} bytes (seq={})", eof2.readableBytes(), seqGen.peek());
         ctx.write(new MySQLPacketEncoder.OutgoingPacket(eof2, seqGen.next()));
 
         ctx.flush();
+    }
+
+    /**
+     * 将 ResultSet 流式编码并写入 Netty Channel（便捷方法，不带指标打点）。
+     */
+    public static void encodeAndWrite(ChannelHandlerContext ctx, ResultSet rs, SeqGenerator seqGen)
+            throws SQLException {
+        encodeAndWrite(ctx, rs, seqGen, null);
     }
 
     /**

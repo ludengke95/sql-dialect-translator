@@ -6,6 +6,7 @@ import com.translator.proxy.protocol.constant.CapabilityFlags;
 import com.translator.proxy.protocol.util.BufferUtils;
 import com.translator.proxy.protocol.util.MySQLAuth;
 import com.translator.proxy.core.session.FrontendSession;
+import com.translator.proxy.metrics.ConnectionMetrics;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
@@ -106,6 +107,7 @@ public class AuthHandler extends ChannelInboundHandlerAdapter {
         // 验证用户名
         if (!expectedUser.equals(resp.username)) {
             log.warn("Auth failed: unknown user '{}'", resp.username);
+            ConnectionMetrics.onAuthFailure("wrong_user");
             writeErrorAndClose(ctx, 1045, "28000",
                     "Access denied for user '" + resp.username + "'", (byte) 2);
             return;
@@ -117,6 +119,7 @@ public class AuthHandler extends ChannelInboundHandlerAdapter {
             // ===== mysql_native_password（SHA-1，单步验证） =====
             if (!MySQLAuth.verify(expectedPassword, session.getScramble(), resp.authResponse)) {
                 log.warn("Auth failed (native): wrong password for user '{}'", resp.username);
+                ConnectionMetrics.onAuthFailure("wrong_password");
                 log.debug("Password: '{}'", expectedPassword);
                 log.debug("Scramble: {}", MySQLAuth.bytesToHex(session.getScramble()));
                 log.debug("Expected: {}", MySQLAuth.bytesToHex(
@@ -127,6 +130,7 @@ public class AuthHandler extends ChannelInboundHandlerAdapter {
                 return;
             }
             log.info("Auth success (native) for user '{}'", resp.username);
+            ConnectionMetrics.onAuthSuccess("native");
             applyDatabase(session, resp.database);
             writeOk(ctx, (byte) 2);
             switchToCommandHandler(ctx);
@@ -145,6 +149,7 @@ public class AuthHandler extends ChannelInboundHandlerAdapter {
 
         } else {
             log.warn("Auth failed: unsupported plugin '{}' from user '{}'", plugin, resp.username);
+            ConnectionMetrics.onAuthFailure("unsupported_plugin");
             writeErrorAndClose(ctx, 1045, "28000",
                     "Authentication plugin '" + plugin + "' is not supported.", (byte) 2);
         }
@@ -174,6 +179,7 @@ public class AuthHandler extends ChannelInboundHandlerAdapter {
         }
 
         log.info("Auth success (sha256) for user '{}'", expectedUser);
+        ConnectionMetrics.onAuthSuccess("sha256");
         applyDatabase(session, pendingDatabase);
         pendingDatabase = null;
 

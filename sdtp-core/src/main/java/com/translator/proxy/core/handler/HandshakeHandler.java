@@ -5,6 +5,8 @@ import com.translator.proxy.protocol.constant.CapabilityFlags;
 import com.translator.proxy.protocol.util.BufferUtils;
 import com.translator.proxy.protocol.util.MySQLAuth;
 import com.translator.proxy.core.session.FrontendSession;
+import com.translator.proxy.metrics.ConnectionMetrics;
+import com.translator.proxy.metrics.NettyMetrics;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
@@ -57,6 +59,10 @@ public class HandshakeHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
+        // 连接指标
+        ConnectionMetrics.onConnect();
+        NettyMetrics.onChannelActive();
+
         long connectionId = CONNECTION_ID_GENERATOR.getAndIncrement();
 
         // 生成 20 字节随机 scramble，追加一个 NUL 凑成 21 字节

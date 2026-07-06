@@ -16,6 +16,7 @@ public class ProxyConfig {
     private AuthConfig auth = new AuthConfig();
     private List<TargetConfig> backends = new ArrayList<>();
     private TranslationConf translation = new TranslationConf(); // 全局默认值
+    private MetricsConf metrics = new MetricsConf(); // 指标暴露配置
 
     public int getPort() { return port; }
     public void setPort(int port) { this.port = port; }
@@ -28,6 +29,9 @@ public class ProxyConfig {
 
     public TranslationConf getTranslation() { return translation; }
     public void setTranslation(TranslationConf translation) { this.translation = translation; }
+
+    public MetricsConf getMetrics() { return metrics; }
+    public void setMetrics(MetricsConf metrics) { this.metrics = metrics; }
 
     // ==================== 内嵌配置类 ====================
 
@@ -99,5 +103,19 @@ public class ProxyConfig {
         public void setKeywordCase(String keywordCase) { this.keywordCase = keywordCase; }
         public String getIdentifierCase() { return identifierCase; }
         public void setIdentifierCase(String identifierCase) { this.identifierCase = identifierCase; }
+    }
+
+    /**
+     * Prometheus 指标暴露配置。
+     */
+    public static class MetricsConf {
+        private boolean enabled = true;
+        /** 0 表示自动计算（proxy端口 + 10000），> 0 表示显式指定 */
+        private int port = 0;
+
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
+        public int getPort() { return port; }
+        public void setPort(int port) { this.port = port; }
     }
 }

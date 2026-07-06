@@ -2,6 +2,9 @@ package com.translator.proxy.core.handler;
 
 import com.translator.proxy.core.intercept.SystemVariableInterceptor;
 import com.translator.proxy.core.session.FrontendSession;
+import com.translator.proxy.metrics.CommandMetrics;
+import com.translator.proxy.metrics.ConnectionMetrics;
+import com.translator.proxy.metrics.NettyMetrics;
 import com.translator.proxy.protocol.codec.MySQLPacketDecoder;
 import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
 import com.translator.proxy.protocol.constant.CommandType;
@@ -69,7 +72,10 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
 
         try {
             int command = payload.readUnsignedByte();
-            log.debug("Command: {} (seq={})", CommandType.nameOf(command), raw.getSequenceId());
+            String cmdName = CommandType.nameOf(command);
+            log.debug("Command: {} (seq={})", cmdName, raw.getSequenceId());
+
+            CommandMetrics.recordCommand(cmdName);
 
             // 每个命令开始时，客户端重置 seq 为 0
             FrontendSession session = ctx.channel().attr(SessionAttribute.SESSION_KEY).get();
@@ -96,6 +102,7 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
             }
         } catch (Exception e) {
             log.error("Error handling command", e);
+            CommandMetrics.recordError();
             writeErr(ctx, 1105, "HY000", "Internal error: " + e.getMessage());
         } finally {
             raw.release();
@@ -120,6 +127,7 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
         // 2. 检查是否 SET 语句（Proxy 内部处理）
         if (SystemVariableInterceptor.isSetStatement(sql)) {
             log.debug("Handling SET statement locally: {}", sql);
+            CommandMetrics.recordSystemVarInterception();
             writeOk(ctx, 0, 0, "");
             return;
         }
@@ -129,6 +137,7 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
                 SystemVariableInterceptor.intercept(sql, session.getDatabase());
         if (ir != null) {
             log.debug("Intercepted system variable query: {}", sql);
+            CommandMetrics.recordSystemVarInterception();
             writeInterceptedResult(ctx, ir);
             return;
         }
@@ -301,6 +310,13 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
             log.error("Exception in CommandHandler", cause);
         }
         ctx.close();
+    }
+
+    @Override
+    public void channelInactive(ChannelHandlerContext ctx) {
+        ConnectionMetrics.onDisconnect();
+        NettyMetrics.onChannelInactive();
+        ctx.fireChannelInactive();
     }
 
     /** 判断是否为客户端主动断连（非服务端异常） */
