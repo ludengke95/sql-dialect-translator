@@ -9,6 +9,7 @@ import com.translator.proxy.core.handler.HandshakeHandler;
 import com.translator.proxy.protocol.codec.MySQLPacketDecoder;
 import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
 import com.translator.proxy.server.config.ConfigLoader;
+import com.translator.proxy.server.config.ConfigWatcher;
 import com.translator.proxy.server.config.ProxyConfig;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
@@ -28,6 +29,9 @@ import java.util.List;
  *
  * <p>启动时初始化 {@link BackendPoolManager} 管理多个后端连接池，
  * 将 {@link BackendRouter} 注入 {@link CommandHandler} 实现按数据库名路由。
+ *
+ * <p>启动后通过 {@link ConfigWatcher} 监听配置文件变更，
+ * 实现 backends 列表的热更新。
  */
 public class ProxyBootstrap {
 
@@ -39,6 +43,8 @@ public class ProxyBootstrap {
     private DefaultEventExecutorGroup bizExecutorGroup;
     /** 多后端管理器 */
     private BackendPoolManager backendPoolManager;
+    /** 配置文件监听器 */
+    private ConfigWatcher configWatcher;
 
     public ProxyBootstrap(ProxyConfig config) {
         this.config = config;
@@ -66,20 +72,12 @@ public class ProxyBootstrap {
         // 将 ProxyConfig.TargetConfig 转换为 BackendEntry 列表
         List<BackendEntry> backends = new ArrayList<>();
         for (ProxyConfig.TargetConfig tc : config.getBackends()) {
-            BackendEntry be = new BackendEntry(
-                    tc.getName(), tc.getDialect(), tc.getJdbcUrl(),
-                    tc.getUsername(), tc.getPassword(),
-                    tc.getMaxPoolSize(), tc.getMinIdle());
-            // 如果后端自带翻译配置，覆盖全局默认
-            if (tc.getTranslation() != null) {
-                be.setKeywordCase(tc.getTranslation().getKeywordCase());
-                be.setIdentifierCase(tc.getTranslation().getIdentifierCase());
-            }
-            backends.add(be);
+            backends.add(ConfigWatcher.toBackendEntry(tc));
         }
 
-        // 初始化多后端连接池管理器
-        BackendPoolManager bpm = new BackendPoolManager(backends, defaultTranslationConfig);
+        // 初始化多后端连接池管理器（传入 reload 参数）
+        BackendPoolManager bpm = new BackendPoolManager(backends, defaultTranslationConfig,
+                config.getReloadQueueCapacity(), config.getReloadDrainTimeoutMs());
         backendPoolManager = bpm;
 
         // 将路由器注入 CommandHandler
@@ -117,7 +115,13 @@ public class ProxyBootstrap {
             }
             log.info("  Auth: user={}", config.getAuth().getUser());
             log.info("  Biz threads: {}", bizThreads);
+            log.info("  Reload: queue={}, drainTimeout={}ms, debounce={}ms",
+                    config.getReloadQueueCapacity(), config.getReloadDrainTimeoutMs(),
+                    config.getReloadDebounceMs());
             log.info("========================================");
+
+            // 启动配置文件监听器
+            startConfigWatcher();
 
             future.channel().closeFuture().sync();
         } finally {
@@ -125,7 +129,26 @@ public class ProxyBootstrap {
         }
     }
 
+    /**
+     * 启动配置文件监听器。
+     */
+    private void startConfigWatcher() {
+        String configPath = ConfigLoader.resolveConfigPath();
+        if (configPath == null) {
+            log.info("No file-based config to watch (using classpath or defaults), config watcher disabled");
+            return;
+        }
+
+        configWatcher = new ConfigWatcher(configPath, config.getReloadDebounceMs(),
+                backendPoolManager, config);
+        configWatcher.start();
+    }
+
     public void shutdown() {
+        // 先停止 watcher，避免 reload 干扰 shutdown
+        if (configWatcher != null) {
+            configWatcher.stop();
+        }
         if (backendPoolManager != null) {
             backendPoolManager.close();
         }

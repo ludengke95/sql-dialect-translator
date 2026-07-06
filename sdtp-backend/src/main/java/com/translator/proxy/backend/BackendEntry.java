@@ -1,5 +1,7 @@
 package com.translator.proxy.backend;
 
+import java.util.Objects;
+
 /**
  * 后端数据库实例配置条目。
  *
@@ -72,4 +74,26 @@ public class BackendEntry {
 
     public String getIdentifierCase() { return identifierCase; }
     public void setIdentifierCase(String identifierCase) { this.identifierCase = identifierCase; }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof BackendEntry)) return false;
+        BackendEntry that = (BackendEntry) o;
+        return maxPoolSize == that.maxPoolSize
+                && minIdle == that.minIdle
+                && Objects.equals(name, that.name)
+                && Objects.equals(dialect, that.dialect)
+                && Objects.equals(jdbcUrl, that.jdbcUrl)
+                && Objects.equals(username, that.username)
+                && Objects.equals(password, that.password)
+                && Objects.equals(keywordCase, that.keywordCase)
+                && Objects.equals(identifierCase, that.identifierCase);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(name, dialect, jdbcUrl, username, password,
+                maxPoolSize, minIdle, keywordCase, identifierCase);
+    }
 }

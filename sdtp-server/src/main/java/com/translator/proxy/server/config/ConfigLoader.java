@@ -4,8 +4,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yaml.snakeyaml.Yaml;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,6 +35,31 @@ public final class ConfigLoader {
 
     private ConfigLoader() {}
 
+    /**
+     * 解析配置文件的真实路径（与 load() 同一查找顺序）。
+     *
+     * @return 配置文件路径，若最终使用 classpath 或默认值则返回 null
+     */
+    public static String resolveConfigPath() {
+        String configPath = System.getProperty("proxy.config");
+        if (configPath != null) {
+            return configPath;
+        }
+        // classpath 资源没有文件路径
+        InputStream classpathStream = ConfigLoader.class.getClassLoader()
+                .getResourceAsStream("proxy-config.yml");
+        if (classpathStream != null) {
+            try { classpathStream.close(); } catch (IOException ignored) {}
+            return null; // classpath 资源不可文件监听
+        }
+        // 当前目录下的文件
+        File file = new File("proxy-config.yml");
+        if (file.exists()) {
+            return file.getAbsolutePath();
+        }
+        return null;
+    }
+
     public static ProxyConfig load() {
         String configPath = System.getProperty("proxy.config");
         if (configPath != null) {
@@ -51,6 +78,24 @@ public final class ConfigLoader {
         } catch (Exception e) {
             log.info("No proxy-config.yml found, using defaults");
             return new ProxyConfig();
+        }
+    }
+
+    /**
+     * 从文件加载配置，失败时返回 null 而不抛异常（供 watcher 热加载使用）。
+     *
+     * @param path 配置文件路径
+     * @return 解析后的 ProxyConfig，失败时返回 null
+     */
+    public static ProxyConfig loadFromFileOrNull(String path) {
+        if (path == null) {
+            return null;
+        }
+        try (FileInputStream fis = new FileInputStream(path)) {
+            return loadFromStream(fis);
+        } catch (Exception e) {
+            log.error("Failed to reload config from {}: {}", path, e.getMessage());
+            return null;
         }
     }
 
@@ -131,6 +176,20 @@ public final class ConfigLoader {
             }
             if (translation.get("identifier-case") != null) {
                 trc.setIdentifierCase((String) translation.get("identifier-case"));
+            }
+        }
+
+        // === reload 段（热更新配置） ===
+        Map<String, Object> reloadMap = (Map<String, Object>) root.get("reload");
+        if (reloadMap != null) {
+            if (reloadMap.get("queue-size") != null) {
+                config.setReloadQueueCapacity(((Number) reloadMap.get("queue-size")).intValue());
+            }
+            if (reloadMap.get("drain-timeout-ms") != null) {
+                config.setReloadDrainTimeoutMs(((Number) reloadMap.get("drain-timeout-ms")).intValue());
+            }
+            if (reloadMap.get("debounce-ms") != null) {
+                config.setReloadDebounceMs(((Number) reloadMap.get("debounce-ms")).intValue());
             }
         }
 

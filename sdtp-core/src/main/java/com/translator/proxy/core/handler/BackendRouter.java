@@ -2,6 +2,9 @@ package com.translator.proxy.core.handler;
 
 import com.translator.proxy.core.session.FrontendSession;
 
+import java.util.Collections;
+import java.util.Set;
+
 /**
  * 后端路由器接口。
  *
@@ -17,4 +20,13 @@ public interface BackendRouter {
      * @return 后端查询处理器，不应为 null
      */
     CommandHandler.QueryProcessor resolve(FrontendSession session);
+
+    /**
+     * 获取所有已配置的后端名称集合。
+     *
+     * @return 后端名称集合（不可变视图），无后端时返回空集合
+     */
+    default Set<String> getBackendNames() {
+        return Collections.emptySet();
+    }
 }
