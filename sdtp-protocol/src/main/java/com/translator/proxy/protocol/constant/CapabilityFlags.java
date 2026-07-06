@@ -47,7 +47,7 @@ public final class CapabilityFlags {
             | CLIENT_MULTI_STATEMENTS
             | CLIENT_MULTI_RESULTS
             | CLIENT_PS_MULTI_RESULTS
-            | CLIENT_PLUGIN_AUTH
-            | CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA;
-            // 注意：不开启 CLIENT_DEPRECATE_EOF，使用传统 EOF 格式兼容所有客户端
+            | CLIENT_PLUGIN_AUTH;
+            // 注意：不开启 CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA（使用 1 字节长度格式，兼容性更好）
+            // 不开启 CLIENT_DEPRECATE_EOF，使用传统 EOF 格式兼容所有客户端
 }

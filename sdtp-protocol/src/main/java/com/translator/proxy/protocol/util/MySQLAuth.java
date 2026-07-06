@@ -5,14 +5,20 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 /**
- * MySQL `mysql_native_password` 认证算法。
+ * MySQL 认证算法：`mysql_native_password`（SHA-1）和 `caching_sha2_password`（SHA-256）。
  *
- * <p>握手流程：
+ * <h3>mysql_native_password</h3>
  * <ol>
- *   <li>服务端生成 20 字节随机数（scramble），连同 8 字节 Auth Plugin Data Part 1 一起发给客户端</li>
+ *   <li>服务端生成 20 字节随机数（scramble）发给客户端</li>
  *   <li>客户端计算：SHA1(password) XOR SHA1(scramble + SHA1(SHA1(password)))</li>
- *   <li>客户端将结果回传给服务端</li>
- *   <li>服务端用自己存储的密码做同样计算，比对结果</li>
+ *   <li>客户端将 20 字节结果回传，服务端比对</li>
+ * </ol>
+ *
+ * <h3>caching_sha2_password</h3>
+ * <ol>
+ *   <li>客户端计算：SHA256(password) XOR SHA256(scramble + SHA256(SHA256(password)))</li>
+ *   <li>客户端将 32 字节结果回传</li>
+ *   <li>服务端比对，成功后先发 AuthMoreData(0x03=fast_auth_success) 再发 OK</li>
  * </ol>
  */
 public final class MySQLAuth {
@@ -97,5 +103,91 @@ public final class MySQLAuth {
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException("SHA-1 algorithm not available", e);
         }
+    }
+
+    // ==================== caching_sha2_password (SHA-256) ====================
+
+    /**
+     * 服务端验证 caching_sha2_password 客户端 token（fast auth）。
+     *
+     * @param password     服务端存储的明文密码
+     * @param scramble     服务端发出去的 20 字节 scramble
+     * @param clientToken  客户端回传的加密 token（应为 32 字节）
+     * @return true 如果验证通过
+     */
+    public static boolean verifySha256(String password, byte[] scramble, byte[] clientToken) {
+        if (password == null || scramble == null || clientToken == null) {
+            return false;
+        }
+        byte[] expected = scramble411Sha256(password, scramble);
+        if (expected.length != clientToken.length) {
+            return false;
+        }
+        for (int i = 0; i < expected.length; i++) {
+            if (expected[i] != clientToken[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * caching_sha2_password fast auth token 计算（SHA-256 版本）。
+     *
+     * <pre>
+     *   stage1 = SHA256(password)
+     *   stage2 = SHA256(stage1)
+     *   stage3 = SHA256(scramble + stage2)
+     *   result = stage1 XOR stage3    （32 字节）
+     * </pre>
+     *
+     * @param password 明文密码
+     * @param scramble 服务端 scramble（20 字节）
+     * @return 32 字节的 fast auth token
+     */
+    public static byte[] scramble411Sha256(String password, byte[] scramble) {
+        if (password == null || scramble == null) {
+            return new byte[0];
+        }
+        try {
+            MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
+
+            byte[] passwordBytes = password.getBytes(StandardCharsets.UTF_8);
+
+            // stage1 = SHA256(password)
+            byte[] stage1 = sha256.digest(passwordBytes);
+
+            // stage2 = SHA256(stage1) = SHA256(SHA256(password))
+            byte[] stage2 = sha256.digest(stage1);
+
+            // stage3 = SHA256(scramble + stage2)
+            sha256.reset();
+            sha256.update(scramble);
+            sha256.update(stage2);
+            byte[] stage3 = sha256.digest();
+
+            // result = stage1 XOR stage3
+            byte[] result = new byte[stage1.length];
+            for (int i = 0; i < result.length; i++) {
+                result[i] = (byte) (stage1[i] ^ stage3[i]);
+            }
+            return result;
+
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 algorithm not available", e);
+        }
+    }
+
+    // ==================== Debug Helper ====================
+
+    /**
+     * 字节数组转十六进制字符串（调试用）。
+     */
+    public static String bytesToHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder(bytes.length * 2);
+        for (byte b : bytes) {
+            sb.append(String.format("%02x", b & 0xFF));
+        }
+        return sb.toString();
     }
 }

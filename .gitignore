@@ -66,6 +66,9 @@ logs/
 
 
 /.history
+/.codegraph
+/.omc
+/.trae
 
 # Reasonix
 .reasonix/
