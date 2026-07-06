@@ -80,25 +80,36 @@ public class HandshakeAuthTest {
 
         // 读取 auth-plugin-name
         String authPlugin = BufferUtils.readNullTerminatedString(handshakePayload);
-        assertEquals("auth plugin 应为 mysql_native_password", "mysql_native_password", authPlugin);
+        assertEquals("auth plugin 应为 caching_sha2_password", "caching_sha2_password", authPlugin);
 
-        // ========== Step 2: 模拟客户端发送 HandshakeResponse41 ==========
-        // 客户端计算 auth token
-        byte[] clientToken = MySQLAuth.scramble411(TEST_PASSWORD, scramble);
+        // ========== Step 2: 模拟 MySQL 8.0 客户端发送 HandshakeResponse41（使用 caching_sha2_password） ==========
+        // 客户端计算 auth token（SHA-256）
+        byte[] clientToken = MySQLAuth.scramble411Sha256(TEST_PASSWORD, scramble);
 
         ByteBuf authPayload = buildHandshakeResponse41(
                 CapabilityFlags.SERVER_DEFAULT_CAPABILITIES,
-                TEST_USER, clientToken, null);
+                TEST_USER, clientToken, null, "caching_sha2_password");
         // 包装为完整 MySQL 包（4字节头 + payload），seq=1（客户端响应用 seq=1）
         ByteBuf authRequest = buildClientPacket(authPayload, (byte) 1);
         channel.writeInbound(authRequest);
 
-        // ========== Step 3: 服务端应回复 OK Packet ==========
+        // ========== Step 3: 服务端应回复 AuthMoreData + OK Packet（MySQL 8.0 caching_sha2_password 流程） ==========
+        // 先读取 AuthMoreData 包
+        ByteBuf authMoreDataRaw = channel.readOutbound();
+        assertNotNull("服务端应发送 AuthMoreData 包", authMoreDataRaw);
+
+        int authMoreDataLen = authMoreDataRaw.readUnsignedMediumLE();
+        assertEquals("AuthMoreData 包 seq 应为 2", (byte) 2, authMoreDataRaw.readByte());
+        ByteBuf authMoreDataPayload = authMoreDataRaw.readBytes(authMoreDataLen);
+        assertEquals("AuthMoreData 包头应为 0x01", (byte) 0x01, authMoreDataPayload.readByte());
+        assertEquals("AuthMoreData 应为 fast auth success (0x03)", (byte) 0x03, authMoreDataPayload.readByte());
+
+        // 再读取 OK 包
         ByteBuf okRaw = channel.readOutbound();
         assertNotNull("服务端应发送 OK 包", okRaw);
 
         int okLen = okRaw.readUnsignedMediumLE();
-        assertEquals("OK 包 seq 应为 2", (byte) 2, okRaw.readByte());
+        assertEquals("OK 包 seq 应为 3", (byte) 3, okRaw.readByte());
         ByteBuf okPayload = okRaw.readBytes(okLen);
         assertEquals("OK 包头应为 0x00", (byte) 0x00, okPayload.readByte());
 
@@ -156,12 +167,12 @@ public class HandshakeAuthTest {
         System.arraycopy(scramblePart1, 0, scramble, 0, 8);
         System.arraycopy(scramblePart2, 0, scramble, 8, 12);
 
-        // 用错误密码计算 token
-        byte[] wrongToken = MySQLAuth.scramble411("wrong_password", scramble);
+        // 用错误密码计算 token（SHA-256）
+        byte[] wrongToken = MySQLAuth.scramble411Sha256("wrong_password", scramble);
 
         ByteBuf authPayload = buildHandshakeResponse41(
                 CapabilityFlags.SERVER_DEFAULT_CAPABILITIES,
-                TEST_USER, wrongToken, null);
+                TEST_USER, wrongToken, null, "caching_sha2_password");
         ByteBuf authRequest = buildClientPacket(authPayload, (byte) 1);
         channel.writeInbound(authRequest);
 
@@ -194,9 +205,15 @@ public class HandshakeAuthTest {
 
     /**
      * 构造 HandshakeResponse41。
+     *
+     * @param capabilities 能力标志
+     * @param username 用户名
+     * @param authResponse 认证响应 token
+     * @param database 数据库名（可选）
+     * @param authPluginName 认证插件名称
      */
     private ByteBuf buildHandshakeResponse41(int capabilities, String username,
-                                              byte[] authResponse, String database) {
+                                              byte[] authResponse, String database, String authPluginName) {
         ByteBuf buf = Unpooled.buffer(128);
 
         // 1. capability flags (4 bytes)
@@ -240,7 +257,7 @@ public class HandshakeAuthTest {
 
         // 8. auth-plugin-name (null-terminated, if CLIENT_PLUGIN_AUTH)
         if ((capabilities & CapabilityFlags.CLIENT_PLUGIN_AUTH) != 0) {
-            BufferUtils.writeNullTerminatedString(buf, "mysql_native_password");
+            BufferUtils.writeNullTerminatedString(buf, authPluginName);
         }
 
         return buf;

@@ -113,8 +113,23 @@ public class AuthHandler extends ChannelInboundHandlerAdapter {
 
         String plugin = resp.authPluginName;
 
-        if (plugin == null || "mysql_native_password".equals(plugin)) {
-            // ===== mysql_native_password（SHA-1，单步验证） =====
+        if ("caching_sha2_password".equals(plugin) || plugin == null) {
+            // ===== MySQL 8.0 客户端 AuthSwitch 流程 =====
+            // 服务端声明 caching_sha2_password，但为避免复杂流程，发起 AuthSwitch 切换到 mysql_native_password
+            // MySQL 8.0 JDBC 支持 AuthSwitch，会改用 SHA-1 认证
+            log.info("Client requests caching_sha2_password, initiating AuthSwitch to mysql_native_password");
+            pendingDatabase = resp.database;
+
+            // 生成新 scramble 用于 AuthSwitch 阶段
+            authSwitchScramble = MySQLAuth.generateScramble();
+            writeAuthSwitchRequest(ctx, authSwitchScramble, "mysql_native_password");
+            expectingAuthSwitchResponse = true;
+            // 不切换 pipeline，等待 AuthSwitchResponse
+
+        } else if ("mysql_native_password".equals(plugin)) {
+            // ===== MySQL 5.7 客户端直接认证（mysql_native_password） =====
+            // 服务端声明 caching_sha2_password，但客户端请求 mysql_native_password
+            // 尝试直接验证（如果客户端支持 AuthSwitch，会在后续流程中切换）
             if (!MySQLAuth.verify(expectedPassword, session.getScramble(), resp.authResponse)) {
                 log.warn("Auth failed (native): wrong password for user '{}'", resp.username);
                 log.debug("Password: '{}'", expectedPassword);
@@ -130,18 +145,6 @@ public class AuthHandler extends ChannelInboundHandlerAdapter {
             applyDatabase(session, resp.database);
             writeOk(ctx, (byte) 2);
             switchToCommandHandler(ctx);
-
-        } else if ("caching_sha2_password".equals(plugin)) {
-            // ===== caching_sha2_password（SHA-256，两步 AuthSwitch 流程） =====
-            // 客户端和服务端插件不一致 → 发起 AuthSwitchRequest
-            log.info("Client requests caching_sha2_password, initiating AuthSwitch");
-            pendingDatabase = resp.database;
-
-            // 生成新 scramble 用于 AuthSwitch 阶段
-            authSwitchScramble = MySQLAuth.generateScramble();
-            writeAuthSwitchRequest(ctx, authSwitchScramble);
-            expectingAuthSwitchResponse = true;
-            // 不切换 pipeline，等待 AuthSwitchResponse
 
         } else {
             log.warn("Auth failed: unsupported plugin '{}' from user '{}'", plugin, resp.username);
@@ -163,23 +166,24 @@ public class AuthHandler extends ChannelInboundHandlerAdapter {
         log.info("AuthSwitchResponse received ({} bytes)", clientToken.length);
         log.debug("AuthSwitch scramble: {}", MySQLAuth.bytesToHex(authSwitchScramble));
 
-        if (!MySQLAuth.verifySha256(expectedPassword, authSwitchScramble, clientToken)) {
-            log.warn("Auth failed (sha256 auth switch): wrong password");
+        // 使用 SHA-1 验证（mysql_native_password）
+        if (!MySQLAuth.verify(expectedPassword, authSwitchScramble, clientToken)) {
+            log.warn("Auth failed (native auth switch): wrong password");
             log.debug("Expected: {}", MySQLAuth.bytesToHex(
-                    MySQLAuth.scramble411Sha256(expectedPassword, authSwitchScramble)));
+                    MySQLAuth.scramble411(expectedPassword, authSwitchScramble)));
             log.debug("Client:   {}", MySQLAuth.bytesToHex(clientToken));
             writeErrorAndClose(ctx, 1045, "28000",
                     "Access denied for user '" + expectedUser + "' (using password: YES)", (byte) 4);
             return;
         }
 
-        log.info("Auth success (sha256) for user '{}'", expectedUser);
+        log.info("Auth success (native auth switch) for user '{}'", expectedUser);
         applyDatabase(session, pendingDatabase);
         pendingDatabase = null;
+        authSwitchScramble = null;
 
-        // AuthMoreData(0x03) → OK
-        writeAuthMoreDataFastSuccess(ctx, (byte) 4);
-        writeOk(ctx, (byte) 5);
+        // AuthSwitch 成功 → OK
+        writeOk(ctx, (byte) 4);
         switchToCommandHandler(ctx);
     }
 
@@ -197,12 +201,16 @@ public class AuthHandler extends ChannelInboundHandlerAdapter {
 
     /**
      * 发送 AuthSwitchRequest 包。
-     * <p>格式：header=0xFE + auth_plugin_name(NUL) + auth_plugin_data(20字节scramble+NUL)
+     * <p>格式：header=0xFE + auth_plugin_name(NUL) + auth_plugin_data(20字节scramble)
+     *
+     * @param ctx Netty 上下文
+     * @param scramble 20 字节的认证挑战码
+     * @param pluginName 目标认证插件名称
      */
-    static void writeAuthSwitchRequest(ChannelHandlerContext ctx, byte[] scramble) {
+    static void writeAuthSwitchRequest(ChannelHandlerContext ctx, byte[] scramble, String pluginName) {
         ByteBuf buf = ctx.alloc().buffer(64);
         buf.writeByte(0xFE);  // EOF header (same as AuthSwitchRequest)
-        BufferUtils.writeNullTerminatedString(buf, "caching_sha2_password");
+        BufferUtils.writeNullTerminatedString(buf, pluginName);
         buf.writeBytes(scramble);  // 20 bytes, NO NUL terminator (string[EOF])
         ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(buf, (byte) 2));
     }
