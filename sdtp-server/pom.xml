@@ -33,6 +33,18 @@
             <artifactId>logback-classic</artifactId>
         </dependency>
 
+        <!-- Test -->
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <!-- JDBC 驱动（显式覆盖父POM的test scope，确保 maven-dependency-plugin 复制到 target/lib/） -->
         <dependency>
             <groupId>org.postgresql</groupId>

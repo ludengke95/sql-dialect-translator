@@ -19,7 +19,7 @@ public class JavaJdbcTest {
         // URL 格式: jdbc:translator:<源方言>:<目标数据库子协议>://<真实PG地址>
         // postgresql 既是子协议也是方言组的 key
         String jdbcUrl = "jdbc:mysql://"
-                + "127.0.0.1" + ":" + 3306
+                + "127.0.0.1" + ":" + 3307
                 + "/tes"
         // +"?defaultAuthenticationPlugin=caching_sha2_password"
         ;

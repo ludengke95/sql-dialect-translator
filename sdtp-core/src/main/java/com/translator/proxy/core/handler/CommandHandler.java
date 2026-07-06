@@ -19,6 +19,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 命令处理器 —— 认证完成后处理客户端各类 MySQL 命令。
@@ -39,6 +46,11 @@ import java.nio.charset.StandardCharsets;
 public class CommandHandler extends ChannelInboundHandlerAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(CommandHandler.class);
+
+    /** SHOW DATABASES / SHOW SCHEMAS [LIKE 'xxx'] */
+    private static final Pattern SHOW_DATABASES = Pattern.compile(
+            "^\\s*SHOW\\s+(DATABASES|SCHEMAS)(?:\\s+LIKE\\s+'([^']*)')?\\s*$",
+            Pattern.CASE_INSENSITIVE);
 
     /** 后端路由器（多后端模式下按数据库名路由） */
     private static volatile BackendRouter backendRouter = null;
@@ -124,6 +136,12 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
             return;
         }
 
+        // 1.5. 检查是否 SHOW DATABASES / SHOW SCHEMAS（返回配置的后端名称列表）
+        if (isShowDatabases(sql)) {
+            handleShowDatabases(ctx, sql);
+            return;
+        }
+
         // 2. 检查是否 SET 语句（Proxy 内部处理）
         if (SystemVariableInterceptor.isSetStatement(sql)) {
             log.debug("Handling SET statement locally: {}", sql);
@@ -155,6 +173,90 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
             return backendRouter.resolve(session);
         }
         return queryProcessor;
+    }
+
+    // ==================== SHOW DATABASES / SHOW SCHEMAS ====================
+
+    private boolean isShowDatabases(String sql) {
+        return sql != null && SHOW_DATABASES.matcher(sql.trim()).matches();
+    }
+
+    private void handleShowDatabases(ChannelHandlerContext ctx, String sql) {
+        // 获取配置的后端名称列表
+        Set<String> names;
+        if (backendRouter != null) {
+            names = backendRouter.getBackendNames();
+        } else {
+            names = Collections.emptySet();
+        }
+
+        // 检查 LIKE 过滤模式
+        Matcher m = SHOW_DATABASES.matcher(sql.trim());
+        if (m.matches()) {
+            String likePattern = m.group(2);
+            if (likePattern != null && !likePattern.isEmpty()) {
+                Pattern likeRegex = sqlLikeToRegex(likePattern);
+                List<String> filtered = new ArrayList<>();
+                for (String name : names) {
+                    if (likeRegex.matcher(name).matches()) {
+                        filtered.add(name);
+                    }
+                }
+                names = new LinkedHashSet<>(filtered);
+            }
+        }
+
+        writeShowDatabasesResult(ctx, names);
+    }
+
+    private void writeShowDatabasesResult(ChannelHandlerContext ctx, Set<String> names) {
+        List<String> sorted = new ArrayList<>(names);
+
+        // Column Count Packet (1 column)
+        ByteBuf colCountBuf = ctx.alloc().buffer(2);
+        BufferUtils.writeLengthEncodedInt(colCountBuf, 1);
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(colCountBuf, (byte) 1));
+
+        byte seq = 2;
+        // Column Def: Database
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(
+                buildColumnDef(ctx.alloc(), "def", "", "Database", "Database", 255, 0xFD, 33), seq++));
+
+        // EOF after columns
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx.alloc()), seq++));
+
+        // Rows
+        for (String name : sorted) {
+            ByteBuf row = buildTextRow(ctx.alloc(), new String[]{name});
+            ctx.write(new MySQLPacketEncoder.OutgoingPacket(row, seq++));
+        }
+
+        // Final EOF
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx.alloc()), seq));
+        ctx.flush();
+    }
+
+    /**
+     * 将 SQL LIKE 模式（% _ 通配符）转换为 Java 正则表达式。
+     */
+    private static Pattern sqlLikeToRegex(String likePattern) {
+        StringBuilder sb = new StringBuilder("^");
+        for (int i = 0; i < likePattern.length(); i++) {
+            char c = likePattern.charAt(i);
+            if (c == '%') {
+                sb.append(".*");
+            } else if (c == '_') {
+                sb.append('.');
+            } else if (c == '\\' && i + 1 < likePattern.length()) {
+                // 转义字符：\% → % , \_ → _
+                sb.append(Pattern.quote(String.valueOf(likePattern.charAt(i + 1))));
+                i++;
+            } else {
+                sb.append(Pattern.quote(String.valueOf(c)));
+            }
+        }
+        sb.append("$");
+        return Pattern.compile(sb.toString(), Pattern.CASE_INSENSITIVE);
     }
 
     // ==================== COM_PING / COM_QUIT ====================

@@ -2,6 +2,7 @@ package com.translator.proxy.server.config;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Proxy 配置模型 —— 支持多后端数据库实例。
@@ -13,6 +14,15 @@ public class ProxyConfig {
 
     private int port = 3306;
 
+    /** 热 reload 请求队列容量 */
+    private int reloadQueueCapacity = 1000;
+
+    /** 热 reload drain 超时（毫秒） */
+    private int reloadDrainTimeoutMs = 30000;
+
+    /** 文件变化防抖间隔（毫秒） */
+    private int reloadDebounceMs = 500;
+
     private AuthConfig auth = new AuthConfig();
     private List<TargetConfig> backends = new ArrayList<>();
     private TranslationConf translation = new TranslationConf(); // 全局默认值
@@ -20,6 +30,15 @@ public class ProxyConfig {
 
     public int getPort() { return port; }
     public void setPort(int port) { this.port = port; }
+
+    public int getReloadQueueCapacity() { return reloadQueueCapacity; }
+    public void setReloadQueueCapacity(int reloadQueueCapacity) { this.reloadQueueCapacity = reloadQueueCapacity; }
+
+    public int getReloadDrainTimeoutMs() { return reloadDrainTimeoutMs; }
+    public void setReloadDrainTimeoutMs(int reloadDrainTimeoutMs) { this.reloadDrainTimeoutMs = reloadDrainTimeoutMs; }
+
+    public int getReloadDebounceMs() { return reloadDebounceMs; }
+    public void setReloadDebounceMs(int reloadDebounceMs) { this.reloadDebounceMs = reloadDebounceMs; }
 
     public AuthConfig getAuth() { return auth; }
     public void setAuth(AuthConfig auth) { this.auth = auth; }
@@ -90,6 +109,27 @@ public class ProxyConfig {
         public void setMinIdle(int minIdle) { this.minIdle = minIdle; }
         public TranslationConf getTranslation() { return translation; }
         public void setTranslation(TranslationConf translation) { this.translation = translation; }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof TargetConfig)) return false;
+            TargetConfig that = (TargetConfig) o;
+            return maxPoolSize == that.maxPoolSize
+                    && minIdle == that.minIdle
+                    && Objects.equals(name, that.name)
+                    && Objects.equals(dialect, that.dialect)
+                    && Objects.equals(jdbcUrl, that.jdbcUrl)
+                    && Objects.equals(username, that.username)
+                    && Objects.equals(password, that.password)
+                    && Objects.equals(translation, that.translation);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(name, dialect, jdbcUrl, username, password,
+                    maxPoolSize, minIdle, translation);
+        }
     }
 
     /**
@@ -103,6 +143,20 @@ public class ProxyConfig {
         public void setKeywordCase(String keywordCase) { this.keywordCase = keywordCase; }
         public String getIdentifierCase() { return identifierCase; }
         public void setIdentifierCase(String identifierCase) { this.identifierCase = identifierCase; }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof TranslationConf)) return false;
+            TranslationConf that = (TranslationConf) o;
+            return Objects.equals(keywordCase, that.keywordCase)
+                    && Objects.equals(identifierCase, that.identifierCase);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(keywordCase, identifierCase);
+        }
     }
 
     /**
