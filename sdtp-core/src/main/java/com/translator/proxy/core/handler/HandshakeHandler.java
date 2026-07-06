@@ -133,8 +133,9 @@ public class HandshakeHandler extends ChannelInboundHandlerAdapter {
         buf.writeByte(0x00);
 
         // 13. auth-plugin-name (null-terminated)
-        // 使用 caching_sha2_password 以匹配 MySQL 8.0 的默认认证行为
-        BufferUtils.writeNullTerminatedString(buf, "caching_sha2_password");
+        // 使用 mysql_native_password 以兼容 MySQL 5.7 JDBC
+        // MySQL 8.0 JDBC 会触发 AuthSwitch 切换到此插件
+        BufferUtils.writeNullTerminatedString(buf, "mysql_native_password");
 
         return buf;
     }
