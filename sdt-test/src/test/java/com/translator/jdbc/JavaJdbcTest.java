@@ -25,7 +25,7 @@ public class JavaJdbcTest {
         ;
 
         connection = DriverManager.getConnection(
-                jdbcUrl, "root", "proxy_password");
+                jdbcUrl, "root", "123");
         statement = connection.createStatement();
     }
 
@@ -45,5 +45,28 @@ public class JavaJdbcTest {
         if (rs.next()) {
             System.out.println(rs.getInt(1));
         }
+    }
+
+    /**
+     * 测试 MySQL 5.7 JDBC 兼容性（使用 mysql_native_password 认证插件）
+     */
+    @Test
+    public void testMySQL57Connection() throws Exception {
+        // MySQL 5.7 JDBC 默认使用 mysql_native_password 认证插件
+        String jdbcUrl = "jdbc:mysql://"
+                + "127.0.0.1" + ":" + 3306
+                + "/tes"
+                + "?defaultAuthenticationPlugin=mysql_native_password";
+        
+        Connection conn57 = DriverManager.getConnection(jdbcUrl, "root", "123");
+        Statement stmt57 = conn57.createStatement();
+        
+        ResultSet rs = stmt57.executeQuery("SELECT 1");
+        if (rs.next()) {
+            System.out.println("MySQL 5.7 JDBC test: " + rs.getInt(1));
+        }
+        
+        stmt57.close();
+        conn57.close();
     }
 }
