@@ -27,15 +27,16 @@ public final class MySQLAuth {
 
     /**
      * 生成 20 字节随机 scramble（Auth Plugin Data）。
+     *
+     * <p>scramble 取值范围为可打印 ASCII (0x21-0x7E)，避免 NUL 字节，
+     * 同时兼容 MySQL JDBC 5.1.x 驱动将 seed 作为 String 处理的场景
+     * （String 转换对非 ASCII 字节可能引入编码问题）。
      */
     public static byte[] generateScramble() {
         byte[] scramble = new byte[20];
         for (int i = 0; i < 20; i++) {
-            // 避免出现 0x00，MySQL 协议要求 scramble 不含 NUL 字节
-            int b;
-            do {
-                b = (int) (Math.random() * 256);
-            } while (b == 0);
+            // 使用可打印 ASCII 范围 0x21-0x7E（避免 NUL 和高位字节的字符集问题）
+            int b = 0x21 + (int) (Math.random() * (0x7E - 0x21 + 1));
             scramble[i] = (byte) b;
         }
         return scramble;

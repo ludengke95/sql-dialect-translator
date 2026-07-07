@@ -20,12 +20,9 @@ import java.nio.charset.StandardCharsets;
  *
  * <p>流程：
  * <ol>
- *   <li>收到客户端 HandshakeResponse41</li>
- *   <li>解析用户名、能力标志、auth plugin name 等</li>
- *   <li>如果客户端插件与服务端一致 (mysql_native_password)：直接验证 → OK</li>
- *   <li>如果客户端选了不同插件 (caching_sha2_password)：发送 AuthSwitchRequest
- *       带新 scramble，等待 AuthSwitchResponse → 验证 → AuthMoreData(0x03) → OK</li>
- *   <li>验证失败 → 发送 ERR 包，关闭连接</li>
+ *   <li>服务端声明 mysql_native_password（HandshakeV10）</li>
+ *   <li>客户端请求 mysql_native_password → 直接 SHA-1 验证 → OK</li>
+ *   <li>客户端请求 caching_sha2_password → AuthSwitch 到 mysql_native_password → 验证 → OK</li>
  * </ol>
  */
 public class AuthHandler extends ChannelInboundHandlerAdapter {
@@ -113,23 +110,34 @@ public class AuthHandler extends ChannelInboundHandlerAdapter {
 
         String plugin = resp.authPluginName;
 
-        if ("caching_sha2_password".equals(plugin) || plugin == null) {
-            // ===== MySQL 8.0 客户端 AuthSwitch 流程 =====
-            // 服务端声明 caching_sha2_password，但为避免复杂流程，发起 AuthSwitch 切换到 mysql_native_password
-            // MySQL 8.0 JDBC 支持 AuthSwitch，会改用 SHA-1 认证
-            log.info("Client requests caching_sha2_password, initiating AuthSwitch to mysql_native_password");
-            pendingDatabase = resp.database;
+        if ("caching_sha2_password".equals(plugin)) {
+            // ===== MySQL 8.0 客户端：先尝试 SHA-256 快速认证 =====
+            // 如果 auth_response 为 0 字节，说明客户端缓存了空密码 → 需要 AuthSwitch
+            if (resp.authResponse.length > 0) {
+                // fast auth: 客户端用 HandshakeV10 的 scramble 计算 SHA-256 token
+                if (MySQLAuth.verifySha256(expectedPassword, session.getScramble(), resp.authResponse)) {
+                    log.info("Auth success (sha256 fast) for user '{}'", resp.username);
+                    applyDatabase(session, resp.database);
+                    writeAuthMoreDataFastSuccess(ctx, (byte) 2);
+                    writeOk(ctx, (byte) 3);
+                    switchToCommandHandler(ctx);
+                    return;
+                }
+                // SHA-256 快速认证失败，回退到 AuthSwitch
+                log.info("SHA-256 fast auth failed, falling back to AuthSwitch");
+            } else {
+                log.info("Client sent empty auth_response for caching_sha2_password, starting AuthSwitch");
+            }
 
-            // 生成新 scramble 用于 AuthSwitch 阶段
+            // 发起 AuthSwitch 切换为 mysql_native_password
+            pendingDatabase = resp.database;
             authSwitchScramble = MySQLAuth.generateScramble();
             writeAuthSwitchRequest(ctx, authSwitchScramble, "mysql_native_password");
             expectingAuthSwitchResponse = true;
-            // 不切换 pipeline，等待 AuthSwitchResponse
 
-        } else if ("mysql_native_password".equals(plugin)) {
-            // ===== MySQL 5.7 客户端直接认证（mysql_native_password） =====
-            // 服务端声明 caching_sha2_password，但客户端请求 mysql_native_password
-            // 尝试直接验证（如果客户端支持 AuthSwitch，会在后续流程中切换）
+        } else if ("mysql_native_password".equals(plugin) || plugin == null) {
+            // ===== MySQL 5.7 或旧版客户端：SHA-1 认证 =====
+            // 尝试直接验证（用 HandshakeV10 的 scramble 和 SHA-1 算法）
             if (!MySQLAuth.verify(expectedPassword, session.getScramble(), resp.authResponse)) {
                 log.warn("Auth failed (native): wrong password for user '{}'", resp.username);
                 log.debug("Password: '{}'", expectedPassword);
@@ -141,7 +149,7 @@ public class AuthHandler extends ChannelInboundHandlerAdapter {
                         "Access denied for user '" + resp.username + "' (using password: YES)", (byte) 2);
                 return;
             }
-            log.info("Auth success (native) for user '{}'", resp.username);
+            log.info("Auth success (native sha-1) for user '{}'", resp.username);
             applyDatabase(session, resp.database);
             writeOk(ctx, (byte) 2);
             switchToCommandHandler(ctx);
@@ -150,6 +158,12 @@ public class AuthHandler extends ChannelInboundHandlerAdapter {
             log.warn("Auth failed: unsupported plugin '{}' from user '{}'", plugin, resp.username);
             writeErrorAndClose(ctx, 1045, "28000",
                     "Authentication plugin '" + plugin + "' is not supported.", (byte) 2);
+        }
+    }
+
+    private void applyDatabase(FrontendSession session, String database) {
+        if (database != null && !database.isEmpty()) {
+            session.setDatabase(database);
         }
     }
 
@@ -187,12 +201,6 @@ public class AuthHandler extends ChannelInboundHandlerAdapter {
         switchToCommandHandler(ctx);
     }
 
-    private void applyDatabase(FrontendSession session, String database) {
-        if (database != null && !database.isEmpty()) {
-            session.setDatabase(database);
-        }
-    }
-
     private void switchToCommandHandler(ChannelHandlerContext ctx) {
         ctx.pipeline().replace(this, "commandHandler", new CommandHandler());
     }
@@ -201,7 +209,7 @@ public class AuthHandler extends ChannelInboundHandlerAdapter {
 
     /**
      * 发送 AuthSwitchRequest 包。
-     * <p>格式：header=0xFE + auth_plugin_name(NUL) + auth_plugin_data(20字节scramble)
+     * <p>格式：header=0xFE + auth_plugin_name(NUL) + auth_plugin_data(20字节scramble + NUL)
      *
      * @param ctx Netty 上下文
      * @param scramble 20 字节的认证挑战码
@@ -211,7 +219,8 @@ public class AuthHandler extends ChannelInboundHandlerAdapter {
         ByteBuf buf = ctx.alloc().buffer(64);
         buf.writeByte(0xFE);  // EOF header (same as AuthSwitchRequest)
         BufferUtils.writeNullTerminatedString(buf, pluginName);
-        buf.writeBytes(scramble);  // 20 bytes, NO NUL terminator (string[EOF])
+        buf.writeBytes(scramble);  // 20 bytes scramble
+        buf.writeByte(0x00);       // NUL terminator
         ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(buf, (byte) 2));
     }
 
