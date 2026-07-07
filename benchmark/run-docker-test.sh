@@ -7,6 +7,7 @@
 #   mysql-client-8  : Docker mysql:8.0 原生客户端
 #   mysql-jdbc-5    : Docker mysql5-sqlline (JDBC 5.1.49)
 #   mysql-jdbc-8    : Docker mysql8-sqlline (JDBC 8.0.x)
+#   python-mysql    : Docker python-mysql (mysql-connector-python, 兼容5/8)
 #
 # 用法:
 #   bash run-docker-test.sh \
@@ -47,6 +48,7 @@ usage() {
   --mode MODE              测试模式（必填）
                              mysql-client-5  / mysql-client-8
                              mysql-jdbc-5    / mysql-jdbc-8
+                             python-mysql
   --host HOST              目标 MySQL 主机（默认: host.docker.internal）
   --port PORT              目标 MySQL 端口（默认: 3306）
   --user USER              MySQL 用户名（默认: root）
@@ -94,9 +96,10 @@ case "$MODE" in
     mysql-client-8) DOCKER_IMAGE="mysql:8.0" ;;
     mysql-jdbc-5)   DOCKER_IMAGE="mysql5-sqlline:latest" ;;
     mysql-jdbc-8)   DOCKER_IMAGE="mysql8-sqlline:latest" ;;
+    python-mysql)   DOCKER_IMAGE="python-mysql:latest" ;;
     *)
         echo "错误: 不支持的 mode: $MODE"
-        echo "  支持: mysql-client-5, mysql-client-8, mysql-jdbc-5, mysql-jdbc-8"
+        echo "  支持: mysql-client-5, mysql-client-8, mysql-jdbc-5, mysql-jdbc-8, python-mysql"
         exit 1
         ;;
 esac
@@ -194,6 +197,20 @@ execute_sql() {
 
             rm -f "$tmpfile"
             ;;
+        python-mysql)
+            # === Python mysql.connector 模式 ===
+            # 通过环境变量传递连接参数和 SQL，调用 run_sql.py 执行多语句
+            _EXEC_OUTPUT="$(
+                docker run $DOCKER_BASE_FLAGS --rm \
+                    -e MYSQL_HOST="$HOST" \
+                    -e MYSQL_PORT="$PORT" \
+                    -e MYSQL_USER="$USER" \
+                    -e MYSQL_PASSWORD="$PASSWORD" \
+                    -e MYSQL_DATABASE="$DATABASE" \
+                    -e SQL_STATEMENTS="$sql" \
+                    "$DOCKER_IMAGE" 2>&1
+            )" || _EXEC_RC=$?
+            ;;
     esac
 
     end_time="$(date +%s.%N)"
@@ -202,9 +219,21 @@ execute_sql() {
 
 # ========================= 判断执行是否成功 =========================
 # sqlline 即使 SQL 出错也可能返回 0，需要检查输出中的 ERROR 关键字
+# python-mysql 模式输出 JSON，直接解析 success 字段
 is_success() {
     local rc="$1"
     local output="$2"
+
+    # python-mysql 模式：输出是 JSON，直接解析 success 字段
+    if [[ "$MODE" == "python-mysql" ]]; then
+        local success_val
+        success_val="$(echo "$output" | jq -r '.success' 2>/dev/null)"
+        if [[ "$success_val" == "true" ]]; then
+            return 0
+        else
+            return 1
+        fi
+    fi
 
     # 退出码非 0 → 失败
     if [[ "$rc" -ne 0 ]]; then

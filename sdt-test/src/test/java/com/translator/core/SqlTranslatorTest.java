@@ -587,4 +587,108 @@ public class SqlTranslatorTest {
             System.err.println("WARNING: o_orderkey 缺少 orders 表名前缀! 这会引发 PostgreSQL 'column does not exist' 错误");
         }
     }
+
+    // ==================== SUBSTR/SUBSTRING 第一个参数 → PG CAST AS VARCHAR ====================
+
+    @Test
+    public void testSubstrNumericLiteralCast() {
+        // 核心场景：SUBSTR(数字字面量, 1, 3) → SUBSTR(CAST(数字字面量 AS VARCHAR), 1, 3)
+        String mysqlSql = "SELECT SUBSTR(12312312313, 1, 3)";
+        String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
+        Assert.assertTrue("应包含 CAST: " + pgResult,
+                pgResult.toUpperCase().contains("CAST"));
+        Assert.assertTrue("应包含 SUBSTR: " + pgResult,
+                pgResult.toUpperCase().contains("SUBSTR"));
+        Assert.assertTrue("应包含原始数字: " + pgResult,
+                pgResult.contains("12312312313"));
+    }
+
+    @Test
+    public void testSubstrStringLiteralAlsoCast() {
+        // 字符串字面量也包 CAST（PG 中幂等，安全）
+        String mysqlSql = "SELECT SUBSTR('hello world', 1, 5)";
+        String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
+        Assert.assertTrue("应包含 CAST: " + pgResult,
+                pgResult.toUpperCase().contains("CAST"));
+        Assert.assertTrue("应包含 SUBSTR: " + pgResult,
+                pgResult.toUpperCase().contains("SUBSTR"));
+    }
+
+    @Test
+    public void testSubstrColumnRefAlsoCast() {
+        // 列引用也包 CAST — 无法确定列类型，无条件 CAST 最安全
+        String mysqlSql = "SELECT SUBSTR(phone_number, 1, 3) FROM users";
+        String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
+        Assert.assertTrue("应包含 CAST: " + pgResult,
+                pgResult.toUpperCase().contains("CAST"));
+        Assert.assertTrue("应包含 SUBSTR: " + pgResult,
+                pgResult.toUpperCase().contains("SUBSTR"));
+    }
+
+    @Test
+    public void testSubstrOnlyTwoArgs() {
+        // SUBSTR 只有两个参数时也生效
+        String mysqlSql = "SELECT SUBSTR(12345, 2)";
+        String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
+        Assert.assertTrue("应包含 CAST: " + pgResult,
+                pgResult.toUpperCase().contains("CAST"));
+    }
+
+    @Test
+    public void testSubstrNested() {
+        // 嵌套 SUBSTR：每层第一个参数都独立包 CAST
+        String mysqlSql = "SELECT SUBSTR(SUBSTR('abcdef', 1, 3), 2, 1)";
+        String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
+        Assert.assertTrue("应包含 CAST: " + pgResult,
+                pgResult.toUpperCase().contains("CAST"));
+        // 嵌套两层应该有两个 CAST
+        int castCount = pgResult.toUpperCase().split("CAST").length - 1;
+        Assert.assertEquals("嵌套 SUBSTR 应有两个 CAST: " + pgResult, 2, castCount);
+    }
+
+    @Test
+    public void testSubstringAlsoCast() {
+        // SUBSTRING 函数同样处理
+        String mysqlSql = "SELECT SUBSTRING(9876543210, 1, 5)";
+        String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
+        Assert.assertTrue("应包含 CAST: " + pgResult,
+                pgResult.toUpperCase().contains("CAST"));
+    }
+
+    @Test
+    public void testSubstrNotEnabledForOtherTargets() {
+        // 目标方言不是 PostgreSQL 时，不应用此规则
+        String mysqlSql = "SELECT SUBSTR(123, 1, 2)";
+        String oracleResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.ORACLE);
+        Assert.assertFalse("Oracle 目标不应包含 CAST: " + oracleResult,
+                oracleResult.toUpperCase().contains("CAST"));
+    }
+
+    @Test
+    public void testSubstrNotEnabledForSameDialect() {
+        // 同方言（MySQL→MySQL）不应转换
+        String mysqlSql = "SELECT SUBSTR(123, 1, 2)";
+        String result = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.MYSQL);
+        Assert.assertEquals("同方言应原样返回", mysqlSql, result);
+    }
+
+    @Test
+    public void testSubstrInWhereClause() {
+        // WHERE 子句中的 SUBSTR 也正确处理
+        String mysqlSql = "SELECT * FROM orders WHERE SUBSTR(order_code, 1, 2) = 'AB'";
+        String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
+        Assert.assertTrue("应包含 CAST: " + pgResult,
+                pgResult.toUpperCase().contains("CAST"));
+        Assert.assertTrue("应包含 WHERE: " + pgResult,
+                pgResult.toUpperCase().contains("WHERE"));
+    }
+
+    @Test
+    public void testSubstrWithExpression() {
+        // 表达式作为第一个参数也包 CAST
+        String mysqlSql = "SELECT SUBSTR(price + tax, 1, 3) FROM orders";
+        String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
+        Assert.assertTrue("应包含 CAST: " + pgResult,
+                pgResult.toUpperCase().contains("CAST"));
+    }
 }

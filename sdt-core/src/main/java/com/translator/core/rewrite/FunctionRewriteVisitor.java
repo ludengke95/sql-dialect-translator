@@ -5,6 +5,7 @@ import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.fun.SqlCase;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.util.SqlShuttle;
 
 import java.util.*;
@@ -74,6 +75,14 @@ public class FunctionRewriteVisitor extends SqlShuttle {
         // CONCAT(a, b) → a || b (MySQL → PG/Oracle)
         // 注意：这依赖于 Calcite 的 dialect 处理操作符的 unparse 方式
         // Calcite 的 PG dialect 已经能正确输出 CONCAT 或 ||
+
+        // —— MySQL SUBSTR/SUBSTRING 第一个参数 → PG CAST AS VARCHAR ——
+        // PG 的 SUBSTR 第一个参数必须是 text 类型，MySQL 可隐式转换
+        // 无条件将第一个参数包一层 CAST(... AS VARCHAR)，即使是字符串列也安全（幂等）
+        if (target == DialectType.POSTGRESQL && source == DialectType.MYSQL) {
+            addFunctionMapper("SUBSTR", this::rewriteSubstrToVarchar);
+            addFunctionMapper("SUBSTRING", this::rewriteSubstrToVarchar);
+        }
     }
 
     /**
@@ -127,6 +136,44 @@ public class FunctionRewriteVisitor extends SqlShuttle {
         return new SqlCase(SqlParserPos.ZERO, value, when, then, elseExpr);
     }
 
+    /**
+     * SUBSTR/SUBSTRING 第一个参数 → CAST AS VARCHAR（MySQL → PG）。
+     *
+     * MySQL 允许 SUBSTR 的第一个参数为任意可隐式转换为字符串的类型（整数、数字等），
+     * 而 PG 的 SUBSTR 要求第一个参数必须为 text/varchar 类型。
+     * 因此对于 MySQL → PG 翻译，无条件将第一个参数包装为 CAST(expr AS VARCHAR)。
+     *
+     * 示例：SUBSTR(12312312313, 1, 3) → SUBSTR(CAST(12312312313 AS VARCHAR), 1, 3)
+     *
+     * 即使第一个参数已经是字符串类型，CAST AS VARCHAR 在 PG 中也是安全的（幂等）。
+     */
+    private SqlCall rewriteSubstrToVarchar(SqlCall call) {
+        List<SqlNode> operands = call.getOperandList();
+        if (operands.isEmpty()) {
+            return call;
+        }
+
+        // 将第一个操作数包装为 CAST(firstOperand AS VARCHAR)
+        SqlNode firstOperand = operands.get(0);
+        SqlNode castNode = SqlStdOperatorTable.CAST.createCall(
+                SqlParserPos.ZERO,
+                firstOperand,
+                new SqlDataTypeSpec(
+                        new SqlBasicTypeNameSpec(SqlTypeName.VARCHAR, SqlParserPos.ZERO),
+                        SqlParserPos.ZERO
+                )
+        );
+
+        // 构建新的操作数列表：第一个替换为 CAST 节点，其余不变
+        List<SqlNode> newOperands = new ArrayList<>(operands);
+        newOperands.set(0, castNode);
+
+        return call.getOperator().createCall(
+                call.getParserPosition(),
+                newOperands
+        );
+    }
+
     private void addFunctionMapper(String functionName, FunctionMapper mapper) {
         rules.put(functionName.toUpperCase(), mapper);
     }
@@ -136,16 +183,14 @@ public class FunctionRewriteVisitor extends SqlShuttle {
         // 先深度遍历子节点
         SqlCall visited = (SqlCall) super.visit(call);
 
-        // 检查是否是函数调用
+        // 按函数名查找改写规则（不限制 operator 类型，因为 SUBSTR 等可能不是 SqlFunction 实例）
         SqlOperator operator = visited.getOperator();
-        if (operator instanceof SqlFunction) {
-            String name = operator.getName();
-            FunctionMapper mapper = rules.get(name.toUpperCase());
-            if (mapper != null) {
-                SqlCall rewritten = mapper.apply(visited);
-                if (rewritten != null) {
-                    return rewritten;
-                }
+        String name = operator.getName();
+        FunctionMapper mapper = rules.get(name.toUpperCase());
+        if (mapper != null) {
+            SqlCall rewritten = mapper.apply(visited);
+            if (rewritten != null) {
+                return rewritten;
             }
         }
         return visited;
