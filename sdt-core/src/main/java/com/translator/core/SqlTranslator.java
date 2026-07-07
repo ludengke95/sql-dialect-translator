@@ -146,7 +146,8 @@ public class SqlTranslator {
         if (sql == null || sql.isEmpty()) {
             return sql;
         }
-        String result = sql;
+        // 去掉 -- 行注释，防止注释内容被 normalizeUnquotedIdentifiers 错误加引号
+        String result = stripLineComments(sql);
         switch (dialect) {
             case MYSQL:
                 // 将 `identifier` 转换为 "identifier"
@@ -189,6 +190,59 @@ public class SqlTranslator {
         return sql;
     }
 
+    /**
+     * 去掉 SQL 中的 -- 行注释。
+     * 防止注释内容被后续 normalizeUnquotedIdentifiers 过程错误加引号。
+     */
+    private static String stripLineComments(String sql) {
+        StringBuilder sb = new StringBuilder(sql.length());
+        int i = 0;
+        while (i < sql.length()) {
+            char c = sql.charAt(i);
+            // 跳过单引号字符串（注释符号 -- 可能出现在字符串内）
+            if (c == '\'') {
+                sb.append(c);
+                i++;
+                while (i < sql.length()) {
+                    char sc = sql.charAt(i);
+                    sb.append(sc);
+                    if (sc == '\'') {
+                        if (i + 1 < sql.length() && sql.charAt(i + 1) == '\'') {
+                            sb.append(sql.charAt(i + 1));
+                            i += 2;
+                        } else {
+                            i++;
+                            break;
+                        }
+                    } else {
+                        i++;
+                    }
+                }
+                continue;
+            }
+            // 遇到 -- 行注释，跳过直到行尾
+            if (c == '-' && i + 1 < sql.length() && sql.charAt(i + 1) == '-') {
+                // 去掉注释前的尾部空格
+                while (sb.length() > 0 && sb.charAt(sb.length() - 1) == ' ') {
+                    sb.setLength(sb.length() - 1);
+                }
+                // 跳过 -- 直到行尾
+                while (i < sql.length() && sql.charAt(i) != '\n') {
+                    i++;
+                }
+                // 保留换行符，维持行号一致性
+                if (i < sql.length()) {
+                    sb.append(sql.charAt(i));
+                    i++;
+                }
+                continue;
+            }
+            sb.append(c);
+            i++;
+        }
+        return sb.toString();
+    }
+
     /** SQL 保留关键字集合，用于预处理时跳过不引用。 */
     private static final java.util.Set<String> SQL_KEYWORDS = new java.util.HashSet<>(
             java.util.Arrays.asList(
@@ -214,7 +268,7 @@ public class SqlTranslator {
                     "TO_CHAR", "TO_DATE", "TO_NUMBER", "TO_TIMESTAMP",
                     "NOW", "SYSDATE", "GETDATE", "CURDATE", "CURTIME",
                     "DATE_FORMAT", "DATE_ADD", "DATE_SUB", "DATEDIFF",
-                    "EXTRACT", "YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND",
+                    "EXTRACT", "INTERVAL", "YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND",
                     // 其他
                     "CURRENT_TIMESTAMP", "CURRENT_DATE", "CURRENT_TIME",
                     "CURRENT", "TIMESTAMP", "DATE", "TIME",
