@@ -1,6 +1,10 @@
 -- TPC-C 表结构（PostgreSQL DDL）
 -- 用于 SDTP 基准测试：直连 PostgreSQL 建表，MySQL 方言查询通过 SDTP 执行
 -- 注意：建表顺序按依赖关系排列（被外键引用的表先创建）
+-- 独立 schema 隔离，避免与 TPC-H 同名表冲突
+
+CREATE SCHEMA IF NOT EXISTS tpcc;
+SET search_path TO tpcc;
 
 -- 仓库表
 DROP TABLE IF EXISTS warehouse CASCADE;

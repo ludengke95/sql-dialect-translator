@@ -131,13 +131,21 @@ jobs:
             auth:
               user: ${{ inputs.sdtp_user }}
               password: ${{ inputs.sdtp_password }}
-          target:
-            dialect: POSTGRESQL
-            jdbc-url: jdbc:postgresql://host.docker.internal:${{ inputs.pg_port }}/${{ inputs.pg_db }}
-            username: ${{ inputs.pg_user }}
-            password: ${{ inputs.pg_password }}
-            max-pool-size: 10
-            min-idle: 2
+          backends:
+            - name: tpch
+              dialect: POSTGRESQL
+              jdbc-url: jdbc:postgresql://host.docker.internal:${{ inputs.pg_port }}/${{ inputs.pg_db }}?currentSchema=tpch
+              username: ${{ inputs.pg_user }}
+              password: ${{ inputs.pg_password }}
+              max-pool-size: 10
+              min-idle: 2
+            - name: tpcc
+              dialect: POSTGRESQL
+              jdbc-url: jdbc:postgresql://host.docker.internal:${{ inputs.pg_port }}/${{ inputs.pg_db }}?currentSchema=tpcc
+              username: ${{ inputs.pg_user }}
+              password: ${{ inputs.pg_password }}
+              max-pool-size: 10
+              min-idle: 2
           translation:
             keyword-case: UPPER
             identifier-case: LOWER
@@ -180,7 +188,7 @@ jobs:
           python benchmark/tpch/data_gen.py \
             --pg-host localhost --pg-port ${{ inputs.pg_port }} \
             --pg-user ${{ inputs.pg_user }} --pg-password ${{ inputs.pg_password }} \
-            --pg-db ${{ inputs.pg_db }} --scale 0.01
+            --pg-db ${{ inputs.pg_db }} --scale 0.01 --schema tpch
 
       - name: Create TPC-C tables and load data
         run: |
@@ -188,7 +196,7 @@ jobs:
           python benchmark/tpcc/data_gen.py \
             --pg-host localhost --pg-port ${{ inputs.pg_port }} \
             --pg-user ${{ inputs.pg_user }} --pg-password ${{ inputs.pg_password }} \
-            --pg-db ${{ inputs.pg_db }} --warehouses 1
+            --pg-db ${{ inputs.pg_db }} --warehouses 1 --schema tpcc
 
       # ====================================================================
       # 8. 执行集成测试

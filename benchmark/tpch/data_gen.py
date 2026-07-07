@@ -6,7 +6,7 @@ TPC-H 数据生成器（SF 0.01 小数据量）
 
 用法:
     python data_gen.py --pg-host localhost --pg-port 5432 --pg-user sdtpu --pg-password pg_password --pg-db mydb
-    python data_gen.py --pg-host localhost --pg-port 5432 --pg-user sdtpu --pg-password pg_password --pg-db mydb --scale 0.01
+    python data_gen.py --pg-host localhost --pg-port 5432 --pg-user sdtpu --pg-password pg_password --pg-db mydb --scale 0.01 --schema tpch
 """
 
 import argparse
@@ -261,7 +261,7 @@ class TpchDataGenerator:
         return rows
 
 
-def load_csv_to_pg(conn_kwargs, table_name, columns, rows, batch_size=1000):
+def load_csv_to_pg(conn_kwargs, table_name, columns, rows, schema, batch_size=1000):
     """使用 psycopg2 copy_from 将数据批量导入 PostgreSQL。"""
     import psycopg2
     conn = psycopg2.connect(**conn_kwargs)
@@ -275,18 +275,20 @@ def load_csv_to_pg(conn_kwargs, table_name, columns, rows, batch_size=1000):
         buf.seek(0)
 
         # 使用 COPY FROM STDIN (CSV 格式，正确处理字段内的逗号引用)
+        # 限定 schema 避免写入错误的 schema
+        qualified_name = f"{schema}.{table_name}"
         columns_sql = ', '.join(columns)
         cur.copy_expert(
-            f"COPY {table_name} ({columns_sql}) FROM STDIN WITH CSV NULL ''",
+            f"COPY {qualified_name} ({columns_sql}) FROM STDIN WITH CSV NULL ''",
             buf
         )
         conn.commit()
-        print(f"  导入 {table_name}: {len(rows)} 行")
+        print(f"  导入 {qualified_name}: {len(rows)} 行")
     finally:
         conn.close()
 
 
-def load_tpch_data(conn_kwargs, scale):
+def load_tpch_data(conn_kwargs, scale, schema):
     """生成并加载所有 TPC-H 表（表须已清空）。"""
     # 生成并加载所有 TPC-H 表
     gen = TpchDataGenerator(scale)
@@ -311,7 +313,7 @@ def load_tpch_data(conn_kwargs, scale):
     ]
     for table, cols, gen_func in load_specs:
         rows = gen_func()
-        load_csv_to_pg(conn_kwargs, table, cols, rows)
+        load_csv_to_pg(conn_kwargs, table, cols, rows, schema)
 
 
 def main():
@@ -323,6 +325,8 @@ def main():
     parser.add_argument('--pg-db', default='mydb')
     parser.add_argument('--scale', type=float, default=SCALE_DEFAULT,
                         help='Scale factor (default: 0.01)')
+    parser.add_argument('--schema', default='tpch',
+                        help='PostgreSQL schema 名 (默认: tpch)')
     args = parser.parse_args()
 
     conn_kwargs = {
@@ -333,7 +337,7 @@ def main():
         'dbname': args.pg_db,
     }
 
-    print(f"TPC-H 数据生成 (SF={args.scale})")
+    print(f"TPC-H 数据生成 (SF={args.scale}, schema={args.schema})")
     print(f"  目标: {args.pg_host}:{args.pg_port}/{args.pg_db}")
 
     # 清空所有 TPC-H 表（防止上次残留数据导致主键冲突）
@@ -341,22 +345,22 @@ def main():
     conn_clear = psycopg2.connect(**conn_kwargs)
     cur_clear = conn_clear.cursor()
     for t in ['lineitem', 'orders', 'customer', 'partsupp', 'part', 'supplier', 'nation', 'region']:
-        cur_clear.execute(f"DELETE FROM {t}")
+        cur_clear.execute(f"DELETE FROM {args.schema}.{t}")
     conn_clear.commit()
     conn_clear.close()
 
     # 使用 Python 生成器加载数据
     print("  使用 Python 生成器加载数据...")
-    load_tpch_data(conn_kwargs, args.scale)
+    load_tpch_data(conn_kwargs, args.scale, args.schema)
     print("  Python 生成器加载完成")
 
     # 验证数据量
     conn = psycopg2.connect(**conn_kwargs)
     cur = conn.cursor()
     for table in ['region', 'nation', 'supplier', 'part', 'partsupp', 'customer', 'orders', 'lineitem']:
-        cur.execute(f"SELECT COUNT(*) FROM {table}")
+        cur.execute(f"SELECT COUNT(*) FROM {args.schema}.{table}")
         cnt = cur.fetchone()[0]
-        print(f"  {table}: {cnt} 行")
+        print(f"  {args.schema}.{table}: {cnt} 行")
     conn.close()
 
 

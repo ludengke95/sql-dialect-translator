@@ -1,5 +1,9 @@
 -- TPC-H 表结构（PostgreSQL DDL）
 -- 用于 SDTP 基准测试：直连 PostgreSQL 创建，数据通过 SDTP 用 MySQL 方言查询
+-- 独立 schema 隔离，避免与 TPC-C 同名表冲突
+
+CREATE SCHEMA IF NOT EXISTS tpch;
+SET search_path TO tpch;
 
 -- 区域表
 DROP TABLE IF EXISTS region CASCADE;

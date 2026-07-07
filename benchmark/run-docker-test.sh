@@ -38,6 +38,8 @@ TPCC_QUERIES=""
 OUTPUT_DIR="."
 TIMEOUT=60
 ADD_HOST="true"
+TPCH_DATABASE="tpch"
+TPCC_DATABASE="tpcc"
 
 # ========================= 帮助信息 =========================
 usage() {
@@ -59,6 +61,8 @@ usage() {
   --tpcc-queries PATH     TPC-C 查询目录路径（默认自动检测）
   --output-dir DIR         报告输出目录（默认: .）
   --timeout SEC            单条查询超时秒数（默认: 60）
+  --tpch-database DB      TPC-H 测试使用的 MySQL database（默认: tpch）
+  --tpcc-database DB      TPC-C 测试使用的 MySQL database（默认: tpcc）
   --no-add-host            禁用 --add-host（Docker Desktop 不需要）
   --help                   显示帮助信息
 EOF
@@ -79,6 +83,8 @@ while [[ $# -gt 0 ]]; do
         --tpcc-queries)  TPCC_QUERIES="$2"; shift 2 ;;
         --output-dir)    OUTPUT_DIR="$2"; shift 2 ;;
         --timeout)       TIMEOUT="$2"; shift 2 ;;
+        --tpch-database) TPCH_DATABASE="$2"; shift 2 ;;
+        --tpcc-database) TPCC_DATABASE="$2"; shift 2 ;;
         --no-add-host)   ADD_HOST="false"; shift ;;
         --help)          usage ;;
         *) echo "未知参数: $1"; usage ;;
@@ -157,6 +163,7 @@ _EXEC_DURATION=0
 
 execute_sql() {
     local sql="$1"
+    local db="${2:-$DATABASE}"  # 可选指定 database，默认用全局 DATABASE
     local start_time end_time
 
     _EXEC_RC=0
@@ -173,7 +180,7 @@ execute_sql() {
                 docker run $DOCKER_BASE_FLAGS \
                     "$DOCKER_IMAGE" \
                     mysql -h "$HOST" -P "$PORT" --protocol TCP \
-                    -u "$USER" -p"$PASSWORD" "$DATABASE" \
+                    -u "$USER" -p"$PASSWORD" "$db" \
                     --connect-timeout=10 \
                     -e "$sql" 2>&1
             )" || _EXEC_RC=$?
@@ -190,7 +197,7 @@ execute_sql() {
                 docker run $DOCKER_BASE_FLAGS \
                     -v "$tmpfile:/tmp/q.sql:ro" \
                     "$DOCKER_IMAGE" \
-                    -u "jdbc:mysql://$HOST:$PORT/$DATABASE?useSSL=false&characterEncoding=utf8" \
+                    -u "jdbc:mysql://$HOST:$PORT/$db?useSSL=false&characterEncoding=utf8" \
                     -n "$USER" -p "$PASSWORD" \
                     -e "!run /tmp/q.sql" 2>&1
             )" || _EXEC_RC=$?
@@ -206,7 +213,7 @@ execute_sql() {
                     -e MYSQL_PORT="$PORT" \
                     -e MYSQL_USER="$USER" \
                     -e MYSQL_PASSWORD="$PASSWORD" \
-                    -e MYSQL_DATABASE="$DATABASE" \
+                    -e MYSQL_DATABASE="$db" \
                     -e SQL_STATEMENTS="$sql" \
                     "$DOCKER_IMAGE" 2>&1
             )" || _EXEC_RC=$?
@@ -258,13 +265,14 @@ is_success() {
 run_benchmark() {
     local benchmark_name="$1"
     local queries_dir="$2"
+    local db="$3"  # 该 benchmark 使用的 MySQL database（路由键）
 
     echo ""
     echo "=========================================="
     echo "  运行 $benchmark_name 基准测试"
     echo "  模式: $MODE"
     echo "  镜像: $DOCKER_IMAGE"
-    echo "  目标: $USER@$HOST:$PORT/$DATABASE"
+    echo "  目标: $USER@$HOST:$PORT/$db"
     echo "=========================================="
 
     # 读取查询
@@ -300,8 +308,8 @@ run_benchmark() {
         fi
         echo "  SQL: $preview"
 
-        # 执行
-        execute_sql "$sql"
+        # 执行（使用指定的 database 路由到对应后端）
+        execute_sql "$sql" "$db"
 
         local ok
         if is_success "$_EXEC_RC" "$_EXEC_OUTPUT"; then
@@ -379,6 +387,7 @@ run_benchmark() {
   "benchmark": "$benchmark_name",
   "mode": "$MODE",
   "docker_image": "$DOCKER_IMAGE",
+  "database": "$db",
   "timestamp": "$timestamp",
   "total": $total,
   "success": $success_count,
@@ -410,7 +419,7 @@ JSONEND
         echo "  测试集: $benchmark_name"
         echo "  执行模式: $MODE"
         echo "  Docker 镜像: $DOCKER_IMAGE"
-        echo "  目标: $USER@$HOST:$PORT/$DATABASE"
+        echo "  目标: $USER@$HOST:$PORT/$db"
         echo "  总 SQL 数: $total"
         echo "  成功: $success_count"
         echo "  失败: $failed_count"
@@ -468,11 +477,11 @@ main() {
         echo "  ⚠️ 拉取失败，将尝试本地镜像或运行时自动拉取"
     }
 
-    # 快速连通性验证
+    # 快速连通性验证（使用默认 DATABASE）
     echo ""
     echo "验证连通性..."
     local ping_sql="SELECT 1 AS ping;"
-    execute_sql "$ping_sql"
+    execute_sql "$ping_sql" "$DATABASE"
     if is_success "$_EXEC_RC" "$_EXEC_OUTPUT"; then
         echo "  ✅ SDTP 可达 ($MODE)"
     else
@@ -485,7 +494,8 @@ main() {
     local grand_total=0 grand_success=0 grand_failed=0 grand_time=0
 
     if [[ "$BENCHMARK" == "tpch" || "$BENCHMARK" == "all" ]]; then
-        run_benchmark "TPC-H" "$TPCH_QUERIES"
+        # TPC-H 使用 tpch database 路由到 TPC-H schema 后端
+        run_benchmark "TPC-H" "$TPCH_QUERIES" "$TPCH_DATABASE"
         grand_total=$((grand_total + BENCH_TOTAL))
         grand_success=$((grand_success + BENCH_SUCCESS))
         grand_failed=$((grand_failed + BENCH_FAILED))
@@ -493,7 +503,8 @@ main() {
     fi
 
     if [[ "$BENCHMARK" == "tpcc" || "$BENCHMARK" == "all" ]]; then
-        run_benchmark "TPC-C" "$TPCC_QUERIES"
+        # TPC-C 使用 tpcc database 路由到 TPC-C schema 后端
+        run_benchmark "TPC-C" "$TPCC_QUERIES" "$TPCC_DATABASE"
         grand_total=$((grand_total + BENCH_TOTAL))
         grand_success=$((grand_success + BENCH_SUCCESS))
         grand_failed=$((grand_failed + BENCH_FAILED))
