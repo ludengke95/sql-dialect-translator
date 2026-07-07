@@ -10,7 +10,14 @@ import java.util.List;
 
 /**
  * SQL 改写引擎。
- * 管理可插拔的改写规则链，依次应用于 AST。
+ * <p>
+ * 通过 Java SPI ({@link java.util.ServiceLoader}) 自动发现所有
+ * {@link SqlRewriteRule} 实现，按 (source, target) 方言对筛选后，
+ * 通过 {@link RuleBasedRewriteVisitor} 应用于 AST。
+ * </p>
+ * <p>
+ * 也支持通过 {@link #addVisitor(SqlShuttle)} 注入自定义改写逻辑。
+ * </p>
  */
 public class SqlRewriteEngine {
 
@@ -18,18 +25,25 @@ public class SqlRewriteEngine {
 
     /**
      * 创建一个用于 source→target 转换的改写引擎。
+     * 通过 SPI 自动加载所有 SqlRewriteRule 实现并按方言筛选。
      *
      * @param source 源方言
      * @param target 目标方言
      */
     public SqlRewriteEngine(DialectType source, DialectType target) {
-        // 注册函数改写规则
-        visitors.add(new FunctionRewriteVisitor(source, target));
+        if (source == target) {
+            return; // 同方言无需转换
+        }
+        // 通过 SPI 加载规则，按方言对筛选
+        List<SqlRewriteRule> matchedRules = RuleLoader.loadRules(source, target);
+        if (!matchedRules.isEmpty()) {
+            visitors.add(new RuleBasedRewriteVisitor(matchedRules));
+        }
         // 后续可在此注册更多改写 visitor（标识符、类型转换等）
     }
 
     /**
-     * 添加自定义改写规则。
+     * 添加自定义改写 Visitor。
      *
      * @param visitor SqlNode visitor
      */

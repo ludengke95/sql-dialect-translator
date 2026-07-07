@@ -1,0 +1,7 @@
+com.translator.core.rewrite.rule.NullToCoalesceRule
+com.translator.core.rewrite.rule.NowToCurrentTimestampRule
+com.translator.core.rewrite.rule.GetdateToCurrentTimestampRule
+com.translator.core.rewrite.rule.SysdateToCurrentTimestampRule
+com.translator.core.rewrite.rule.TodayToCurrentDateRule
+com.translator.core.rewrite.rule.DecodeToCaseRule
+com.translator.core.rewrite.rule.SubstrCastRule
