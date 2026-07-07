@@ -100,6 +100,7 @@ jobs:
       - name: Build python-mysql Docker image
         run: |
           docker build -t python-mysql:latest \
+            -f benchmark/python-mysql/Dockerfile.python-mysql \
             benchmark/python-mysql/
 
       - name: Save python-mysql Docker image
