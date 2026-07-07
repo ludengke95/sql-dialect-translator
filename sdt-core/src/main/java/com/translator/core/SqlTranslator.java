@@ -12,6 +12,9 @@ import org.apache.calcite.sql.validate.SqlConformanceEnum;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * SQL 方言翻译器。
  * 核心入口：解析源 SQL → AST 改写 → 生成目标方言 SQL。
@@ -241,18 +244,23 @@ public class SqlTranslator {
         if (sql == null || sql.isEmpty()) {
             return sql;
         }
-        // 匹配 identifier.identifier、identifier.* 或 standalone identifier
-        // 负向后瞻排除已引用或数字开头的；负向前瞻排除函数调用（后跟括号）和已引用标识符
+        // 1. 提取所有单引号字符串字面量，用占位符替换，防止正则匹配到字符串内部
+        //    例如 'SAUDI ARABIA'、'F'、'don''t' 等
+        List<String> stringLiterals = new ArrayList<>();
+        String protectedSql = protectStringLiterals(sql, stringLiterals);
+
+        // 2. 匹配 identifier.identifier、identifier.* 或 standalone identifier
+        //    负向后瞻排除已引用或数字开头的；负向前瞻排除函数调用（后跟括号）和已引用标识符
         java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
                 "(?<![\\w\"`])([a-zA-Z_][a-zA-Z0-9_]*)" +
                 "(?:\\.(\\*|[a-zA-Z_][a-zA-Z0-9_]*))?" +
                 "(?![\\w\"`(])"
         );
-        java.util.regex.Matcher matcher = pattern.matcher(sql);
-        StringBuilder sb = new StringBuilder(sql.length() + 64);
+        java.util.regex.Matcher matcher = pattern.matcher(protectedSql);
+        StringBuilder sb = new StringBuilder(protectedSql.length() + 64);
         int lastEnd = 0;
         while (matcher.find()) {
-            sb.append(sql, lastEnd, matcher.start());
+            sb.append(protectedSql, lastEnd, matcher.start());
             String part1 = matcher.group(1);
             String part2 = matcher.group(2);
             if (part2 != null) {
@@ -273,11 +281,88 @@ public class SqlTranslator {
             }
             lastEnd = matcher.end();
         }
-        sb.append(sql.substring(lastEnd));
+        sb.append(protectedSql.substring(lastEnd));
 
-        // 第二遍：修复 DML 语句中紧跟 ( 的表名（如 INSERT INTO test(...)）
-        // 这些表名在第一遍被 (?![\\w\"\`(]) 跳过了
-        return quoteDmlTableNames(sb.toString(), identifierCase);
+        // 3. 第二遍：修复 DML 语句中紧跟 ( 的表名（如 INSERT INTO test(...)）
+        //    这些表名在第一遍被 (?![\\w\"\`(]) 跳过了
+        String quoted = quoteDmlTableNames(sb.toString(), identifierCase);
+
+        // 4. 还原字符串字面量
+        return restoreStringLiterals(quoted, stringLiterals);
+    }
+
+    /**
+     * 提取 SQL 中所有单引号字符串字面量，用不可见占位符替换。
+     * 支持 SQL 标准的双单引号转义（'' 表示一个单引号字符）。
+     *
+     * @param sql    原始 SQL
+     * @param out    输出列表，按索引存放提取出的字符串字面量（含外层单引号）
+     * @return 替换占位符后的 SQL
+     */
+    private static String protectStringLiterals(String sql, List<String> out) {
+        StringBuilder sb = new StringBuilder(sql.length());
+        int i = 0;
+        while (i < sql.length()) {
+            char c = sql.charAt(i);
+            if (c == '\'') {
+                // 进入字符串字面量
+                int start = i;
+                i++; // 跳过开头的单引号
+                while (i < sql.length()) {
+                    if (sql.charAt(i) == '\'') {
+                        if (i + 1 < sql.length() && sql.charAt(i + 1) == '\'') {
+                            // 转义的 '' → 跳过一个字符
+                            i += 2;
+                        } else {
+                            // 字符串结束
+                            i++;
+                            break;
+                        }
+                    } else {
+                        i++;
+                    }
+                }
+                // 占位符使用 \0 + 索引 + \0，\0 不会出现在正常 SQL 中
+                int index = out.size();
+                out.add(sql.substring(start, i));
+                sb.append('\0').append(index).append('\0');
+            } else {
+                sb.append(c);
+                i++;
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 将占位符还原为原始字符串字面量。
+     */
+    private static String restoreStringLiterals(String sql, List<String> stringLiterals) {
+        if (stringLiterals.isEmpty()) {
+            return sql;
+        }
+        StringBuilder sb = new StringBuilder(sql.length());
+        int i = 0;
+        while (i < sql.length()) {
+            char c = sql.charAt(i);
+            if (c == '\0') {
+                // 找到占位符结束位置
+                int end = sql.indexOf('\0', i + 1);
+                if (end > i) {
+                    int index = Integer.parseInt(sql.substring(i + 1, end));
+                    sb.append(stringLiterals.get(index));
+                    i = end + 1;
+                } else {
+                    // 异常情况，直接复制
+                    sb.append(c);
+                    i++;
+                }
+            } else {
+                sb.append(c);
+                i++;
+            }
+        }
+        return sb.toString();
     }
 
     /**

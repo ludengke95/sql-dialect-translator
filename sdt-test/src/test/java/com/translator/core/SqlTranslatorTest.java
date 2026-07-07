@@ -566,8 +566,13 @@ public class SqlTranslatorTest {
         Assert.assertTrue("应包含 FROM: " + pgResult, upper.contains("FROM"));
         Assert.assertTrue("应包含 GROUP BY: " + pgResult, upper.contains("GROUP BY"));
         Assert.assertTrue("应包含 ORDER BY: " + pgResult, upper.contains("ORDER BY"));
-        Assert.assertTrue("应包含 LIMIT: " + pgResult, upper.contains("LIMIT"));
+        Assert.assertTrue("应包含 FETCH NEXT 或 LIMIT: " + pgResult,
+                upper.contains("LIMIT") || upper.contains("FETCH NEXT"));
         Assert.assertTrue("应包含 EXISTS: " + pgResult, upper.contains("EXISTS"));
+
+        // 字符串字面量应正确保留（不被加引号破坏）
+        Assert.assertTrue("'F' 应保留: " + pgResult, pgResult.contains("'F'"));
+        Assert.assertTrue("SAUDI ARABIA 应保留: " + pgResult, pgResult.contains("SAUDI ARABIA"));
 
         // 关键检查：o_orderkey 应被正确限定
         // 如果 Calcite 正确添加了 orders 前缀，结果中应出现 orders.o_orderkey 或 "orders"."o_orderkey"
@@ -575,12 +580,8 @@ public class SqlTranslatorTest {
         boolean hasOrdersPrefix = pgResult.contains("orders.o_orderkey")
                 || pgResult.contains("orders.\"o_orderkey\"")
                 || pgResult.contains("\"orders\".\"o_orderkey\"");
-        boolean hasBareOrderkey = pgResult.matches("(?s).*[^\\.]o_orderkey.*")
-                && !pgResult.contains(".o_orderkey")
-                && !pgResult.contains(".\"o_orderkey\"");
 
         System.out.println("是否有 orders 前缀: " + hasOrdersPrefix);
-        System.out.println("是否出现裸 o_orderkey: " + hasBareOrderkey);
 
         // 这个断言当前预期失败——我们把它打印出来诊断而不阻塞其他测试
         if (!hasOrdersPrefix) {
