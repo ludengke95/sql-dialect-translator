@@ -1,14 +1,16 @@
 # =============================================================================
-# SDTP Python / MySQL CLI / Java JDBC Integration Test (TPC-C / TPC-H)
+# SDTP 多客户端集成测试 (TPC-C / TPC-H)
 #
-# 分为四个 job：
-#   1. build          — 构建 Maven + Docker，产出共享 artifact
-#   2. python-test    — 独立 PostgreSQL + SDTP，通过 Python mysql.connector 执行
-#   3. mysql-cli-test — 独立 PostgreSQL + SDTP，通过 mysql CLI 执行
-#   4. java-jdbc-test — 独立 PostgreSQL + SDTP，通过 Java MySQL JDBC 驱动执行
+# 测试 job 分为:
+#   1. build           — 统一构建所有 Docker 镜像（SDTP + sqlline-5 + sqlline-8）
+#   2. mysql-client-5  — Docker mysql:5.7 原生客户端
+#   3. mysql-client-8  — Docker mysql:8.0 原生客户端
+#   4. mysql-jdbc-5    — Docker mysql5-sqlline (JDBC 5.1.49)
+#   5. mysql-jdbc-8    — Docker mysql8-sqlline (JDBC 8.0.28)
+#   6. python-mysql    — Python mysql.connector
 # =============================================================================
 
-name: SDTP Integration Test (TPC-C / TPC-H)
+name: SDTP Integration Test
 
 on:
   push:
@@ -31,12 +33,12 @@ env:
   PG_PORT: 5432
 
 # ============================================================================
-# Job 1：构建 Maven 和 Docker 镜像，产出供后续 job 复用
+# Job 1: 统一构建 — Maven + 3 个 Docker 镜像
 # ============================================================================
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -49,34 +51,65 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
+      # --- SDTP 构建 ---
       - name: Build SDTP with Maven
         run: mvn clean package -DskipTests -B
 
       - name: Build SDTP Docker image
         run: docker build -t sdtp:latest .
 
-      - name: Save Docker image as artifact
-        run: |
-          docker save sdtp:latest | gzip > /tmp/sdtp-image.tar.gz
+      - name: Save SDTP Docker image
+        run: docker save sdtp:latest | gzip > /tmp/sdtp-image.tar.gz
 
-      - name: Upload Docker image artifact
+      - name: Upload SDTP Docker image artifact
         uses: actions/upload-artifact@v4
         with:
           name: sdtp-docker-image
           path: /tmp/sdtp-image.tar.gz
           retention-days: 1
 
-      - name: Upload Maven tarball for reference (optional)
+      # --- sqlline MySQL 5 构建 ---
+      - name: Build mysql5-sqlline Docker image
+        run: |
+          docker build -t mysql5-sqlline:latest \
+            -f benchmark/sqlline/Dockerfile.mysql5-sqlline \
+            benchmark/sqlline/
+
+      - name: Save mysql5-sqlline Docker image
+        run: docker save mysql5-sqlline:latest | gzip > /tmp/mysql5-sqlline.tar.gz
+
+      - name: Upload mysql5-sqlline Docker image artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sdtp-server-dist
-          path: sdtp-server/target/sdtp-server-*.tar.gz
+          name: mysql5-sqlline-docker-image
+          path: /tmp/mysql5-sqlline.tar.gz
           retention-days: 1
 
+      # --- sqlline MySQL 8 构建 ---
+      - name: Build mysql8-sqlline Docker image
+        run: |
+          docker build -t mysql8-sqlline:latest \
+            -f benchmark/sqlline/Dockerfile.mysql8-sqlline \
+            benchmark/sqlline/
+
+      - name: Save mysql8-sqlline Docker image
+        run: docker save mysql8-sqlline:latest | gzip > /tmp/mysql8-sqlline.tar.gz
+
+      - name: Upload mysql8-sqlline Docker image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mysql8-sqlline-docker-image
+          path: /tmp/mysql8-sqlline.tar.gz
+          retention-days: 1
+
+# ============================================================================
+# 通用步骤：启动 SDTP + PostgreSQL + 加载数据（复合 Action 模板）
+# ============================================================================
+
   # ==========================================================================
-  # Job 2：Python mysql.connector 集成测试
+  # Job 2: MySQL Client 5 (原生 mysql:5.7 容器)
   # ==========================================================================
-  python-test:
+  mysql-client-5:
     needs: [build]
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -85,13 +118,13 @@ jobs:
       postgres:
         image: postgres:15-alpine
         env:
-          POSTGRES_USER: sdtpu
-          POSTGRES_PASSWORD: pg_password
-          POSTGRES_DB: mydb
+          POSTGRES_USER: ${{ env.PG_USER }}
+          POSTGRES_PASSWORD: ${{ env.PG_PASSWORD }}
+          POSTGRES_DB: ${{ env.PG_DB }}
         ports:
           - "5432:5432"
         options: >-
-          --health-cmd "pg_isready -U sdtpu -d mydb"
+          --health-cmd "pg_isready -U ${{ env.PG_USER }} -d ${{ env.PG_DB }}"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -100,19 +133,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download Docker image artifact
+      - name: Download SDTP Docker image
         uses: actions/download-artifact@v4
         with:
           name: sdtp-docker-image
           path: /tmp/
 
-      - name: Load Docker image
-        run: |
-          gunzip -c /tmp/sdtp-image.tar.gz | docker load
+      - name: Load SDTP Docker image
+        run: gunzip -c /tmp/sdtp-image.tar.gz | docker load
 
-      - name: Create SDTP config for CI
+      - name: Create SDTP config and start
         run: |
-          cat > sdtp-proxy-config-ci.yml << 'YAML'
+          cat > /tmp/sdtp-config.yml << 'YAML'
           proxy:
             port: 3306
             auth:
@@ -120,9 +152,9 @@ jobs:
               password: proxy_password
           target:
             dialect: POSTGRESQL
-            jdbc-url: jdbc:postgresql://host.docker.internal:5432/mydb
-            username: sdtpu
-            password: pg_password
+            jdbc-url: jdbc:postgresql://host.docker.internal:5432/${{ env.PG_DB }}
+            username: ${{ env.PG_USER }}
+            password: ${{ env.PG_PASSWORD }}
             max-pool-size: 10
             min-idle: 2
           translation:
@@ -130,40 +162,30 @@ jobs:
             identifier-case: LOWER
           YAML
 
-      - name: Start SDTP container
-        run: |
-          docker rm -f sdtp 2>/dev/null || true
-          docker run -d \
-            --name sdtp \
+          docker run -d --name sdtp \
             --add-host host.docker.internal:host-gateway \
-            -p 3306:3306 \
-            -v ${{ github.workspace }}/sdtp-proxy-config-ci.yml:/opt/sdtp/config/proxy-config.yml \
+            -p ${{ env.SDTP_PORT }}:3306 \
+            -v /tmp/sdtp-config.yml:/opt/sdtp/config/proxy-config.yml \
             sdtp:latest
-          echo "Waiting for SDTP to start..."
-          sleep 8
+
+          # 等待 SDTP 就绪
+          echo "等待 SDTP 启动..."
           for i in $(seq 1 30); do
             if docker logs sdtp 2>&1 | grep -qi "started\|listening"; then
-              echo "SDTP is ready (attempt $i)"
+              echo "SDTP 就绪 (尝试 $i)"
               break
             fi
             sleep 3
           done
+          docker logs sdtp --tail 20
 
-      - name: Verify SDTP container status
-        if: always()
-        run: |
-          docker ps -a
-          docker inspect sdtp --format '{{.State.Status}}' 2>/dev/null || exit 1
-          echo "SDTP is running"
-
-      - name: Set up Python
+      - name: Set up Python (数据生成)
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Install Python dependencies
-        run: |
-          pip install mysql-connector-python psycopg2-binary
+      - name: Install data-gen dependencies
+        run: pip install psycopg2-binary
 
       - name: Create TPC-H tables and load data
         run: |
@@ -181,9 +203,578 @@ jobs:
             --pg-user ${{ env.PG_USER }} --pg-password ${{ env.PG_PASSWORD }} \
             --pg-db ${{ env.PG_DB }} --warehouses 1
 
-      - name: Verify SDTP connectivity via Python mysql.connector
+      - name: Run integration test (mysql-client-5)
         run: |
-          python3 -c "
+          bash benchmark/run-docker-test.sh \
+            --mode mysql-client-5 \
+            --host host.docker.internal \
+            --port ${{ env.SDTP_PORT }} \
+            --user ${{ env.SDTP_USER }} \
+            --password ${{ env.SDTP_PASSWORD }} \
+            --database ${{ env.PG_DB }} \
+            --benchmark all \
+            --output-dir benchmark/reports
+
+      - name: Collect SDTP logs
+        if: always()
+        run: |
+          mkdir -p /tmp/sdtp-logs
+          docker logs sdtp --tail 300 > /tmp/sdtp-logs/sdtp.log 2>&1 || true
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mysql-client-5-reports
+          path: |
+            benchmark/reports/
+            /tmp/sdtp-logs/
+
+      - name: Print summary
+        if: always()
+        run: |
+          {
+            echo "## MySQL Client 5 测试结果"
+            echo ""
+            for report in benchmark/reports/report_*.txt; do
+              if [ -f "$report" ]; then
+                echo '```'
+                cat "$report"
+                echo '```'
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ==========================================================================
+  # Job 3: MySQL Client 8 (原生 mysql:8.0 容器)
+  # ==========================================================================
+  mysql-client-8:
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: ${{ env.PG_USER }}
+          POSTGRES_PASSWORD: ${{ env.PG_PASSWORD }}
+          POSTGRES_DB: ${{ env.PG_DB }}
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U ${{ env.PG_USER }} -d ${{ env.PG_DB }}"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download SDTP Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: sdtp-docker-image
+          path: /tmp/
+
+      - name: Load SDTP Docker image
+        run: gunzip -c /tmp/sdtp-image.tar.gz | docker load
+
+      - name: Create SDTP config and start
+        run: |
+          cat > /tmp/sdtp-config.yml << 'YAML'
+          proxy:
+            port: 3306
+            auth:
+              user: root
+              password: proxy_password
+          target:
+            dialect: POSTGRESQL
+            jdbc-url: jdbc:postgresql://host.docker.internal:5432/${{ env.PG_DB }}
+            username: ${{ env.PG_USER }}
+            password: ${{ env.PG_PASSWORD }}
+            max-pool-size: 10
+            min-idle: 2
+          translation:
+            keyword-case: UPPER
+            identifier-case: LOWER
+          YAML
+
+          docker run -d --name sdtp \
+            --add-host host.docker.internal:host-gateway \
+            -p ${{ env.SDTP_PORT }}:3306 \
+            -v /tmp/sdtp-config.yml:/opt/sdtp/config/proxy-config.yml \
+            sdtp:latest
+
+          echo "等待 SDTP 启动..."
+          for i in $(seq 1 30); do
+            if docker logs sdtp 2>&1 | grep -qi "started\|listening"; then
+              echo "SDTP 就绪 (尝试 $i)"
+              break
+            fi
+            sleep 3
+          done
+          docker logs sdtp --tail 20
+
+      - name: Set up Python (数据生成)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install data-gen dependencies
+        run: pip install psycopg2-binary
+
+      - name: Create TPC-H tables and load data
+        run: |
+          PGPASSWORD=${{ env.PG_PASSWORD }} psql -h localhost -U ${{ env.PG_USER }} -d ${{ env.PG_DB }} -f benchmark/tpch/schema_pg.sql
+          python benchmark/tpch/data_gen.py \
+            --pg-host localhost --pg-port ${{ env.PG_PORT }} \
+            --pg-user ${{ env.PG_USER }} --pg-password ${{ env.PG_PASSWORD }} \
+            --pg-db ${{ env.PG_DB }} --scale 0.01
+
+      - name: Create TPC-C tables and load data
+        run: |
+          PGPASSWORD=${{ env.PG_PASSWORD }} psql -h localhost -U ${{ env.PG_USER }} -d ${{ env.PG_DB }} -f benchmark/tpcc/schema_pg.sql
+          python benchmark/tpcc/data_gen.py \
+            --pg-host localhost --pg-port ${{ env.PG_PORT }} \
+            --pg-user ${{ env.PG_USER }} --pg-password ${{ env.PG_PASSWORD }} \
+            --pg-db ${{ env.PG_DB }} --warehouses 1
+
+      - name: Run integration test (mysql-client-8)
+        run: |
+          bash benchmark/run-docker-test.sh \
+            --mode mysql-client-8 \
+            --host host.docker.internal \
+            --port ${{ env.SDTP_PORT }} \
+            --user ${{ env.SDTP_USER }} \
+            --password ${{ env.SDTP_PASSWORD }} \
+            --database ${{ env.PG_DB }} \
+            --benchmark all \
+            --output-dir benchmark/reports
+
+      - name: Collect SDTP logs
+        if: always()
+        run: |
+          mkdir -p /tmp/sdtp-logs
+          docker logs sdtp --tail 300 > /tmp/sdtp-logs/sdtp.log 2>&1 || true
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mysql-client-8-reports
+          path: |
+            benchmark/reports/
+            /tmp/sdtp-logs/
+
+      - name: Print summary
+        if: always()
+        run: |
+          {
+            echo "## MySQL Client 8 测试结果"
+            echo ""
+            for report in benchmark/reports/report_*.txt; do
+              if [ -f "$report" ]; then
+                echo '```'
+                cat "$report"
+                echo '```'
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ==========================================================================
+  # Job 4: MySQL JDBC 5 (mysql5-sqlline 容器，JDBC 5.1.49)
+  # ==========================================================================
+  mysql-jdbc-5:
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: ${{ env.PG_USER }}
+          POSTGRES_PASSWORD: ${{ env.PG_PASSWORD }}
+          POSTGRES_DB: ${{ env.PG_DB }}
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U ${{ env.PG_USER }} -d ${{ env.PG_DB }}"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 下载两个 Docker 镜像
+      - name: Download SDTP Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: sdtp-docker-image
+          path: /tmp/
+
+      - name: Download mysql5-sqlline Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: mysql5-sqlline-docker-image
+          path: /tmp/
+
+      - name: Load Docker images
+        run: |
+          gunzip -c /tmp/sdtp-image.tar.gz | docker load
+          gunzip -c /tmp/mysql5-sqlline.tar.gz | docker load
+
+      - name: Create SDTP config and start
+        run: |
+          cat > /tmp/sdtp-config.yml << 'YAML'
+          proxy:
+            port: 3306
+            auth:
+              user: root
+              password: proxy_password
+          target:
+            dialect: POSTGRESQL
+            jdbc-url: jdbc:postgresql://host.docker.internal:5432/${{ env.PG_DB }}
+            username: ${{ env.PG_USER }}
+            password: ${{ env.PG_PASSWORD }}
+            max-pool-size: 10
+            min-idle: 2
+          translation:
+            keyword-case: UPPER
+            identifier-case: LOWER
+          YAML
+
+          docker run -d --name sdtp \
+            --add-host host.docker.internal:host-gateway \
+            -p ${{ env.SDTP_PORT }}:3306 \
+            -v /tmp/sdtp-config.yml:/opt/sdtp/config/proxy-config.yml \
+            sdtp:latest
+
+          echo "等待 SDTP 启动..."
+          for i in $(seq 1 30); do
+            if docker logs sdtp 2>&1 | grep -qi "started\|listening"; then
+              echo "SDTP 就绪 (尝试 $i)"
+              break
+            fi
+            sleep 3
+          done
+          docker logs sdtp --tail 20
+
+      - name: Set up Python (数据生成)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install data-gen dependencies
+        run: pip install psycopg2-binary
+
+      - name: Create TPC-H tables and load data
+        run: |
+          PGPASSWORD=${{ env.PG_PASSWORD }} psql -h localhost -U ${{ env.PG_USER }} -d ${{ env.PG_DB }} -f benchmark/tpch/schema_pg.sql
+          python benchmark/tpch/data_gen.py \
+            --pg-host localhost --pg-port ${{ env.PG_PORT }} \
+            --pg-user ${{ env.PG_USER }} --pg-password ${{ env.PG_PASSWORD }} \
+            --pg-db ${{ env.PG_DB }} --scale 0.01
+
+      - name: Create TPC-C tables and load data
+        run: |
+          PGPASSWORD=${{ env.PG_PASSWORD }} psql -h localhost -U ${{ env.PG_USER }} -d ${{ env.PG_DB }} -f benchmark/tpcc/schema_pg.sql
+          python benchmark/tpcc/data_gen.py \
+            --pg-host localhost --pg-port ${{ env.PG_PORT }} \
+            --pg-user ${{ env.PG_USER }} --pg-password ${{ env.PG_PASSWORD }} \
+            --pg-db ${{ env.PG_DB }} --warehouses 1
+
+      - name: Run integration test (mysql-jdbc-5)
+        run: |
+          bash benchmark/run-docker-test.sh \
+            --mode mysql-jdbc-5 \
+            --host host.docker.internal \
+            --port ${{ env.SDTP_PORT }} \
+            --user ${{ env.SDTP_USER }} \
+            --password ${{ env.SDTP_PASSWORD }} \
+            --database ${{ env.PG_DB }} \
+            --benchmark all \
+            --output-dir benchmark/reports
+
+      - name: Collect SDTP logs
+        if: always()
+        run: |
+          mkdir -p /tmp/sdtp-logs
+          docker logs sdtp --tail 300 > /tmp/sdtp-logs/sdtp.log 2>&1 || true
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mysql-jdbc-5-reports
+          path: |
+            benchmark/reports/
+            /tmp/sdtp-logs/
+
+      - name: Print summary
+        if: always()
+        run: |
+          {
+            echo "## MySQL JDBC 5 (sqlline) 测试结果"
+            echo ""
+            for report in benchmark/reports/report_*.txt; do
+              if [ -f "$report" ]; then
+                echo '```'
+                cat "$report"
+                echo '```'
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ==========================================================================
+  # Job 5: MySQL JDBC 8 (mysql8-sqlline 容器，JDBC 8.0.28)
+  # ==========================================================================
+  mysql-jdbc-8:
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: ${{ env.PG_USER }}
+          POSTGRES_PASSWORD: ${{ env.PG_PASSWORD }}
+          POSTGRES_DB: ${{ env.PG_DB }}
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U ${{ env.PG_USER }} -d ${{ env.PG_DB }}"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download SDTP Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: sdtp-docker-image
+          path: /tmp/
+
+      - name: Download mysql8-sqlline Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: mysql8-sqlline-docker-image
+          path: /tmp/
+
+      - name: Load Docker images
+        run: |
+          gunzip -c /tmp/sdtp-image.tar.gz | docker load
+          gunzip -c /tmp/mysql8-sqlline.tar.gz | docker load
+
+      - name: Create SDTP config and start
+        run: |
+          cat > /tmp/sdtp-config.yml << 'YAML'
+          proxy:
+            port: 3306
+            auth:
+              user: root
+              password: proxy_password
+          target:
+            dialect: POSTGRESQL
+            jdbc-url: jdbc:postgresql://host.docker.internal:5432/${{ env.PG_DB }}
+            username: ${{ env.PG_USER }}
+            password: ${{ env.PG_PASSWORD }}
+            max-pool-size: 10
+            min-idle: 2
+          translation:
+            keyword-case: UPPER
+            identifier-case: LOWER
+          YAML
+
+          docker run -d --name sdtp \
+            --add-host host.docker.internal:host-gateway \
+            -p ${{ env.SDTP_PORT }}:3306 \
+            -v /tmp/sdtp-config.yml:/opt/sdtp/config/proxy-config.yml \
+            sdtp:latest
+
+          echo "等待 SDTP 启动..."
+          for i in $(seq 1 30); do
+            if docker logs sdtp 2>&1 | grep -qi "started\|listening"; then
+              echo "SDTP 就绪 (尝试 $i)"
+              break
+            fi
+            sleep 3
+          done
+          docker logs sdtp --tail 20
+
+      - name: Set up Python (数据生成)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install data-gen dependencies
+        run: pip install psycopg2-binary
+
+      - name: Create TPC-H tables and load data
+        run: |
+          PGPASSWORD=${{ env.PG_PASSWORD }} psql -h localhost -U ${{ env.PG_USER }} -d ${{ env.PG_DB }} -f benchmark/tpch/schema_pg.sql
+          python benchmark/tpch/data_gen.py \
+            --pg-host localhost --pg-port ${{ env.PG_PORT }} \
+            --pg-user ${{ env.PG_USER }} --pg-password ${{ env.PG_PASSWORD }} \
+            --pg-db ${{ env.PG_DB }} --scale 0.01
+
+      - name: Create TPC-C tables and load data
+        run: |
+          PGPASSWORD=${{ env.PG_PASSWORD }} psql -h localhost -U ${{ env.PG_USER }} -d ${{ env.PG_DB }} -f benchmark/tpcc/schema_pg.sql
+          python benchmark/tpcc/data_gen.py \
+            --pg-host localhost --pg-port ${{ env.PG_PORT }} \
+            --pg-user ${{ env.PG_USER }} --pg-password ${{ env.PG_PASSWORD }} \
+            --pg-db ${{ env.PG_DB }} --warehouses 1
+
+      - name: Run integration test (mysql-jdbc-8)
+        run: |
+          bash benchmark/run-docker-test.sh \
+            --mode mysql-jdbc-8 \
+            --host host.docker.internal \
+            --port ${{ env.SDTP_PORT }} \
+            --user ${{ env.SDTP_USER }} \
+            --password ${{ env.SDTP_PASSWORD }} \
+            --database ${{ env.PG_DB }} \
+            --benchmark all \
+            --output-dir benchmark/reports
+
+      - name: Collect SDTP logs
+        if: always()
+        run: |
+          mkdir -p /tmp/sdtp-logs
+          docker logs sdtp --tail 300 > /tmp/sdtp-logs/sdtp.log 2>&1 || true
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mysql-jdbc-8-reports
+          path: |
+            benchmark/reports/
+            /tmp/sdtp-logs/
+
+      - name: Print summary
+        if: always()
+        run: |
+          {
+            echo "## MySQL JDBC 8 (sqlline) 测试结果"
+            echo ""
+            for report in benchmark/reports/report_*.txt; do
+              if [ -f "$report" ]; then
+                echo '```'
+                cat "$report"
+                echo '```'
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ==========================================================================
+  # Job 6: Python mysql.connector 集成测试
+  # ==========================================================================
+  python-mysql:
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: ${{ env.PG_USER }}
+          POSTGRES_PASSWORD: ${{ env.PG_PASSWORD }}
+          POSTGRES_DB: ${{ env.PG_DB }}
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U ${{ env.PG_USER }} -d ${{ env.PG_DB }}"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download SDTP Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: sdtp-docker-image
+          path: /tmp/
+
+      - name: Load SDTP Docker image
+        run: gunzip -c /tmp/sdtp-image.tar.gz | docker load
+
+      - name: Create SDTP config and start
+        run: |
+          cat > /tmp/sdtp-config.yml << 'YAML'
+          proxy:
+            port: 3306
+            auth:
+              user: root
+              password: proxy_password
+          target:
+            dialect: POSTGRESQL
+            jdbc-url: jdbc:postgresql://host.docker.internal:5432/${{ env.PG_DB }}
+            username: ${{ env.PG_USER }}
+            password: ${{ env.PG_PASSWORD }}
+            max-pool-size: 10
+            min-idle: 2
+          translation:
+            keyword-case: UPPER
+            identifier-case: LOWER
+          YAML
+
+          docker run -d --name sdtp \
+            --add-host host.docker.internal:host-gateway \
+            -p ${{ env.SDTP_PORT }}:3306 \
+            -v /tmp/sdtp-config.yml:/opt/sdtp/config/proxy-config.yml \
+            sdtp:latest
+
+          echo "等待 SDTP 启动..."
+          for i in $(seq 1 30); do
+            if docker logs sdtp 2>&1 | grep -qi "started\|listening"; then
+              echo "SDTP 就绪 (尝试 $i)"
+              break
+            fi
+            sleep 3
+          done
+          docker logs sdtp --tail 20
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Python dependencies
+        run: pip install mysql-connector-python psycopg2-binary
+
+      - name: Create TPC-H tables and load data
+        run: |
+          PGPASSWORD=${{ env.PG_PASSWORD }} psql -h localhost -U ${{ env.PG_USER }} -d ${{ env.PG_DB }} -f benchmark/tpch/schema_pg.sql
+          python benchmark/tpch/data_gen.py \
+            --pg-host localhost --pg-port ${{ env.PG_PORT }} \
+            --pg-user ${{ env.PG_USER }} --pg-password ${{ env.PG_PASSWORD }} \
+            --pg-db ${{ env.PG_DB }} --scale 0.01
+
+      - name: Create TPC-C tables and load data
+        run: |
+          PGPASSWORD=${{ env.PG_PASSWORD }} psql -h localhost -U ${{ env.PG_USER }} -d ${{ env.PG_DB }} -f benchmark/tpcc/schema_pg.sql
+          python benchmark/tpcc/data_gen.py \
+            --pg-host localhost --pg-port ${{ env.PG_PORT }} \
+            --pg-user ${{ env.PG_USER }} --pg-password ${{ env.PG_PASSWORD }} \
+            --pg-db ${{ env.PG_DB }} --warehouses 1
+
+      - name: Verify SDTP connectivity via Python
+        run: |
+          python -c "
           import mysql.connector
           conn = mysql.connector.connect(
               host='localhost', port=${{ env.SDTP_PORT }},
@@ -192,14 +783,12 @@ jobs:
           )
           cur = conn.cursor()
           cur.execute('SELECT 1 AS ping')
-          row = cur.fetchone()
-          print(f'✅ SDTP reachable via Python: {row}')
+          print(f'✅ SDTP reachable via Python: {cur.fetchone()}')
           cur.close()
           conn.close()
           "
 
       - name: Run TPC-H integration test (Python mode)
-        id: tpch
         run: |
           python benchmark/runner.py \
             --mode python \
@@ -209,17 +798,9 @@ jobs:
             --sdtp-password ${{ env.SDTP_PASSWORD }} \
             --sdtp-database ${{ env.PG_DB }} \
             --benchmark tpch \
-            --output-dir benchmark/reports \
-            --sdtp-logs-dir /tmp/sdtp-logs
-
-      - name: Collect SDTP logs (after TPC-H)
-        if: always()
-        run: |
-          mkdir -p /tmp/sdtp-logs
-          docker logs sdtp --tail 200 > /tmp/sdtp-logs/sdtp-after-tpch.log 2>&1 || true
+            --output-dir benchmark/reports
 
       - name: Run TPC-C integration test (Python mode)
-        id: tpcc
         run: |
           python benchmark/runner.py \
             --mode python \
@@ -229,385 +810,28 @@ jobs:
             --sdtp-password ${{ env.SDTP_PASSWORD }} \
             --sdtp-database ${{ env.PG_DB }} \
             --benchmark tpcc \
-            --output-dir benchmark/reports \
-            --sdtp-logs-dir /tmp/sdtp-logs
+            --output-dir benchmark/reports
 
-      - name: Collect SDTP logs (final)
-        if: always()
-        run: |
-          docker logs sdtp --tail 200 > /tmp/sdtp-logs/sdtp-final.log 2>&1 || true
-
-      - name: Upload Python test reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-integration-reports
-          path: |
-            benchmark/reports/
-            /tmp/sdtp-logs/
-
-      - name: Print Python test summary
-        if: always()
-        run: |
-          {
-            echo "## Python Integration Test Results"
-            echo ""
-            for report in benchmark/reports/report_*.txt; do
-              if [ -f "$report" ]; then
-                echo '```'
-                cat "$report"
-                echo '```'
-              fi
-            done
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  # ==========================================================================
-  # Job 3：mysql CLI 集成测试
-  # ==========================================================================
-  mysql-cli-test:
-    needs: [build]
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_USER: sdtpu
-          POSTGRES_PASSWORD: pg_password
-          POSTGRES_DB: mydb
-        ports:
-          - "5432:5432"
-        options: >-
-          --health-cmd "pg_isready -U sdtpu -d mydb"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download Docker image artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: sdtp-docker-image
-          path: /tmp/
-
-      - name: Load Docker image
-        run: |
-          gunzip -c /tmp/sdtp-image.tar.gz | docker load
-
-      - name: Create SDTP config for CI
-        run: |
-          cat > sdtp-proxy-config-ci.yml << 'YAML'
-          proxy:
-            port: 3306
-            auth:
-              user: root
-              password: proxy_password
-          target:
-            dialect: POSTGRESQL
-            jdbc-url: jdbc:postgresql://host.docker.internal:5432/mydb
-            username: sdtpu
-            password: pg_password
-            max-pool-size: 10
-            min-idle: 2
-          translation:
-            keyword-case: UPPER
-            identifier-case: LOWER
-          YAML
-
-      - name: Start SDTP container
-        run: |
-          docker rm -f sdtp 2>/dev/null || true
-          docker run -d \
-            --name sdtp \
-            --add-host host.docker.internal:host-gateway \
-            -p 3306:3306 \
-            -v ${{ github.workspace }}/sdtp-proxy-config-ci.yml:/opt/sdtp/config/proxy-config.yml \
-            sdtp:latest
-          echo "Waiting for SDTP to start..."
-          sleep 8
-          for i in $(seq 1 30); do
-            if docker logs sdtp 2>&1 | grep -qi "started\|listening"; then
-              echo "SDTP is ready (attempt $i)"
-              break
-            fi
-            sleep 3
-          done
-
-      - name: Verify SDTP container status
-        if: always()
-        run: |
-          docker ps -a
-          docker inspect sdtp --format '{{.State.Status}}' 2>/dev/null || exit 1
-          echo "SDTP is running"
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install dependencies (Python + mysql CLI)
-        run: |
-          pip install mysql-connector-python psycopg2-binary
-          sudo apt-get update -qq && sudo apt-get install -y -qq mysql-client
-          mysql --version
-
-      - name: Create TPC-H tables and load data
-        run: |
-          PGPASSWORD=${{ env.PG_PASSWORD }} psql -h localhost -U ${{ env.PG_USER }} -d ${{ env.PG_DB }} -f benchmark/tpch/schema_pg.sql
-          python benchmark/tpch/data_gen.py \
-            --pg-host localhost --pg-port ${{ env.PG_PORT }} \
-            --pg-user ${{ env.PG_USER }} --pg-password ${{ env.PG_PASSWORD }} \
-            --pg-db ${{ env.PG_DB }} --scale 0.01
-
-      - name: Create TPC-C tables and load data
-        run: |
-          PGPASSWORD=${{ env.PG_PASSWORD }} psql -h localhost -U ${{ env.PG_USER }} -d ${{ env.PG_DB }} -f benchmark/tpcc/schema_pg.sql
-          python benchmark/tpcc/data_gen.py \
-            --pg-host localhost --pg-port ${{ env.PG_PORT }} \
-            --pg-user ${{ env.PG_USER }} --pg-password ${{ env.PG_PASSWORD }} \
-            --pg-db ${{ env.PG_DB }} --warehouses 1
-
-      - name: Verify SDTP connectivity via MySQL CLI
-        run: |
-          mysql -h localhost -P ${{ env.SDTP_PORT }} --protocol TCP \
-            -u ${{ env.SDTP_USER }} -p${{ env.SDTP_PASSWORD }} \
-            ${{ env.PG_DB }} -e "SELECT 1 AS ping;"
-
-      - name: Run TPC-H integration test (mysql CLI mode)
-        id: tpch
-        run: |
-          python benchmark/runner.py \
-            --mode mysql-cli \
-            --sdtp-host localhost \
-            --sdtp-port ${{ env.SDTP_PORT }} \
-            --sdtp-user ${{ env.SDTP_USER }} \
-            --sdtp-password ${{ env.SDTP_PASSWORD }} \
-            --sdtp-database ${{ env.PG_DB }} \
-            --benchmark tpch \
-            --output-dir benchmark/reports \
-            --sdtp-logs-dir /tmp/sdtp-logs
-
-      - name: Collect SDTP logs (after TPC-H)
+      - name: Collect SDTP logs
         if: always()
         run: |
           mkdir -p /tmp/sdtp-logs
-          docker logs sdtp --tail 200 > /tmp/sdtp-logs/sdtp-after-tpch.log 2>&1 || true
+          docker logs sdtp --tail 300 > /tmp/sdtp-logs/sdtp.log 2>&1 || true
 
-      - name: Run TPC-C integration test (mysql CLI mode)
-        id: tpcc
-        run: |
-          python benchmark/runner.py \
-            --mode mysql-cli \
-            --sdtp-host localhost \
-            --sdtp-port ${{ env.SDTP_PORT }} \
-            --sdtp-user ${{ env.SDTP_USER }} \
-            --sdtp-password ${{ env.SDTP_PASSWORD }} \
-            --sdtp-database ${{ env.PG_DB }} \
-            --benchmark tpcc \
-            --output-dir benchmark/reports \
-            --sdtp-logs-dir /tmp/sdtp-logs
-
-      - name: Collect SDTP logs (final)
-        if: always()
-        run: |
-          docker logs sdtp --tail 200 > /tmp/sdtp-logs/sdtp-final.log 2>&1 || true
-
-      - name: Upload mysql-cli test reports
+      - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mysql-cli-integration-reports
+          name: python-mysql-reports
           path: |
             benchmark/reports/
             /tmp/sdtp-logs/
 
-      - name: Print mysql-cli test summary
+      - name: Print summary
         if: always()
         run: |
           {
-            echo "## MySQL CLI Integration Test Results"
-            echo ""
-            for report in benchmark/reports/report_*.txt; do
-              if [ -f "$report" ]; then
-                echo '```'
-                cat "$report"
-                echo '```'
-              fi
-            done
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  # ==========================================================================
-  # Job 4：Java JDBC 集成测试
-  # ==========================================================================
-  java-jdbc-test:
-    needs: [build]
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_USER: sdtpu
-          POSTGRES_PASSWORD: pg_password
-          POSTGRES_DB: mydb
-        ports:
-          - "5432:5432"
-        options: >-
-          --health-cmd "pg_isready -U sdtpu -d mydb"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download Docker image artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: sdtp-docker-image
-          path: /tmp/
-
-      - name: Load Docker image
-        run: |
-          gunzip -c /tmp/sdtp-image.tar.gz | docker load
-
-      - name: Create SDTP config for CI
-        run: |
-          cat > sdtp-proxy-config-ci.yml << 'YAML'
-          proxy:
-            port: 3306
-            auth:
-              user: root
-              password: proxy_password
-          target:
-            dialect: POSTGRESQL
-            jdbc-url: jdbc:postgresql://host.docker.internal:5432/mydb
-            username: sdtpu
-            password: pg_password
-            max-pool-size: 10
-            min-idle: 2
-          translation:
-            keyword-case: UPPER
-            identifier-case: LOWER
-          YAML
-
-      - name: Start SDTP container
-        run: |
-          docker rm -f sdtp 2>/dev/null || true
-          docker run -d \
-            --name sdtp \
-            --add-host host.docker.internal:host-gateway \
-            -p 3306:3306 \
-            -v ${{ github.workspace }}/sdtp-proxy-config-ci.yml:/opt/sdtp/config/proxy-config.yml \
-            sdtp:latest
-          echo "Waiting for SDTP to start..."
-          sleep 8
-          for i in $(seq 1 30); do
-            if docker logs sdtp 2>&1 | grep -qi "started\|listening"; then
-              echo "SDTP is ready (attempt $i)"
-              break
-            fi
-            sleep 3
-          done
-
-      - name: Verify SDTP container status
-        if: always()
-        run: |
-          docker ps -a
-          docker inspect sdtp --format '{{.State.Status}}' 2>/dev/null || exit 1
-          echo "SDTP is running"
-
-      - name: Set up JDK 8
-        uses: actions/setup-java@v4
-        with:
-          java-version: '8'
-          distribution: 'temurin'
-
-      - name: Set up Python and install dependencies
-        run: |
-          pip install psycopg2-binary
-
-      - name: Create TPC-H tables and load data
-        run: |
-          PGPASSWORD=${{ env.PG_PASSWORD }} psql -h localhost -U ${{ env.PG_USER }} -d ${{ env.PG_DB }} -f benchmark/tpch/schema_pg.sql
-          python benchmark/tpch/data_gen.py \
-            --pg-host localhost --pg-port ${{ env.PG_PORT }} \
-            --pg-user ${{ env.PG_USER }} --pg-password ${{ env.PG_PASSWORD }} \
-            --pg-db ${{ env.PG_DB }} --scale 0.01
-
-      - name: Create TPC-C tables and load data
-        run: |
-          PGPASSWORD=${{ env.PG_PASSWORD }} psql -h localhost -U ${{ env.PG_USER }} -d ${{ env.PG_DB }} -f benchmark/tpcc/schema_pg.sql
-          python benchmark/tpcc/data_gen.py \
-            --pg-host localhost --pg-port ${{ env.PG_PORT }} \
-            --pg-user ${{ env.PG_USER }} --pg-password ${{ env.PG_PASSWORD }} \
-            --pg-db ${{ env.PG_DB }} --warehouses 1
-
-      - name: Compile Java JDBC test
-        run: |
-          bash benchmark/run-java-jdbc.sh compile
-
-      - name: Verify SDTP connectivity via Java JDBC
-        run: |
-          java -cp benchmark:/tmp/mysql-connector-java-8.0.33.jar JavaJdbcTest \
-            --tpch-queries "" --tpcc-queries "" \
-            --host localhost --port 3306 \
-            --user ${{ env.SDTP_USER }} --password ${{ env.SDTP_PASSWORD }} \
-            --database ${{ env.PG_DB }} --output-dir benchmark/reports
-
-      - name: Run TPC-H integration test (Java JDBC mode)
-        id: tpch
-        run: |
-          java -cp benchmark:/tmp/mysql-connector-java-8.0.33.jar JavaJdbcTest \
-            --host localhost --port ${{ env.SDTP_PORT }} \
-            --user ${{ env.SDTP_USER }} --password ${{ env.SDTP_PASSWORD }} \
-            --database ${{ env.PG_DB }} \
-            --tpch-queries benchmark/tpch/queries \
-            --tpcc-queries "" \
-            --output-dir benchmark/reports
-
-      - name: Collect SDTP logs (after TPC-H)
-        if: always()
-        run: |
-          mkdir -p /tmp/sdtp-logs
-          docker logs sdtp --tail 200 > /tmp/sdtp-logs/sdtp-after-tpch.log 2>&1 || true
-
-      - name: Run TPC-C integration test (Java JDBC mode)
-        id: tpcc
-        run: |
-          java -cp benchmark:/tmp/mysql-connector-java-8.0.33.jar JavaJdbcTest \
-            --host localhost --port ${{ env.SDTP_PORT }} \
-            --user ${{ env.SDTP_USER }} --password ${{ env.SDTP_PASSWORD }} \
-            --database ${{ env.PG_DB }} \
-            --tpcc-queries benchmark/tpcc/queries \
-            --tpch-queries "" \
-            --output-dir benchmark/reports
-
-      - name: Collect SDTP logs (final)
-        if: always()
-        run: |
-          docker logs sdtp --tail 200 > /tmp/sdtp-logs/sdtp-final.log 2>&1 || true
-
-      - name: Upload Java JDBC test reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: java-jdbc-integration-reports
-          path: |
-            benchmark/reports/
-            /tmp/sdtp-logs/
-
-      - name: Print Java JDBC test summary
-        if: always()
-        run: |
-          {
-            echo "## Java JDBC Integration Test Results"
+            echo "## Python mysql.connector 测试结果"
             echo ""
             for report in benchmark/reports/report_*.txt; do
               if [ -f "$report" ]; then
