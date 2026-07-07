@@ -65,23 +65,22 @@ public class HandshakeHandler extends ChannelInboundHandlerAdapter {
 
         long connectionId = CONNECTION_ID_GENERATOR.getAndIncrement();
 
-        // 生成 20 字节随机 scramble，追加一个 NUL 凑成 21 字节
-        // JDBC 驱动（mysql-connector-java）使用 authDataLen 作为 seed 数组大小
-        // authDataLen=21（8+13），所以 seed 是 21 字节（含尾部 NUL）
-        byte[] scramble20 = MySQLAuth.generateScramble();
-        byte[] scramble21 = new byte[21];
-        System.arraycopy(scramble20, 0, scramble21, 0, 20);
-        // scramble21[20] = 0x00 (already default)
+        // 生成 20 字节随机 scramble（Auth Plugin Data）
+        // 注意：MySQL 认证算法要求使用 20 字节 scramble
+        // 客户端解析 HandshakeV10 包时会提取 20 字节 scramble（auth-plugin-data-part-1[8字节] + auth-plugin-data-part-2[12字节]）
+        // 并用这 20 字节计算认证 token
+        byte[] scramble = MySQLAuth.generateScramble();
 
         // 创建会话并绑定到 channel 属性
-        FrontendSession session = FrontendSession.create(ctx.channel(), connectionId, scramble21);
+        // Session 存储 20 字节 scramble（用于验证客户端 token）
+        FrontendSession session = FrontendSession.create(ctx.channel(), connectionId, scramble);
         ctx.channel().attr(SessionAttribute.SESSION_KEY).set(session);
 
         // 构造 HandshakeV10 包
-        ByteBuf handshake = buildHandshakeV10(ctx.alloc(), connectionId, scramble20);
+        ByteBuf handshake = buildHandshakeV10(ctx.alloc(), connectionId, scramble);
 
         log.info("Sending handshake to {} (connectionId={})", ctx.channel().remoteAddress(), connectionId);
-        log.debug("Handshake scramble (20 bytes): {}", MySQLAuth.bytesToHex(scramble20));
+        log.debug("Handshake scramble (20 bytes): {}", MySQLAuth.bytesToHex(scramble));
 
         // 注意：handshake 是连接发起的第一个包，sequenceId = 0
         // 但 Encoder 不负责管理 sequenceId，由调用者传入。这里固定 seq=0
@@ -140,6 +139,9 @@ public class HandshakeHandler extends ChannelInboundHandlerAdapter {
         buf.writeByte(0x00);
 
         // 13. auth-plugin-name (null-terminated)
+        // 声明 mysql_native_password 作为服务端默认认证插件
+        // MySQL 5.x/8.x 客户端均支持此插件
+        // MySQL 8.0 客户端声明 caching_sha2_password 时会走 AuthSwitch 流程
         BufferUtils.writeNullTerminatedString(buf, "mysql_native_password");
 
         return buf;

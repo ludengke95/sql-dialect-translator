@@ -298,6 +298,13 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
 
     private void writeInterceptedResult(ChannelHandlerContext ctx,
                                          SystemVariableInterceptor.InterceptResult ir) {
+        // 检查是否为多列模式
+        if (ir.isMultiColumn()) {
+            writeMultiColumnResult(ctx, ir);
+            return;
+        }
+
+        // 原有的单列、双列、三列逻辑
         int colCount = ir.twoColumns ? 2 : (ir.colName3 != null ? 3 : 1);
         boolean isEmpty = ir.empty;
 
@@ -335,6 +342,48 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
                 ctx.write(new MySQLPacketEncoder.OutgoingPacket(row, seq++));
             }
         }
+
+        // Final EOF
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx.alloc()), seq));
+
+        ctx.flush();
+    }
+
+    /**
+     * 写入多列系统变量查询结果。
+     *
+     * <p>用于拦截 MySQL Connector/J 发送的多变量查询（如 SELECT @@var1, @@var2, ...）。
+     *
+     * @param ctx Netty ChannelHandlerContext
+     * @param ir   拦截结果（多列模式）
+     */
+    private void writeMultiColumnResult(ChannelHandlerContext ctx,
+                                         SystemVariableInterceptor.InterceptResult ir) {
+        List<SystemVariableInterceptor.ColumnInfo> columns = ir.columns;
+        int colCount = columns.size();
+
+        // Column Count Packet
+        ByteBuf colCountBuf = ctx.alloc().buffer(2);
+        BufferUtils.writeLengthEncodedInt(colCountBuf, colCount);
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(colCountBuf, (byte) 1));
+
+        byte seq = 2;
+        // 写入所有列定义
+        for (SystemVariableInterceptor.ColumnInfo col : columns) {
+            ctx.write(new MySQLPacketEncoder.OutgoingPacket(
+                    buildColumnDef(ctx.alloc(), "def", "", col.columnName, col.columnName, 255, 0xFD, 33), seq++));
+        }
+
+        // EOF (after columns)
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx.alloc()), seq++));
+
+        // 构造一行数据（包含所有列值）
+        String[] values = new String[colCount];
+        for (int i = 0; i < colCount; i++) {
+            values[i] = columns.get(i).value;
+        }
+        ByteBuf row = buildTextRow(ctx.alloc(), values);
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(row, seq++));
 
         // Final EOF
         ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx.alloc()), seq));

@@ -1,6 +1,8 @@
 package com.translator.proxy.core.intercept;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -35,6 +37,14 @@ public final class SystemVariableInterceptor {
             "^\\s*SHOW\\s+WARNINGS\\s*$",
             Pattern.CASE_INSENSITIVE);
 
+    /**
+     * 多列系统变量查询：SELECT @@session.var1 AS alias1, @@var2 AS alias2, ...
+     * 用于拦截 MySQL Connector/J 8.0.33 在连接建立时发送的多变量查询。
+     */
+    private static final Pattern SELECT_MULTI_AT_AT = Pattern.compile(
+            "^\\s*SELECT\\s+@@(?:session\\.)?(\\w+)(?:\\s+AS\\s+\\w+)?(?:,\\s*@@(?:session\\.)?(\\w+)(?:\\s+AS\\s+\\w+)?)*\\s*$",
+            Pattern.CASE_INSENSITIVE);
+
     /** 预定义的系统变量值 */
     private static final Map<String, String> SYSTEM_VARIABLES = new LinkedHashMap<>();
 
@@ -62,6 +72,16 @@ public final class SystemVariableInterceptor {
         SYSTEM_VARIABLES.put("protocol_version", "10");
         SYSTEM_VARIABLES.put("ssl_cipher", "");
         SYSTEM_VARIABLES.put("have_ssl", "DISABLED");
+        // MySQL Connector/J 8.0 查询的系统变量
+        SYSTEM_VARIABLES.put("auto_increment_increment", "1");
+        SYSTEM_VARIABLES.put("net_write_timeout", "60");
+        SYSTEM_VARIABLES.put("performance_schema", "0");
+        // MySQL 8.0 已废弃的变量，但 Connector/J 仍会查询
+        SYSTEM_VARIABLES.put("query_cache_size", "0");
+        SYSTEM_VARIABLES.put("query_cache_type", "OFF");
+        SYSTEM_VARIABLES.put("system_time_zone", "UTC");
+        SYSTEM_VARIABLES.put("time_zone", "SYSTEM");
+        SYSTEM_VARIABLES.put("init_connect", "");
     }
 
     /**
@@ -74,10 +94,41 @@ public final class SystemVariableInterceptor {
     public static InterceptResult intercept(String sql, String database) {
         if (sql == null) return null;
 
+        // 去除 SQL 前面的注释（如 MySQL Connector/J 的版本注释）
+        // 格式: /* mysql-connector-j-8.0.33 ... */ SELECT ...
         String trimmed = sql.trim();
+        if (trimmed.startsWith("/*")) {
+            // 查找注释结束位置
+            int commentEnd = trimmed.indexOf("*/");
+            if (commentEnd >= 0) {
+                // 去除注释，保留后面的 SQL
+                trimmed = trimmed.substring(commentEnd + 2).trim();
+            }
+        }
 
-        // SELECT @@xxx [LIMIT n]
-        Matcher m = SELECT_AT_AT.matcher(trimmed);
+        // 优先检查多列系统变量查询（如 MySQL Connector/J 8.0.33 发送的查询）
+        // SELECT @@session.var1 AS alias1, @@var2 AS alias2, ...
+        Matcher m = SELECT_MULTI_AT_AT.matcher(trimmed);
+        if (m.find()) {
+            List<ColumnInfo> columns = extractMultiVariableNames(trimmed);
+            // 单变量查询：走原有逻辑（已知变量返回单列结果，未知变量不拦截）
+            if (columns.size() == 1) {
+                ColumnInfo col = columns.get(0);
+                String value = SYSTEM_VARIABLES.get(col.columnName);
+                if (value != null) {
+                    return new InterceptResult("@@" + col.columnName, value);
+                }
+                // 未知单变量，不拦截
+                return null;
+            }
+            // 多变量查询：返回多列结果（未知变量返回空字符串）
+            if (columns.size() > 1) {
+                return new InterceptResult(columns);
+            }
+        }
+
+        // SELECT @@xxx [LIMIT n] — 单列查询（原有逻辑，不支持 @@session. 前缀）
+        m = SELECT_AT_AT.matcher(trimmed);
         if (m.find()) {
             String varName = m.group(1).toLowerCase();
             String value = SYSTEM_VARIABLES.get(varName);
@@ -115,6 +166,46 @@ public final class SystemVariableInterceptor {
     }
 
     /**
+     * 从多列系统变量查询中提取变量名和值。
+     *
+     * <p>支持格式：
+     * <ul>
+     *   <li>@@session.var_name AS alias</li>
+     *   <li>@@var_name AS alias</li>
+     *   <li>@@session.var_name</li>
+     *   <li>@@var_name</li>
+     * </ul>
+     *
+     * @param sql SQL 语句
+     * @return 列信息列表（变量名已标准化为不含 session. 前缀）
+     */
+    private static List<ColumnInfo> extractMultiVariableNames(String sql) {
+        List<ColumnInfo> columns = new ArrayList<>();
+
+        // 匹配所有 @@session.var_name 或 @@var_name 模式
+        Pattern varPattern = Pattern.compile(
+                "@@(?:session\\.)?(\\w+)",
+                Pattern.CASE_INSENSITIVE);
+        Matcher m = varPattern.matcher(sql);
+
+        while (m.find()) {
+            String varName = m.group(1).toLowerCase();
+            // 移除 session. 前缀（如果有）
+            String normalized = varName.replace("session.", "");
+
+            // 查找变量值，未定义变量返回空字符串
+            String value = SYSTEM_VARIABLES.get(normalized);
+            if (value == null) {
+                value = "";
+            }
+
+            columns.add(new ColumnInfo(normalized, value));
+        }
+
+        return columns;
+    }
+
+    /**
      * 判断是否为 SET 语句（在 Proxy 侧直接生效，不转发）。
      */
     public static boolean isSetStatement(String sql) {
@@ -137,6 +228,27 @@ public final class SystemVariableInterceptor {
     // ==================== 拦截结果 ====================
 
     /**
+     * 列信息（用于多列结果模式）。
+     */
+    public static class ColumnInfo {
+        /** 列名（不含 @@ 前缀，如 "version_comment"） */
+        public final String columnName;
+        /** 列值 */
+        public final String value;
+
+        /**
+         * 构造列信息。
+         *
+         * @param columnName 列名
+         * @param value      列值
+         */
+        public ColumnInfo(String columnName, String value) {
+            this.columnName = columnName;
+            this.value = value;
+        }
+    }
+
+    /**
      * 系统变量拦截结果。
      */
     public static class InterceptResult {
@@ -155,6 +267,10 @@ public final class SystemVariableInterceptor {
         /** 是否无数据行（只返回列定义） */
         public boolean empty;
 
+        // ==================== 多列模式 ====================
+        /** 多列结果（如 SELECT @@var1, @@var2, ...） */
+        public final List<ColumnInfo> columns;
+
         /** 单列结果（如 SELECT @@version） */
         InterceptResult(String colName, String value) {
             this.colName1 = colName;
@@ -164,6 +280,7 @@ public final class SystemVariableInterceptor {
             this.value2 = null;
             this.twoColumns = false;
             this.empty = false;
+            this.columns = null;
         }
 
         /** 双列结果（如 SHOW VARIABLES LIKE） */
@@ -175,6 +292,24 @@ public final class SystemVariableInterceptor {
             this.value2 = value2;
             this.twoColumns = true;
             this.empty = false;
+            this.columns = null;
+        }
+
+        /**
+         * 多列结果（如 SELECT @@var1 AS alias1, @@var2 AS alias2, ...）。
+         *
+         * @param columns 列信息列表
+         */
+        InterceptResult(List<ColumnInfo> columns) {
+            // 设置兼容字段（取第一列信息）
+            this.colName1 = columns.isEmpty() ? "" : columns.get(0).columnName;
+            this.value1 = columns.isEmpty() ? "" : columns.get(0).value;
+            this.colName2 = null;
+            this.colName3 = null;
+            this.value2 = null;
+            this.twoColumns = false;
+            this.empty = false;
+            this.columns = columns;
         }
 
         /** 三列空结果集（如 SHOW WARNINGS，有列名无数据行） */
@@ -185,6 +320,15 @@ public final class SystemVariableInterceptor {
             r.twoColumns = false;
             r.empty = true;
             return r;
+        }
+
+        /**
+         * 判断是否为多列模式。
+         *
+         * @return 如果 columns 不为 null 且包含多列，返回 true
+         */
+        public boolean isMultiColumn() {
+            return columns != null && columns.size() > 1;
         }
     }
 }

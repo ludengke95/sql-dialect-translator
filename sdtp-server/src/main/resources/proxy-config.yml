@@ -3,7 +3,7 @@ proxy:
   port: 3306
   auth:
     user: root
-    password: proxy_password
+    password: '123'
 
 target:
   name: tes
