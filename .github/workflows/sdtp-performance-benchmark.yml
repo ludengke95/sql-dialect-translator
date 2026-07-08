@@ -1,0 +1,505 @@
+# =============================================================================
+# SDTP 自动化基准测试工作流 (TPC-C / TPC-H)
+# =============================================================================
+
+name: SDTP Performance Benchmark
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ===========================================================================
+  # Job 1: 统一构建 — 编译 Maven 包，并构建压测与 SDTP Docker 镜像
+  # ===========================================================================
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build with Maven (Skip Tests)
+        run: mvn clean package -DskipTests -B
+
+      # 1. 构建 SDTP Proxy 镜像
+      - name: Build SDTP Docker image
+        run: docker build -t sdtp:latest .
+
+      - name: Save SDTP Docker image
+        run: docker save sdtp:latest | gzip > /tmp/sdtp-image.tar.gz
+
+      - name: Upload SDTP Docker image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdtp-docker-image
+          path: /tmp/sdtp-image.tar.gz
+          retention-days: 1
+
+      # 2. 构建 BenchmarkSQL 压测端镜像
+      - name: Build BenchmarkSQL Docker image
+        run: |
+          docker build -t benchmarksql:latest \
+            -f benchmark/benchmarksql/Dockerfile.benchmarksql \
+            benchmark/benchmarksql/
+
+      - name: Save BenchmarkSQL Docker image
+        run: docker save benchmarksql:latest | gzip > /tmp/benchmarksql-image.tar.gz
+
+      - name: Upload BenchmarkSQL Docker image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmarksql-docker-image
+          path: /tmp/benchmarksql-image.tar.gz
+          retention-days: 1
+
+  # ===========================================================================
+  # Job 2: TPC-C 对照组 — PG 直连数据装载与 Baseline 压测
+  # ===========================================================================
+  tpcc-baseline-pg:
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: mydb
+          POSTGRES_USER: sdtpu
+          POSTGRES_PASSWORD: pg_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download BenchmarkSQL Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmarksql-docker-image
+          path: /tmp
+
+      - name: Load BenchmarkSQL Docker image
+        run: |
+          gunzip -c /tmp/benchmarksql-image.tar.gz | docker load
+
+      - name: Build TPC-C PG Schema & Data Load (2 Warehouses)
+        run: |
+          docker run --rm \
+            --network host \
+            -e PG_HOST=127.0.0.1 \
+            -e PG_PORT=5432 \
+            -e PG_DB=mydb \
+            -e PG_USER=sdtpu \
+            -e PG_PASSWORD=pg_password \
+            benchmarksql:latest \
+            ./run_tpcc.sh build-pg
+
+      - name: Run TPC-C PG Direct Benchmark (Baseline)
+        run: |
+          docker run --name tpcc-runner \
+            --network host \
+            -e PG_HOST=127.0.0.1 \
+            -e PG_PORT=5432 \
+            -e PG_DB=mydb \
+            -e PG_USER=sdtpu \
+            -e PG_PASSWORD=pg_password \
+            benchmarksql:latest \
+            ./run_tpcc.sh run-pg
+
+      - name: Copy TPC-C PG Log out
+        run: |
+          docker cp tpcc-runner:/opt/benchmarksql/run_pg.log /tmp/run_pg.log
+
+      - name: Upload TPC-C PG Log
+        uses: actions/upload-artifact@v4
+        with:
+          name: tpcc-pg-log
+          path: /tmp/run_pg.log
+          retention-days: 1
+
+  # ===========================================================================
+  # Job 3: TPC-C 实验组 1 — 通过 MySQL JDBC 8 驱动连接 SDTP 代理压测
+  # ===========================================================================
+  tpcc-sdtp-mysql-jdbc-8:
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: mydb
+          POSTGRES_USER: sdtpu
+          POSTGRES_PASSWORD: pg_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Artifacts (SDTP & BenchmarkSQL)
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp
+
+      - name: Load Docker images
+        run: |
+          gunzip -c /tmp/sdtp-docker-image/sdtp-image.tar.gz | docker load
+          gunzip -c /tmp/benchmarksql-docker-image/benchmarksql-image.tar.gz | docker load
+
+      - name: Create Custom SDTP Config
+        run: |
+          mkdir -p /tmp/sdtp-config
+          cat <<EOF > /tmp/sdtp-config/proxy-config.yml
+          proxy:
+            port: 3306
+            auth:
+              user: root
+              password: proxy_password
+          backends:
+            - name: mydb
+              dialect: POSTGRESQL
+              jdbc-url: jdbc:postgresql://host.docker.internal:5432/mydb
+              username: sdtpu
+              password: pg_password
+              max-pool-size: 20
+              min-idle: 2
+          translation:
+            keyword-case: UPPER
+            identifier-case: LOWER
+          EOF
+
+      - name: Run SDTP server in background
+        run: |
+          docker run -d --name sdtp-server \
+            --network host \
+            --add-host=host.docker.internal:127.0.0.1 \
+            -v /tmp/sdtp-config/proxy-config.yml:/opt/sdtp/config/proxy-config.yml \
+            sdtp:latest
+
+      - name: Build TPC-C Schema & Load Data (Direct to PG before proxy test)
+        run: |
+          docker run --rm \
+            --network host \
+            -e PG_HOST=127.0.0.1 \
+            -e PG_PORT=5432 \
+            -e PG_DB=mydb \
+            -e PG_USER=sdtpu \
+            -e PG_PASSWORD=pg_password \
+            benchmarksql:latest \
+            ./run_tpcc.sh build-pg
+
+      - name: Run TPC-C Benchmark (MySQL JDBC 8 via SDTP)
+        run: |
+          docker run --name tpcc-mysql8-runner \
+            --network host \
+            -e SDTP_HOST=127.0.0.1 \
+            -e SDTP_PORT=3306 \
+            -e PG_DB=mydb \
+            -e SDTP_USER=root \
+            -e SDTP_PASSWORD=proxy_password \
+            benchmarksql:latest \
+            ./run_tpcc.sh run-sdtp-mysql 8
+
+      - name: Copy TPC-C MySQL 8 Log out
+        run: |
+          docker cp tpcc-mysql8-runner:/opt/benchmarksql/run_mysql.log /tmp/run_mysql8.log
+
+      - name: Upload TPC-C MySQL 8 Log
+        uses: actions/upload-artifact@v4
+        with:
+          name: tpcc-mysql8-log
+          path: /tmp/run_mysql8.log
+          retention-days: 1
+
+  # ===========================================================================
+  # Job 4: TPC-C 实验组 2 — 通过 MySQL JDBC 5 驱动连接 SDTP 代理压测
+  # ===========================================================================
+  tpcc-sdtp-mysql-jdbc-5:
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: mydb
+          POSTGRES_USER: sdtpu
+          POSTGRES_PASSWORD: pg_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Artifacts (SDTP & BenchmarkSQL)
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp
+
+      - name: Load Docker images
+        run: |
+          gunzip -c /tmp/sdtp-docker-image/sdtp-image.tar.gz | docker load
+          gunzip -c /tmp/benchmarksql-docker-image/benchmarksql-image.tar.gz | docker load
+
+      - name: Create Custom SDTP Config
+        run: |
+          mkdir -p /tmp/sdtp-config
+          cat <<EOF > /tmp/sdtp-config/proxy-config.yml
+          proxy:
+            port: 3306
+            auth:
+              user: root
+              password: proxy_password
+          backends:
+            - name: mydb
+              dialect: POSTGRESQL
+              jdbc-url: jdbc:postgresql://host.docker.internal:5432/mydb
+              username: sdtpu
+              password: pg_password
+              max-pool-size: 20
+              min-idle: 2
+          translation:
+            keyword-case: UPPER
+            identifier-case: LOWER
+          EOF
+
+      - name: Run SDTP server in background
+        run: |
+          docker run -d --name sdtp-server \
+            --network host \
+            --add-host=host.docker.internal:127.0.0.1 \
+            -v /tmp/sdtp-config/proxy-config.yml:/opt/sdtp/config/proxy-config.yml \
+            sdtp:latest
+
+      - name: Build TPC-C Schema & Load Data (Direct to PG before proxy test)
+        run: |
+          docker run --rm \
+            --network host \
+            -e PG_HOST=127.0.0.1 \
+            -e PG_PORT=5432 \
+            -e PG_DB=mydb \
+            -e PG_USER=sdtpu \
+            -e PG_PASSWORD=pg_password \
+            benchmarksql:latest \
+            ./run_tpcc.sh build-pg
+
+      - name: Run TPC-C Benchmark (MySQL JDBC 5 via SDTP)
+        run: |
+          docker run --name tpcc-mysql5-runner \
+            --network host \
+            -e SDTP_HOST=127.0.0.1 \
+            -e SDTP_PORT=3306 \
+            -e PG_DB=mydb \
+            -e SDTP_USER=root \
+            -e SDTP_PASSWORD=proxy_password \
+            benchmarksql:latest \
+            ./run_tpcc.sh run-sdtp-mysql 5
+
+      - name: Copy TPC-C MySQL 5 Log out
+        run: |
+          docker cp tpcc-mysql5-runner:/opt/benchmarksql/run_mysql.log /tmp/run_mysql5.log
+
+      - name: Upload TPC-C MySQL 5 Log
+        uses: actions/upload-artifact@v4
+        with:
+          name: tpcc-mysql5-log
+          path: /tmp/run_mysql5.log
+          retention-days: 1
+
+  # ===========================================================================
+  # Job 5: TPC-H 对照组 — PG 直连数据装载与查询性能基线
+  # ===========================================================================
+  tpch-baseline-pg:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: mydb
+          POSTGRES_USER: sdtpu
+          POSTGRES_PASSWORD: pg_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Python DB drivers
+        run: pip install psycopg2-binary pymysql
+
+      - name: Install TPC-H Schema in PostgreSQL
+        run: |
+          PGPASSWORD=pg_password psql -h 127.0.0.1 -p 5432 -U sdtpu -d mydb -f benchmark/tpch/schema_pg.sql
+
+      - name: Generate TPC-H Data & Load to PostgreSQL (SF = 0.01)
+        run: |
+          python benchmark/tpch/data_gen.py \
+            --pg-host 127.0.0.1 --pg-port 5432 --pg-user sdtpu --pg-password pg_password --pg-db mydb \
+            --scale 0.01 --schema tpch
+
+      - name: Run TPC-H PG Benchmark
+        run: |
+          python benchmark/tpch/run_tpch_benchmark.py \
+            --mode baseline-pg \
+            --host 127.0.0.1 --port 5432 --user sdtpu --password pg_password --db mydb \
+            --output /tmp/tpch_baseline.json
+
+      - name: Upload TPC-H PG Benchmark JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: tpch-baseline-json
+          path: /tmp/tpch_baseline.json
+          retention-days: 1
+
+  # ===========================================================================
+  # Job 6: TPC-H 实验组与报告汇总 — SDTP 翻译查询与完整报告呈递
+  # ===========================================================================
+  tpch-sdtp-mysql:
+    needs: [build, tpcc-baseline-pg, tpcc-sdtp-mysql-jdbc-8, tpcc-sdtp-mysql-jdbc-5, tpch-baseline-pg]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: mydb
+          POSTGRES_USER: sdtpu
+          POSTGRES_PASSWORD: pg_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Python DB drivers
+        run: pip install psycopg2-binary pymysql
+
+      # 下载前面所有的压测日志文件制品
+      - name: Download All Logs and Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp
+
+      - name: Load SDTP Docker image
+        run: |
+          gunzip -c /tmp/sdtp-docker-image/sdtp-image.tar.gz | docker load
+
+      - name: Create Custom SDTP Config
+        run: |
+          mkdir -p /tmp/sdtp-config
+          cat <<EOF > /tmp/sdtp-config/proxy-config.yml
+          proxy:
+            port: 3306
+            auth:
+              user: root
+              password: proxy_password
+          backends:
+            - name: mydb
+              dialect: POSTGRESQL
+              jdbc-url: jdbc:postgresql://host.docker.internal:5432/mydb
+              username: sdtpu
+              password: pg_password
+              max-pool-size: 20
+              min-idle: 2
+          translation:
+            keyword-case: UPPER
+            identifier-case: LOWER
+          EOF
+
+      - name: Run SDTP server in background
+        run: |
+          docker run -d --name sdtp-server \
+            --network host \
+            --add-host=host.docker.internal:127.0.0.1 \
+            -v /tmp/sdtp-config/proxy-config.yml:/opt/sdtp/config/proxy-config.yml \
+            sdtp:latest
+
+      - name: Install TPC-H Schema in PostgreSQL (Experimental)
+        run: |
+          PGPASSWORD=pg_password psql -h 127.0.0.1 -p 5432 -U sdtpu -d mydb -f benchmark/tpch/schema_pg.sql
+
+      - name: Generate TPC-H Data & Load to PostgreSQL (SF = 0.01)
+        run: |
+          python benchmark/tpch/data_gen.py \
+            --pg-host 127.0.0.1 --pg-port 5432 --pg-user sdtpu --pg-password pg_password --pg-db mydb \
+            --scale 0.01 --schema tpch
+
+      - name: Run TPC-H SDTP (MySQL Protocol) Benchmark
+        run: |
+          python benchmark/tpch/run_tpch_benchmark.py \
+            --mode sdtp-mysql \
+            --host 127.0.0.1 --port 3306 --user root --password proxy_password --db mydb \
+            --output /tmp/tpch_sdtp.json
+
+      # 收集前面的所有数据并生成大汇总报告呈递给 GitHub Workflow Summary
+      - name: Run Report Collector and Render Markdown Summary
+        run: |
+          python benchmark/report_collector.py \
+            --tpcc-pg-log /tmp/tpcc-pg-log/run_pg.log \
+            --tpcc-mysql8-log /tmp/tpcc-mysql8-log/run_mysql8.log \
+            --tpcc-mysql5-log /tmp/tpcc-mysql5-log/run_mysql5.log \
+            --tpch-pg-json /tmp/tpch-baseline-json/tpch_baseline.json \
+            --tpch-mysql-json /tmp/tpch_sdtp.json

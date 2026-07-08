@@ -45,7 +45,7 @@ class TpccDataGenerator:
     CITIES = ["Springfield", "Riverside", "Centerville", "Fairview", "Oakland"]
     STATES = ["CA", "NY", "TX", "FL", "IL", "PA", "OH", "GA", "NC", "MI"]
 
-    def __init__(self, num_warehouses: int = 1):
+    def __init__(self, num_warehouses: int = 5):
         self.num_warehouses = num_warehouses
         # 使用固定种子确保可重复
         self.rng = random.Random(42)
