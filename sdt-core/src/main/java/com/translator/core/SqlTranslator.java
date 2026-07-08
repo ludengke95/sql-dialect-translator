@@ -2,13 +2,30 @@ package com.translator.core;
 
 import com.translator.core.config.SqlDialectFactory;
 import com.translator.core.config.TranslationConfig;
+import com.translator.core.metadata.MetadataProvider;
+import com.translator.core.metadata.CalciteMetadataSchema;
 import com.translator.core.rewrite.SqlRewriteEngine;
+import org.apache.calcite.config.CalciteConnectionConfig;
+import org.apache.calcite.jdbc.CalciteSchema;
+import org.apache.calcite.prepare.CalciteCatalogReader;
+import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.rel.type.RelDataTypeSystem;
+import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.sql.SqlDialect;
 import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.SqlOperatorTable;
+import org.apache.calcite.sql.fun.SqlLibrary;
+import org.apache.calcite.sql.fun.SqlLibraryOperatorTableFactory;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.pretty.SqlPrettyWriter;
+import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
+import org.apache.calcite.sql.util.SqlOperatorTables;
 import org.apache.calcite.sql.validate.SqlConformanceEnum;
+import org.apache.calcite.sql.validate.SqlValidator;
+import org.apache.calcite.sql.validate.SqlValidatorUtil;
+import org.apache.calcite.tools.Frameworks;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,6 +45,7 @@ public class SqlTranslator {
     private final SqlDialect targetSqlDialect;
     private final SqlRewriteEngine rewriteEngine;
     private final TranslationConfig config;
+    private MetadataProvider metadataProvider;
 
     /** 默认构造器，使用 {@link TranslationConfig#DEFAULT}。 */
     public SqlTranslator(DialectType sourceDialect, DialectType targetDialect) {
@@ -42,6 +60,18 @@ public class SqlTranslator {
      * @param config        翻译配置（大小写策略），null 时使用默认配置
      */
     public SqlTranslator(DialectType sourceDialect, DialectType targetDialect, TranslationConfig config) {
+        this(sourceDialect, targetDialect, config, null);
+    }
+
+    /**
+     * 创建 SQL 翻译器，并指定元数据提供者。
+     *
+     * @param sourceDialect    源方言类型
+     * @param targetDialect    目标方言类型
+     * @param config           翻译配置，null 时使用默认配置
+     * @param metadataProvider 元数据提供者，用于校验
+     */
+    public SqlTranslator(DialectType sourceDialect, DialectType targetDialect, TranslationConfig config, MetadataProvider metadataProvider) {
         if (sourceDialect == null || targetDialect == null) {
             throw new IllegalArgumentException("源方言和目标方言不能为 null");
         }
@@ -50,6 +80,15 @@ public class SqlTranslator {
         this.targetSqlDialect = SqlDialectFactory.getDialect(targetDialect);
         this.rewriteEngine = new SqlRewriteEngine(sourceDialect, targetDialect);
         this.config = config != null ? config : TranslationConfig.DEFAULT;
+        this.metadataProvider = metadataProvider;
+    }
+
+    public MetadataProvider getMetadataProvider() {
+        return metadataProvider;
+    }
+
+    public void setMetadataProvider(MetadataProvider metadataProvider) {
+        this.metadataProvider = metadataProvider;
     }
 
     /**
@@ -74,8 +113,23 @@ public class SqlTranslator {
             // 1. 解析 SQL → AST (SqlNode)
             SqlNode parsed = parseSql(sql);
 
+            // 如果开启了校验并且提供了元数据提供者，对 SqlNode 进行校验和重写
+            SqlNode validated = parsed;
+            if (config.isEnableValidation() && metadataProvider != null) {
+                try {
+                    validated = validateSql(parsed, metadataProvider);
+                } catch (Exception e) {
+                    if (config.getValidationMode() == TranslationConfig.ValidationMode.STRICT) {
+                        throw e; // STRICT 模式直接阻断
+                    } else {
+                        log.warn("SQL 校验失败，已自动降级为非校验 AST 进行翻译。校验异常: {}", e.getMessage());
+                        validated = parsed; // WARN 模式仅记录日志并降级
+                    }
+                }
+            }
+
             // 2. 改写 AST
-            SqlNode rewritten = rewriteEngine.rewrite(parsed);
+            SqlNode rewritten = rewriteEngine.rewrite(validated);
 
             // 3. 使用目标方言生成 SQL（按配置控制关键词大小写）
             String result;
@@ -93,6 +147,8 @@ public class SqlTranslator {
             log.debug("SQL 翻译完成 ({}ms): [{}] → [{}]", elapsed, sql, result);
 
             return result;
+        } catch (SqlTranslationException e) {
+            throw e; // 已知翻译或校验异常，不重复包裹
         } catch (SqlParseException e) {
             throw new SqlTranslationException("SQL 解析失败: " + sql, e);
         } catch (Exception e) {
@@ -512,5 +568,92 @@ public class SqlTranslator {
 
     public DialectType getTargetDialect() {
         return targetDialect;
+    }
+
+    /**
+     * 校验 SQL AST，并进行隐式列展开、类型推断和自动补全。
+     */
+    private SqlNode validateSql(SqlNode parsed, MetadataProvider metadataProvider) {
+        if (metadataProvider == null) {
+            return parsed;
+        }
+
+        try {
+            // 1. 类型工厂
+            RelDataTypeFactory typeFactory = new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
+
+            // 2. 创建元数据 Schema 并添加到 root schema 路径中
+            SchemaPlus rootSchema = Frameworks.createRootSchema(true);
+            rootSchema.add("PUBLIC", new CalciteMetadataSchema(metadataProvider));
+
+            // 3. 构建 CatalogReader，设置默认 Schema 搜索路径为 "PUBLIC"
+            CalciteSchema calciteSchema = CalciteSchema.from(rootSchema);
+            java.util.List<String> defaultSchemaPath = java.util.Collections.singletonList("PUBLIC");
+            CalciteConnectionConfig connectionConfig = CalciteConnectionConfig.DEFAULT;
+            CalciteCatalogReader catalogReader = new CalciteCatalogReader(
+                    calciteSchema,
+                    defaultSchemaPath,
+                    typeFactory,
+                    connectionConfig);
+
+            // 4. 构建联合算子表（标准 SQL 函数 + 方言专属函数 + 自定义方言函数如 IFNULL）
+            SqlOperatorTable stdOpTable = SqlStdOperatorTable.instance();
+            SqlOperatorTable libraryOpTable = SqlLibraryOperatorTableFactory.INSTANCE
+                    .getOperatorTable(SqlLibrary.MYSQL, SqlLibrary.ORACLE, SqlLibrary.POSTGRESQL);
+
+            SqlOperatorTable customOpTable = new SqlOperatorTable() {
+                private final java.util.List<org.apache.calcite.sql.SqlOperator> list = java.util.Arrays.asList(
+                    new org.apache.calcite.sql.SqlFunction(
+                        "IFNULL",
+                        org.apache.calcite.sql.SqlKind.OTHER_FUNCTION,
+                        org.apache.calcite.sql.type.ReturnTypes.ARG0_NULLABLE,
+                        null,
+                        org.apache.calcite.sql.type.OperandTypes.family(org.apache.calcite.sql.type.SqlTypeFamily.ANY, org.apache.calcite.sql.type.SqlTypeFamily.ANY),
+                        org.apache.calcite.sql.SqlFunctionCategory.SYSTEM
+                    )
+                );
+
+                @Override
+                public void lookupOperatorOverloads(
+                        org.apache.calcite.sql.SqlIdentifier opName,
+                        org.apache.calcite.sql.SqlFunctionCategory category,
+                        org.apache.calcite.sql.SqlSyntax syntax,
+                        java.util.List<org.apache.calcite.sql.SqlOperator> operatorList,
+                        org.apache.calcite.sql.validate.SqlNameMatcher nameMatcher) {
+                    for (org.apache.calcite.sql.SqlOperator op : list) {
+                        if (nameMatcher.matches(op.getName(), opName.getSimple())) {
+                            operatorList.add(op);
+                        }
+                    }
+                }
+
+                @Override
+                public java.util.List<org.apache.calcite.sql.SqlOperator> getOperatorList() {
+                    return list;
+                }
+            };
+
+            SqlOperatorTable chainOpTable = SqlOperatorTables.chain(stdOpTable, libraryOpTable, customOpTable);
+
+            // 5. 设置符合度 Conformance 级别
+            org.apache.calcite.sql.validate.SqlConformance conformance = getConformanceForSource(sourceDialect);
+
+            // 6. 创建验证器配置，支持标示符大小写敏感（Calcite 默认与 Conformance 相关，这里支持标识符展开）
+            SqlValidator.Config validatorConfig = SqlValidator.Config.DEFAULT
+                    .withConformance(conformance)
+                    .withIdentifierExpansion(true)
+                    .withCallRewrite(true);
+
+            // 7. 创建验证器并校验
+            SqlValidator validator = SqlValidatorUtil.newValidator(
+                    chainOpTable,
+                    catalogReader,
+                    typeFactory,
+                    validatorConfig);
+
+            return validator.validate(parsed);
+        } catch (Exception e) {
+            throw new SqlTranslationException("SQL 校验失败: " + e.getMessage(), e);
+        }
     }
 }

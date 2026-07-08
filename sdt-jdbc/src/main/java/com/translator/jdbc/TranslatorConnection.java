@@ -3,6 +3,7 @@ package com.translator.jdbc;
 import com.translator.core.DialectType;
 import com.translator.core.SqlTranslator;
 import com.translator.core.config.TranslationConfig;
+import com.translator.core.metadata.JdbcMetadataProvider;
 import com.translator.metrics.ConnectionMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,6 +40,9 @@ public class TranslatorConnection implements Connection, AutoCloseable {
         this.sourceDialect = sourceDialect;
         this.targetDialect = targetDialect;
         this.translator = new SqlTranslator(sourceDialect, targetDialect, config);
+        if (config != null && config.isEnableValidation()) {
+            this.translator.setMetadataProvider(new JdbcMetadataProvider(realConnection, config.getMaxTables()));
+        }
     }
 
     /**
