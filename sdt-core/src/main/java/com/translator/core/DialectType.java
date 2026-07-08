@@ -5,7 +5,6 @@ package com.translator.core;
  * 对应需求文档中的 4 大方言组。
  */
 public enum DialectType {
-
     POSTGRESQL("postgresql", "PostgreSQL方言组"),
     MYSQL("mysql", "MySQL方言组"),
     ORACLE("oracle", "Oracle方言组"),
@@ -50,7 +49,6 @@ public enum DialectType {
                 return type;
             }
         }
-        throw new IllegalArgumentException("未知的方言标识符: " + identifier
-                + "，支持的标识符: postgresql, mysql, oracle, sqlserver");
+        throw new IllegalArgumentException("未知的方言标识符: " + identifier + "，支持的标识符: postgresql, mysql, oracle, sqlserver");
     }
 }

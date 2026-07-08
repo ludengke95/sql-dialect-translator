@@ -1,15 +1,16 @@
 package com.translator.proxy.server.config;
 
-import com.translator.proxy.backend.BackendEntry;
-import com.translator.proxy.backend.BackendPoolManager;
-import com.translator.proxy.metrics.ReloadMetrics;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.File;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.translator.proxy.backend.BackendEntry;
+import com.translator.proxy.backend.BackendPoolManager;
+import com.translator.proxy.metrics.ReloadMetrics;
 
 /**
  * 配置文件监听器 —— 监听 YAML 配置文件变化并热更新 backends。
@@ -47,8 +48,8 @@ public class ConfigWatcher implements Runnable {
      * @param poolManager    后端连接池管理器
      * @param currentConfig  当前生效的配置（用于差异对比）
      */
-    public ConfigWatcher(String configFilePath, int debounceMs,
-                          BackendPoolManager poolManager, ProxyConfig currentConfig) {
+    public ConfigWatcher(
+            String configFilePath, int debounceMs, BackendPoolManager poolManager, ProxyConfig currentConfig) {
         this.configFilePath = configFilePath;
         this.debounceMs = debounceMs;
         this.poolManager = poolManager;
@@ -106,8 +107,8 @@ public class ConfigWatcher implements Runnable {
             Path configDir = configFile.getAbsoluteFile().getParentFile().toPath();
             String configFileName = configFile.getName();
 
-            configDir.register(watchService, StandardWatchEventKinds.ENTRY_MODIFY,
-                    StandardWatchEventKinds.ENTRY_CREATE);
+            configDir.register(
+                    watchService, StandardWatchEventKinds.ENTRY_MODIFY, StandardWatchEventKinds.ENTRY_CREATE);
 
             log.info("Watching directory: {} for file: {}", configDir, configFileName);
 
@@ -131,7 +132,8 @@ public class ConfigWatcher implements Runnable {
                         continue;
                     }
                     Path changed = (Path) event.context();
-                    if (changed != null && configFileName.equals(changed.getFileName().toString())) {
+                    if (changed != null
+                            && configFileName.equals(changed.getFileName().toString())) {
                         relevant = true;
                         log.debug("Detected change: {} on {}", kind.name(), changed);
                     }
@@ -232,9 +234,13 @@ public class ConfigWatcher implements Runnable {
             ProxyConfig.TargetConfig newTc = entry.getValue();
             ProxyConfig.TargetConfig oldTc = oldBackends.get(name);
             if (oldTc != null && !newTc.equals(oldTc)) {
-                log.info("Backend changed: '{}' (jdbcUrl={} → {}, pool={} → {})",
-                        name, oldTc.getJdbcUrl(), newTc.getJdbcUrl(),
-                        oldTc.getMaxPoolSize(), newTc.getMaxPoolSize());
+                log.info(
+                        "Backend changed: '{}' (jdbcUrl={} → {}, pool={} → {})",
+                        name,
+                        oldTc.getJdbcUrl(),
+                        newTc.getJdbcUrl(),
+                        oldTc.getMaxPoolSize(),
+                        newTc.getMaxPoolSize());
                 BackendEntry be = toBackendEntry(newTc);
                 if (poolManager.reloadBackend(be)) {
                     totalChanges++;
@@ -273,14 +279,19 @@ public class ConfigWatcher implements Runnable {
      */
     private void checkNonReloadableChanges(ProxyConfig oldConfig, ProxyConfig newConfig) {
         if (oldConfig.getPort() != newConfig.getPort()) {
-            log.warn("Port changed from {} to {} (requires restart to take effect)",
-                    oldConfig.getPort(), newConfig.getPort());
+            log.warn(
+                    "Port changed from {} to {} (requires restart to take effect)",
+                    oldConfig.getPort(),
+                    newConfig.getPort());
         }
         if (!Objects.equals(oldConfig.getAuth().getUser(), newConfig.getAuth().getUser())) {
-            log.warn("Auth user changed from '{}' to '{}' (requires restart to take effect)",
-                    oldConfig.getAuth().getUser(), newConfig.getAuth().getUser());
+            log.warn(
+                    "Auth user changed from '{}' to '{}' (requires restart to take effect)",
+                    oldConfig.getAuth().getUser(),
+                    newConfig.getAuth().getUser());
         }
-        if (!Objects.equals(oldConfig.getAuth().getPassword(), newConfig.getAuth().getPassword())) {
+        if (!Objects.equals(
+                oldConfig.getAuth().getPassword(), newConfig.getAuth().getPassword())) {
             log.warn("Auth password changed (requires restart to take effect)");
         }
         if (!oldConfig.getTranslation().equals(newConfig.getTranslation())) {
@@ -291,8 +302,7 @@ public class ConfigWatcher implements Runnable {
     /**
      * 将后端列表按 name 索引为 Map。
      */
-    private static Map<String, ProxyConfig.TargetConfig> indexByName(
-            List<ProxyConfig.TargetConfig> backends) {
+    private static Map<String, ProxyConfig.TargetConfig> indexByName(List<ProxyConfig.TargetConfig> backends) {
         Map<String, ProxyConfig.TargetConfig> map = new LinkedHashMap<>();
         for (ProxyConfig.TargetConfig tc : backends) {
             String name = tc.getName();
@@ -308,9 +318,13 @@ public class ConfigWatcher implements Runnable {
      */
     public static BackendEntry toBackendEntry(ProxyConfig.TargetConfig tc) {
         BackendEntry be = new BackendEntry(
-                tc.getName(), tc.getDialect(), tc.getJdbcUrl(),
-                tc.getUsername(), tc.getPassword(),
-                tc.getMaxPoolSize(), tc.getMinIdle());
+                tc.getName(),
+                tc.getDialect(),
+                tc.getJdbcUrl(),
+                tc.getUsername(),
+                tc.getPassword(),
+                tc.getMaxPoolSize(),
+                tc.getMinIdle());
         if (tc.getTranslation() != null) {
             be.setKeywordCase(tc.getTranslation().getKeywordCase());
             be.setIdentifierCase(tc.getTranslation().getIdentifierCase());

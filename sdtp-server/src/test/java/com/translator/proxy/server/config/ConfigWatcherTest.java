@@ -1,14 +1,13 @@
 package com.translator.proxy.server.config;
 
-import com.translator.proxy.backend.BackendEntry;
-import org.junit.Test;
+import static org.junit.Assert.*;
 
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
-import static org.junit.Assert.*;
+import org.junit.Test;
+
+import com.translator.proxy.backend.BackendEntry;
 
 /**
  * ConfigWatcher 单元测试 —— 测试 TargetConfig → BackendEntry 转换和差异对比逻辑。
@@ -74,10 +73,8 @@ public class ConfigWatcherTest {
 
     @Test
     public void testTargetConfigEqualsSame() {
-        ProxyConfig.TargetConfig a = createTargetConfig("db1", "POSTGRESQL",
-                "jdbc:postgresql://localhost:5432/db1");
-        ProxyConfig.TargetConfig b = createTargetConfig("db1", "POSTGRESQL",
-                "jdbc:postgresql://localhost:5432/db1");
+        ProxyConfig.TargetConfig a = createTargetConfig("db1", "POSTGRESQL", "jdbc:postgresql://localhost:5432/db1");
+        ProxyConfig.TargetConfig b = createTargetConfig("db1", "POSTGRESQL", "jdbc:postgresql://localhost:5432/db1");
 
         assertEquals(a, b);
         assertEquals(a.hashCode(), b.hashCode());
@@ -85,22 +82,18 @@ public class ConfigWatcherTest {
 
     @Test
     public void testTargetConfigEqualsDifferentJdbcUrl() {
-        ProxyConfig.TargetConfig a = createTargetConfig("db1", "POSTGRESQL",
-                "jdbc:postgresql://oldhost:5432/db1");
-        ProxyConfig.TargetConfig b = createTargetConfig("db1", "POSTGRESQL",
-                "jdbc:postgresql://newhost:5432/db1");
+        ProxyConfig.TargetConfig a = createTargetConfig("db1", "POSTGRESQL", "jdbc:postgresql://oldhost:5432/db1");
+        ProxyConfig.TargetConfig b = createTargetConfig("db1", "POSTGRESQL", "jdbc:postgresql://newhost:5432/db1");
 
         assertNotEquals(a, b);
     }
 
     @Test
     public void testTargetConfigEqualsDifferentPoolSize() {
-        ProxyConfig.TargetConfig a = createTargetConfig("db1", "POSTGRESQL",
-                "jdbc:postgresql://localhost:5432/db1");
+        ProxyConfig.TargetConfig a = createTargetConfig("db1", "POSTGRESQL", "jdbc:postgresql://localhost:5432/db1");
         a.setMaxPoolSize(10);
 
-        ProxyConfig.TargetConfig b = createTargetConfig("db1", "POSTGRESQL",
-                "jdbc:postgresql://localhost:5432/db1");
+        ProxyConfig.TargetConfig b = createTargetConfig("db1", "POSTGRESQL", "jdbc:postgresql://localhost:5432/db1");
         b.setMaxPoolSize(20);
 
         assertNotEquals(a, b);
@@ -108,14 +101,12 @@ public class ConfigWatcherTest {
 
     @Test
     public void testTargetConfigEqualsDifferentTranslation() {
-        ProxyConfig.TargetConfig a = createTargetConfig("db1", "POSTGRESQL",
-                "jdbc:postgresql://localhost:5432/db1");
+        ProxyConfig.TargetConfig a = createTargetConfig("db1", "POSTGRESQL", "jdbc:postgresql://localhost:5432/db1");
         ProxyConfig.TranslationConf trA = new ProxyConfig.TranslationConf();
         trA.setKeywordCase("UPPER");
         a.setTranslation(trA);
 
-        ProxyConfig.TargetConfig b = createTargetConfig("db1", "POSTGRESQL",
-                "jdbc:postgresql://localhost:5432/db1");
+        ProxyConfig.TargetConfig b = createTargetConfig("db1", "POSTGRESQL", "jdbc:postgresql://localhost:5432/db1");
         ProxyConfig.TranslationConf trB = new ProxyConfig.TranslationConf();
         trB.setKeywordCase("LOWER");
         b.setTranslation(trB);
@@ -125,10 +116,8 @@ public class ConfigWatcherTest {
 
     @Test
     public void testTargetConfigNotEqualsDifferentName() {
-        ProxyConfig.TargetConfig a = createTargetConfig("db1", "POSTGRESQL",
-                "jdbc:postgresql://localhost:5432/db1");
-        ProxyConfig.TargetConfig b = createTargetConfig("db2", "POSTGRESQL",
-                "jdbc:postgresql://localhost:5432/db1");
+        ProxyConfig.TargetConfig a = createTargetConfig("db1", "POSTGRESQL", "jdbc:postgresql://localhost:5432/db1");
+        ProxyConfig.TargetConfig b = createTargetConfig("db2", "POSTGRESQL", "jdbc:postgresql://localhost:5432/db1");
 
         assertNotEquals(a, b);
     }
@@ -140,13 +129,11 @@ public class ConfigWatcherTest {
      */
     @Test
     public void testDiffNewBackend() {
-        List<ProxyConfig.TargetConfig> oldList = Arrays.asList(
-                createTargetConfig("db1", "POSTGRESQL", "jdbc:pg://host1/db1")
-        );
+        List<ProxyConfig.TargetConfig> oldList =
+                Arrays.asList(createTargetConfig("db1", "POSTGRESQL", "jdbc:pg://host1/db1"));
         List<ProxyConfig.TargetConfig> newList = Arrays.asList(
                 createTargetConfig("db1", "POSTGRESQL", "jdbc:pg://host1/db1"),
-                createTargetConfig("db2", "MYSQL", "jdbc:mysql://host2/db2")
-        );
+                createTargetConfig("db2", "MYSQL", "jdbc:mysql://host2/db2"));
 
         // db2 在 new 中存在，old 中不存在 → 应新增
         assertTrue("db1 should exist in old", findByPath(oldList, "db1"));
@@ -162,11 +149,9 @@ public class ConfigWatcherTest {
     public void testDiffRemovedBackend() {
         List<ProxyConfig.TargetConfig> oldList = Arrays.asList(
                 createTargetConfig("db1", "POSTGRESQL", "jdbc:pg://host1/db1"),
-                createTargetConfig("db2", "MYSQL", "jdbc:mysql://host2/db2")
-        );
-        List<ProxyConfig.TargetConfig> newList = Arrays.asList(
-                createTargetConfig("db1", "POSTGRESQL", "jdbc:pg://host1/db1")
-        );
+                createTargetConfig("db2", "MYSQL", "jdbc:mysql://host2/db2"));
+        List<ProxyConfig.TargetConfig> newList =
+                Arrays.asList(createTargetConfig("db1", "POSTGRESQL", "jdbc:pg://host1/db1"));
 
         // db2 在 old 中存在，new 中不存在 → 应删除
         assertTrue("db2 should exist in old", findByPath(oldList, "db2"));
@@ -178,12 +163,10 @@ public class ConfigWatcherTest {
      */
     @Test
     public void testDiffChangedBackend() {
-        ProxyConfig.TargetConfig oldTc = createTargetConfig("db1", "POSTGRESQL",
-                "jdbc:pg://oldhost/db1");
+        ProxyConfig.TargetConfig oldTc = createTargetConfig("db1", "POSTGRESQL", "jdbc:pg://oldhost/db1");
         oldTc.setMaxPoolSize(10);
 
-        ProxyConfig.TargetConfig newTc = createTargetConfig("db1", "POSTGRESQL",
-                "jdbc:pg://newhost/db1");
+        ProxyConfig.TargetConfig newTc = createTargetConfig("db1", "POSTGRESQL", "jdbc:pg://newhost/db1");
         newTc.setMaxPoolSize(20);
 
         // 同名但不 equals
@@ -196,12 +179,10 @@ public class ConfigWatcherTest {
      */
     @Test
     public void testDiffUnchangedBackend() {
-        ProxyConfig.TargetConfig oldTc = createTargetConfig("db1", "POSTGRESQL",
-                "jdbc:pg://host1/db1");
+        ProxyConfig.TargetConfig oldTc = createTargetConfig("db1", "POSTGRESQL", "jdbc:pg://host1/db1");
         oldTc.setMaxPoolSize(10);
 
-        ProxyConfig.TargetConfig newTc = createTargetConfig("db1", "POSTGRESQL",
-                "jdbc:pg://host1/db1");
+        ProxyConfig.TargetConfig newTc = createTargetConfig("db1", "POSTGRESQL", "jdbc:pg://host1/db1");
         newTc.setMaxPoolSize(10);
 
         // 同名且 equals

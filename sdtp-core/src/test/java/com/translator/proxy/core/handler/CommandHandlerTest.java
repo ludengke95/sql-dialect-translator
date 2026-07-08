@@ -1,22 +1,23 @@
 package com.translator.proxy.core.handler;
 
-import com.translator.proxy.core.intercept.SystemVariableInterceptor;
-import com.translator.proxy.protocol.codec.MySQLPacketDecoder;
-import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
-import com.translator.proxy.protocol.constant.CommandType;
-import com.translator.proxy.protocol.util.BufferUtils;
-import com.translator.proxy.protocol.util.MySQLAuth;
-import com.translator.proxy.core.session.FrontendSession;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import io.netty.channel.embedded.EmbeddedChannel;
+import static org.junit.Assert.*;
+
+import java.nio.charset.StandardCharsets;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.nio.charset.StandardCharsets;
+import com.translator.proxy.core.intercept.SystemVariableInterceptor;
+import com.translator.proxy.core.session.FrontendSession;
+import com.translator.proxy.protocol.codec.MySQLPacketDecoder;
+import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
+import com.translator.proxy.protocol.constant.CommandType;
+import com.translator.proxy.protocol.util.MySQLAuth;
 
-import static org.junit.Assert.*;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.channel.embedded.EmbeddedChannel;
 
 /**
  * CommandHandler 测试：系统变量拦截、SET 语句、COM_PING/QUIT 等。
@@ -28,10 +29,7 @@ public class CommandHandlerTest {
 
     @Before
     public void setUp() {
-        channel = new EmbeddedChannel(
-                new MySQLPacketDecoder(),
-                new MySQLPacketEncoder()
-        );
+        channel = new EmbeddedChannel(new MySQLPacketDecoder(), new MySQLPacketEncoder());
         scramble = MySQLAuth.generateScramble();
     }
 
@@ -77,7 +75,7 @@ public class CommandHandlerTest {
         ByteBuf raw = channel.readOutbound();
         if (raw == null) return -2; // no response
         raw.readUnsignedMediumLE(); // packet length
-        raw.readByte();             // seq
+        raw.readByte(); // seq
         int header = raw.readUnsignedByte();
         raw.release();
         return header;
@@ -127,8 +125,7 @@ public class CommandHandlerTest {
 
     @Test
     public void testSelectDatabaseNull() {
-        SystemVariableInterceptor.InterceptResult ir =
-                SystemVariableInterceptor.intercept("SELECT DATABASE()", null);
+        SystemVariableInterceptor.InterceptResult ir = SystemVariableInterceptor.intercept("SELECT DATABASE()", null);
         assertNotNull(ir);
         assertEquals("NULL", ir.value1);
     }
@@ -144,8 +141,7 @@ public class CommandHandlerTest {
 
     @Test
     public void testNonSystemQueryNotIntercepted() {
-        SystemVariableInterceptor.InterceptResult ir =
-                SystemVariableInterceptor.intercept("SELECT * FROM users", null);
+        SystemVariableInterceptor.InterceptResult ir = SystemVariableInterceptor.intercept("SELECT * FROM users", null);
         assertNull("普通查询不应被拦截", ir);
     }
 
@@ -219,14 +215,13 @@ public class CommandHandlerTest {
     @Test
     public void testSelectMultiVariablesConnectorJ80() {
         // 模拟 MySQL Connector/J 8.0.33 在连接建立时发送的查询
-        String sql = "SELECT @@session.auto_increment_increment AS auto_increment_increment, " +
-                     "@@character_set_client AS character_set_client, " +
-                     "@@character_set_connection AS character_set_connection, " +
-                     "@@character_set_results AS character_set_results, " +
-                     "@@character_set_server AS character_set_server";
+        String sql = "SELECT @@session.auto_increment_increment AS auto_increment_increment, "
+                + "@@character_set_client AS character_set_client, "
+                + "@@character_set_connection AS character_set_connection, "
+                + "@@character_set_results AS character_set_results, "
+                + "@@character_set_server AS character_set_server";
 
-        SystemVariableInterceptor.InterceptResult ir =
-                SystemVariableInterceptor.intercept(sql, null);
+        SystemVariableInterceptor.InterceptResult ir = SystemVariableInterceptor.intercept(sql, null);
         assertNotNull("应拦截 Connector/J 多变量查询", ir);
         assertTrue("应为多列模式", ir.isMultiColumn());
         assertEquals(5, ir.columns.size());
@@ -248,7 +243,7 @@ public class CommandHandlerTest {
         assertEquals(2, ir.columns.size());
         assertEquals("version", ir.columns.get(0).columnName);
         assertEquals("unknown_var_xyz", ir.columns.get(1).columnName);
-        assertEquals("", ir.columns.get(1).value);  // 未知变量返回空字符串
+        assertEquals("", ir.columns.get(1).value); // 未知变量返回空字符串
     }
 
     /**
@@ -257,8 +252,7 @@ public class CommandHandlerTest {
     @Test
     public void testMixedPrefixVariables() {
         String sql = "SELECT @@session.version, @@autocommit";
-        SystemVariableInterceptor.InterceptResult ir =
-                SystemVariableInterceptor.intercept(sql, null);
+        SystemVariableInterceptor.InterceptResult ir = SystemVariableInterceptor.intercept(sql, null);
         assertNotNull("应拦截混合前缀查询", ir);
         assertTrue("应为多列模式", ir.isMultiColumn());
         assertEquals(2, ir.columns.size());
@@ -280,14 +274,13 @@ public class CommandHandlerTest {
 
         // 测试多列包含新增变量
         String sql = "SELECT @@auto_increment_increment, @@net_write_timeout, @@time_zone";
-        SystemVariableInterceptor.InterceptResult ir2 =
-                SystemVariableInterceptor.intercept(sql, null);
+        SystemVariableInterceptor.InterceptResult ir2 = SystemVariableInterceptor.intercept(sql, null);
         assertNotNull("应拦截多列查询", ir2);
         assertTrue("应为多列模式", ir2.isMultiColumn());
         assertEquals(3, ir2.columns.size());
-        assertEquals("1", ir2.columns.get(0).value);       // auto_increment_increment
-        assertEquals("60", ir2.columns.get(1).value);       // net_write_timeout
-        assertEquals("SYSTEM", ir2.columns.get(2).value);   // time_zone
+        assertEquals("1", ir2.columns.get(0).value); // auto_increment_increment
+        assertEquals("60", ir2.columns.get(1).value); // net_write_timeout
+        assertEquals("SYSTEM", ir2.columns.get(2).value); // time_zone
     }
 
     @After

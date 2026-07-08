@@ -1,11 +1,12 @@
 package com.translator.proxy.backend.mapper;
 
-import com.translator.proxy.protocol.constant.ColumnType;
-import org.junit.Test;
+import static org.junit.Assert.*;
 
 import java.sql.Types;
 
-import static org.junit.Assert.*;
+import org.junit.Test;
+
+import com.translator.proxy.protocol.constant.ColumnType;
 
 /**
  * TypeMapper 测试：JDBC Types → MySQL ColumnType 映射正确性。
@@ -55,10 +56,8 @@ public class TypeMapperTest {
     @Test
     public void testDefaultToVarString() {
         // 不认识的类型默认映射到 VAR_STRING
-        assertEquals(ColumnType.FIELD_TYPE_VAR_STRING,
-                TypeMapper.jdbcToMysql(Types.OTHER));
-        assertEquals(ColumnType.FIELD_TYPE_VAR_STRING,
-                TypeMapper.jdbcToMysql(Types.JAVA_OBJECT));
+        assertEquals(ColumnType.FIELD_TYPE_VAR_STRING, TypeMapper.jdbcToMysql(Types.OTHER));
+        assertEquals(ColumnType.FIELD_TYPE_VAR_STRING, TypeMapper.jdbcToMysql(Types.JAVA_OBJECT));
     }
 
     @Test

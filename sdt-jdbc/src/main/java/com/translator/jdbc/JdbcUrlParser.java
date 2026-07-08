@@ -1,14 +1,15 @@
 package com.translator.jdbc;
 
-import com.translator.core.DialectRegistry;
-import com.translator.core.DialectType;
-import com.translator.core.config.TranslationConfig;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.translator.core.DialectRegistry;
+import com.translator.core.DialectType;
+import com.translator.core.config.TranslationConfig;
 
 /**
  * JDBC URL 解析器。
@@ -32,9 +33,8 @@ public class JdbcUrlParser {
      * group(2) = 目标数据库子协议（同时也是 DialectRegistry 查询 key）
      * group(3) = 真实连接地址（如 //host:port/db?params、TNSName 等，原样透传）
      */
-    private static final Pattern URL_PATTERN = Pattern.compile(
-            "^jdbc:translator:([a-zA-Z0-9_]+):([a-zA-Z0-9_]+):(.+)$"
-    );
+    private static final Pattern URL_PATTERN =
+            Pattern.compile("^jdbc:translator:([a-zA-Z0-9_]+):([a-zA-Z0-9_]+):(.+)$");
 
     /**
      * 解析 JDBC URL。
@@ -51,8 +51,8 @@ public class JdbcUrlParser {
 
         Matcher matcher = URL_PATTERN.matcher(url);
         if (!matcher.matches()) {
-            throw new IllegalArgumentException("URL 格式不正确，期望: " +
-                    "jdbc:translator:<源方言>:<目标数据库子协议>:<真实地址>, 实际: " + url);
+            throw new IllegalArgumentException(
+                    "URL 格式不正确，期望: " + "jdbc:translator:<源方言>:<目标数据库子协议>:<真实地址>, 实际: " + url);
         }
 
         // 提取源方言标识符
@@ -73,15 +73,17 @@ public class JdbcUrlParser {
                     + "，支持的数据库: PostgreSQL/HighGo/瀚高, MySQL/Doris, Oracle/DM/达梦, SQL Server");
         }
 
-        log.debug("解析 JDBC URL: source={}, targetProduct={}, targetDialect={}, realUrl={}",
-                sourceDialect, targetProduct, targetDialect, realUrl);
+        log.debug(
+                "解析 JDBC URL: source={}, targetProduct={}, targetDialect={}, realUrl={}",
+                sourceDialect,
+                targetProduct,
+                targetDialect,
+                realUrl);
 
         // 从 URL 查询参数中提取翻译配置
-        TranslationConfig translationConfig = parseTranslationConfig(
-                matcher.group(3), properties);
+        TranslationConfig translationConfig = parseTranslationConfig(matcher.group(3), properties);
 
-        return new JdbcUrlInfo(sourceDialect, targetDialect, realUrl,
-                properties, translationConfig);
+        return new JdbcUrlInfo(sourceDialect, targetDialect, realUrl, properties, translationConfig);
     }
 
     /**
@@ -106,9 +108,7 @@ public class JdbcUrlParser {
                 for (String pair : pairs) {
                     int eqIdx = pair.indexOf('=');
                     if (eqIdx > 0) {
-                        params.setProperty(
-                                pair.substring(0, eqIdx),
-                                pair.substring(eqIdx + 1));
+                        params.setProperty(pair.substring(0, eqIdx), pair.substring(eqIdx + 1));
                     }
                 }
             }
@@ -129,12 +129,12 @@ public class JdbcUrlParser {
 
         TranslationConfig config = new TranslationConfig();
         if (keywordCaseStr != null) {
-            config.setKeywordCase(TranslationConfig.KeywordCase.valueOf(
-                    keywordCaseStr.toUpperCase(java.util.Locale.ROOT)));
+            config.setKeywordCase(
+                    TranslationConfig.KeywordCase.valueOf(keywordCaseStr.toUpperCase(java.util.Locale.ROOT)));
         }
         if (identifierCaseStr != null) {
-            config.setIdentifierCase(TranslationConfig.IdentifierCase.valueOf(
-                    identifierCaseStr.toUpperCase(java.util.Locale.ROOT)));
+            config.setIdentifierCase(
+                    TranslationConfig.IdentifierCase.valueOf(identifierCaseStr.toUpperCase(java.util.Locale.ROOT)));
         }
         log.debug("翻译配置: {}", config);
         return config;

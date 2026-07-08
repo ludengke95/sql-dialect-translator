@@ -1,17 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-
     <groupId>com.draven.sql.translator</groupId>
     <artifactId>sql-dialect-translator</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
-
     <name>SDT — SQL Dialect Translator</name>
     <description>SDT — SQL Dialect Translator: JDBC Wrapper Driver &amp; SDT Proxy</description>
-
     <modules>
         <module>sdt-metrics</module>
         <module>sdt-core</module>
@@ -23,7 +18,6 @@
         <module>sdtp-server</module>
         <module>sdtp-metrics</module>
     </modules>
-
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
@@ -39,7 +33,6 @@
         <snakeyaml.version>1.33</snakeyaml.version>
         <logback.version>1.2.13</logback.version>
     </properties>
-
     <dependencyManagement>
         <dependencies>
             <!-- Apache Calcite -->
@@ -48,7 +41,6 @@
                 <artifactId>calcite-core</artifactId>
                 <version>${calcite.version}</version>
             </dependency>
-
             <!-- Logging -->
             <dependency>
                 <groupId>org.slf4j</groupId>
@@ -61,7 +53,6 @@
                 <version>${slf4j.version}</version>
                 <scope>test</scope>
             </dependency>
-
             <!-- Test -->
             <dependency>
                 <groupId>junit</groupId>
@@ -69,7 +60,6 @@
                 <version>${junit.version}</version>
                 <scope>test</scope>
             </dependency>
-
             <!-- Testcontainers -->
             <dependency>
                 <groupId>org.testcontainers</groupId>
@@ -89,7 +79,6 @@
                 <version>${testcontainers.version}</version>
                 <scope>test</scope>
             </dependency>
-
             <!-- JDBC Drivers -->
             <dependency>
                 <groupId>mysql</groupId>
@@ -103,28 +92,24 @@
                 <version>${postgresql.driver.version}</version>
                 <scope>test</scope>
             </dependency>
-
             <!-- Netty -->
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-all</artifactId>
                 <version>${netty.version}</version>
             </dependency>
-
             <!-- HikariCP -->
             <dependency>
                 <groupId>com.zaxxer</groupId>
                 <artifactId>HikariCP</artifactId>
                 <version>${hikaricp.version}</version>
             </dependency>
-
             <!-- SnakeYAML -->
             <dependency>
                 <groupId>org.yaml</groupId>
                 <artifactId>snakeyaml</artifactId>
                 <version>${snakeyaml.version}</version>
             </dependency>
-
             <!-- Logback -->
             <dependency>
                 <groupId>ch.qos.logback</groupId>
@@ -133,7 +118,6 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
-
     <build>
         <pluginManagement>
             <plugins>
@@ -149,5 +133,53 @@
                 </plugin>
             </plugins>
         </pluginManagement>
+        <plugins>
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>2.43.0</version>
+                <configuration>
+                    <java>
+                        <!-- <googleJavaFormat>
+                            <version>1.17.0</version>
+                            <style>GOOGLE</style>
+                            <reflowLongStrings>true</reflowLongStrings>
+                        </googleJavaFormat> -->
+                        <palantirJavaFormat>
+                            <version>2.39.0</version>
+                        </palantirJavaFormat>
+                        <!-- 移除未使用的import -->
+                        <removeUnusedImports></removeUnusedImports>
+                        <!-- import排序：逗号分隔分组，连续两个逗号表示插入空行 -->
+                        <importOrder>
+                            <order>java,javax,org,com,,#</order>
+                        </importOrder>
+                        <!-- 格式化注解排版 -->
+                        <formatAnnotations></formatAnnotations>
+                        <!-- 去除行尾空格 -->
+                        <trimTrailingWhitespace></trimTrailingWhitespace>
+                        <!-- 文件末尾保留一个空行 -->
+                        <endWithNewline></endWithNewline>
+                    </java>
+                    <pom>
+                        <sortPom>
+                            <nrOfIndentSpace>4</nrOfIndentSpace>
+                            <keepBlankLines>false</keepBlankLines>
+                        </sortPom>
+                    </pom>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>spotless-check</id>
+                        <!-- 执行插件的哪个目标 -->
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <!-- 绑定到 Maven 的哪个构建阶段 -->
+                        <phase>verify</phase>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
     </build>
 </project>

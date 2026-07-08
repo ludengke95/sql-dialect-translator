@@ -1,18 +1,16 @@
 package com.translator.proxy.protocol.codec;
 
-import com.translator.proxy.protocol.util.BufferUtils;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
-import io.netty.buffer.Unpooled;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.embedded.EmbeddedChannel;
-import org.junit.Test;
+import static org.junit.Assert.*;
 
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
 
-import static org.junit.Assert.*;
+import org.junit.Test;
+
+import com.translator.proxy.protocol.util.BufferUtils;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.channel.embedded.EmbeddedChannel;
 
 /**
  * MySQL 编解码器测试：验证 Encoder/Decoder 的往返正确性。
@@ -29,9 +27,9 @@ public class MySQLPacketCodecTest {
         String payload = "Hello";
         byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
         ByteBuf in = Unpooled.buffer();
-        in.writeMediumLE(payloadBytes.length);  // 3 字节长度
-        in.writeByte(0);                        // seq=0
-        in.writeBytes(payloadBytes);            // payload
+        in.writeMediumLE(payloadBytes.length); // 3 字节长度
+        in.writeByte(0); // seq=0
+        in.writeBytes(payloadBytes); // payload
 
         channel.writeInbound(in);
 
@@ -58,12 +56,12 @@ public class MySQLPacketCodecTest {
         // 包 1: payload "AB", seq=0
         in.writeMediumLE(2);
         in.writeByte(0);
-        in.writeBytes(new byte[]{'A', 'B'});
+        in.writeBytes(new byte[] {'A', 'B'});
 
         // 包 2: payload "CDE", seq=1
         in.writeMediumLE(3);
         in.writeByte(1);
-        in.writeBytes(new byte[]{'C', 'D', 'E'});
+        in.writeBytes(new byte[] {'C', 'D', 'E'});
 
         channel.writeInbound(in);
 
@@ -107,7 +105,7 @@ public class MySQLPacketCodecTest {
         ByteBuf in = Unpooled.buffer();
         in.writeMediumLE(10);
         in.writeByte(0);
-        in.writeBytes(new byte[]{1, 2, 3, 4, 5});
+        in.writeBytes(new byte[] {1, 2, 3, 4, 5});
         channel.writeInbound(in);
 
         // payload 不完整，不应解码
@@ -115,7 +113,7 @@ public class MySQLPacketCodecTest {
 
         // 补发剩余 5 字节
         ByteBuf more = Unpooled.buffer();
-        more.writeBytes(new byte[]{6, 7, 8, 9, 10});
+        more.writeBytes(new byte[] {6, 7, 8, 9, 10});
         channel.writeInbound(more);
 
         // 现在应该解码出来了
@@ -157,16 +155,13 @@ public class MySQLPacketCodecTest {
 
     @Test
     public void testRoundTrip() {
-        EmbeddedChannel serverChannel = new EmbeddedChannel(
-                new MySQLPacketDecoder(),
-                new MySQLPacketEncoder()
-        );
+        EmbeddedChannel serverChannel = new EmbeddedChannel(new MySQLPacketDecoder(), new MySQLPacketEncoder());
 
         // 模拟客户端发送包
         ByteBuf clientIn = Unpooled.buffer();
         clientIn.writeMediumLE(3);
         clientIn.writeByte(5);
-        clientIn.writeBytes(new byte[]{10, 20, 30});
+        clientIn.writeBytes(new byte[] {10, 20, 30});
         serverChannel.writeInbound(clientIn);
 
         // 服务端解码
@@ -176,7 +171,7 @@ public class MySQLPacketCodecTest {
 
         // 服务端构造响应包
         ByteBuf response = Unpooled.buffer();
-        response.writeBytes(new byte[]{99, 98, 97});
+        response.writeBytes(new byte[] {99, 98, 97});
         serverChannel.writeOutbound(new MySQLPacketEncoder.OutgoingPacket(response, (byte) 6));
 
         // 读取编码后的输出
@@ -187,7 +182,7 @@ public class MySQLPacketCodecTest {
         assertEquals(6, encoded.readByte());
         byte[] respPayload = new byte[3];
         encoded.readBytes(respPayload);
-        assertArrayEquals(new byte[]{99, 98, 97}, respPayload);
+        assertArrayEquals(new byte[] {99, 98, 97}, respPayload);
 
         decoded.release();
         encoded.release();
@@ -203,9 +198,9 @@ public class MySQLPacketCodecTest {
 
         ByteBuf encoded = channel.readOutbound();
         assertNotNull(encoded);
-        assertEquals(0, encoded.readUnsignedMediumLE());  // payload 长度 = 0
-        assertEquals(0, encoded.readByte());               // seq = 0
-        assertEquals(0, encoded.readableBytes());           // 没有多余数据
+        assertEquals(0, encoded.readUnsignedMediumLE()); // payload 长度 = 0
+        assertEquals(0, encoded.readByte()); // seq = 0
+        assertEquals(0, encoded.readableBytes()); // 没有多余数据
 
         empty.release();
         encoded.release();
@@ -237,8 +232,8 @@ public class MySQLPacketCodecTest {
     public void testLengthEncodedString() {
         ByteBuf buf = Unpooled.buffer();
         BufferUtils.writeLengthEncodedString(buf, "Hello World");
-        BufferUtils.writeLengthEncodedString(buf, null);         // NULL 标记
-        BufferUtils.writeLengthEncodedString(buf, "");           // 空串
+        BufferUtils.writeLengthEncodedString(buf, null); // NULL 标记
+        BufferUtils.writeLengthEncodedString(buf, ""); // 空串
 
         assertEquals("Hello World", BufferUtils.readLengthEncodedString(buf));
         assertNull(BufferUtils.readLengthEncodedString(buf));
@@ -259,7 +254,7 @@ public class MySQLPacketCodecTest {
     @Test
     public void testFixedLengthString() {
         ByteBuf buf = Unpooled.buffer();
-        BufferUtils.writeFixedLengthString(buf, "root", 16);  // 填到 16 字节
+        BufferUtils.writeFixedLengthString(buf, "root", 16); // 填到 16 字节
 
         byte[] raw = new byte[16];
         buf.readBytes(raw);

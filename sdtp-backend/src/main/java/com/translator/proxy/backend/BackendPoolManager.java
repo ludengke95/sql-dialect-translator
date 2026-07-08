@@ -1,17 +1,18 @@
 package com.translator.proxy.backend;
 
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.translator.core.config.TranslationConfig;
 import com.translator.proxy.core.handler.BackendRouter;
 import com.translator.proxy.core.handler.CommandHandler;
 import com.translator.proxy.core.session.FrontendSession;
 import com.translator.proxy.metrics.ReloadMetrics;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 /**
  * 多后端连接池管理器。
@@ -60,10 +61,11 @@ public class BackendPoolManager implements BackendRouter {
      * @param reloadQueueCapacity     reload 请求队列容量
      * @param reloadDrainTimeoutMs    reload drain 超时（毫秒）
      */
-    public BackendPoolManager(List<BackendEntry> backends,
-                               TranslationConfig defaultTranslationConfig,
-                               int reloadQueueCapacity,
-                               int reloadDrainTimeoutMs) {
+    public BackendPoolManager(
+            List<BackendEntry> backends,
+            TranslationConfig defaultTranslationConfig,
+            int reloadQueueCapacity,
+            int reloadDrainTimeoutMs) {
         this.defaultTranslationConfig = defaultTranslationConfig;
         this.reloadQueueCapacity = reloadQueueCapacity;
         this.reloadDrainTimeoutMs = reloadDrainTimeoutMs;
@@ -77,8 +79,12 @@ public class BackendPoolManager implements BackendRouter {
 
             ReloadableQueryProcessor rp = createReloadableProcessor(be);
             processorMap.put(name, rp);
-            log.info("Backend '{}': {} ({}), pool={}, kw={}, id={}",
-                    name, be.getJdbcUrl(), be.getDialect(), be.getMaxPoolSize(),
+            log.info(
+                    "Backend '{}': {} ({}), pool={}, kw={}, id={}",
+                    name,
+                    be.getJdbcUrl(),
+                    be.getDialect(),
+                    be.getMaxPoolSize(),
                     resolveTranslationConfig(be).getKeywordCase(),
                     resolveTranslationConfig(be).getIdentifierCase());
         }
@@ -222,8 +228,7 @@ public class BackendPoolManager implements BackendRouter {
         // 4. 如果是最初的默认后端，可能需要更新 defaultProcessor
         updateDefaultProcessor();
 
-        log.info("Backend '{}' reloaded (drained={}): {} ({})",
-                name, drained, be.getJdbcUrl(), be.getDialect());
+        log.info("Backend '{}' reloaded (drained={}): {} ({})", name, drained, be.getJdbcUrl(), be.getDialect());
         return true;
     }
 
@@ -245,8 +250,12 @@ public class BackendPoolManager implements BackendRouter {
     private CommandHandler.QueryProcessor createInnerProcessor(BackendEntry be) {
         // 创建原始 JDBC 后端处理器
         JdbcBackendQueryProcessor jdbcProcessor = JdbcBackendQueryProcessor.create(
-                be.getName(), be.getJdbcUrl(), be.getUsername(), be.getPassword(),
-                be.getMaxPoolSize(), be.getMinIdle());
+                be.getName(),
+                be.getJdbcUrl(),
+                be.getUsername(),
+                be.getPassword(),
+                be.getMaxPoolSize(),
+                be.getMinIdle());
 
         TranslationConfig tc = resolveTranslationConfig(be);
 
@@ -263,8 +272,7 @@ public class BackendPoolManager implements BackendRouter {
      */
     private ReloadableQueryProcessor createReloadableProcessor(BackendEntry be) {
         CommandHandler.QueryProcessor inner = createInnerProcessor(be);
-        return new ReloadableQueryProcessor(be.getName(), inner,
-                reloadQueueCapacity, reloadDrainTimeoutMs);
+        return new ReloadableQueryProcessor(be.getName(), inner, reloadQueueCapacity, reloadDrainTimeoutMs);
     }
 
     /**
@@ -273,9 +281,11 @@ public class BackendPoolManager implements BackendRouter {
     private TranslationConfig resolveTranslationConfig(BackendEntry be) {
         if (be.getKeywordCase() != null || be.getIdentifierCase() != null) {
             String kw = be.getKeywordCase() != null
-                    ? be.getKeywordCase() : defaultTranslationConfig.getKeywordCase().name();
+                    ? be.getKeywordCase()
+                    : defaultTranslationConfig.getKeywordCase().name();
             String id = be.getIdentifierCase() != null
-                    ? be.getIdentifierCase() : defaultTranslationConfig.getIdentifierCase().name();
+                    ? be.getIdentifierCase()
+                    : defaultTranslationConfig.getIdentifierCase().name();
             return new TranslationConfig()
                     .withKeywordCase(TranslationConfig.KeywordCase.valueOf(kw))
                     .withIdentifierCase(TranslationConfig.IdentifierCase.valueOf(id));
@@ -289,7 +299,9 @@ public class BackendPoolManager implements BackendRouter {
     private void updateDefaultProcessor() {
         if (!processorMap.isEmpty()) {
             defaultProcessor = processorMap.values().iterator().next();
-            log.info("Default backend updated to: '{}'", processorMap.keySet().iterator().next());
+            log.info(
+                    "Default backend updated to: '{}'",
+                    processorMap.keySet().iterator().next());
         } else {
             defaultProcessor = CommandHandler.QueryProcessor.NOOP;
             log.warn("No backends remaining, default processor is NOOP");

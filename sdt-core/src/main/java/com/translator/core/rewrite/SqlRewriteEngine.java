@@ -1,12 +1,13 @@
 package com.translator.core.rewrite;
 
-import com.translator.core.DialectType;
-import org.apache.calcite.sql.SqlNode;
-import org.apache.calcite.sql.util.SqlShuttle;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+
+import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.util.SqlShuttle;
+
+import com.translator.core.DialectType;
 
 /**
  * SQL 改写引擎。

@@ -1,11 +1,12 @@
 package com.translator.core.config;
 
-import com.translator.core.DialectType;
+import java.util.EnumMap;
+import java.util.Map;
+
 import org.apache.calcite.sql.SqlDialect;
 import org.apache.calcite.sql.dialect.*;
 
-import java.util.EnumMap;
-import java.util.Map;
+import com.translator.core.DialectType;
 
 /**
  * SQL 方言工厂。

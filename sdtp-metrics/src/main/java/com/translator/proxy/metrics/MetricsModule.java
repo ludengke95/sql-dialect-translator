@@ -1,14 +1,16 @@
 package com.translator.proxy.metrics;
 
-import com.translator.metrics.MetricsConfig;
-import com.translator.metrics.MetricsHttpServer;
-import io.prometheus.client.hotspot.DefaultExports;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.translator.metrics.MetricsConfig;
+import com.translator.metrics.MetricsHttpServer;
+
+import io.prometheus.client.hotspot.DefaultExports;
 
 /**
  * 指标模块生命周期管理器。
@@ -64,8 +66,7 @@ public class MetricsModule {
                 HikariMetricsTrackerFactory::refreshPoolGauges,
                 POOL_REFRESH_INTERVAL_SECONDS,
                 POOL_REFRESH_INTERVAL_SECONDS,
-                TimeUnit.SECONDS
-        );
+                TimeUnit.SECONDS);
 
         log.info("Prometheus metrics module started successfully");
     }

@@ -1,17 +1,18 @@
 package com.translator.jdbc;
 
+import java.sql.*;
+import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.Executor;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.translator.core.DialectType;
 import com.translator.core.SqlTranslator;
 import com.translator.core.config.TranslationConfig;
 import com.translator.core.metadata.JdbcMetadataProvider;
 import com.translator.metrics.ConnectionMetrics;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.sql.*;
-import java.util.Map;
-import java.util.Properties;
-import java.util.concurrent.Executor;
 
 /**
  * 翻译连接实现。
@@ -26,16 +27,12 @@ public class TranslatorConnection implements Connection, AutoCloseable {
     private final DialectType targetDialect;
     private final SqlTranslator translator;
 
-    public TranslatorConnection(Connection realConnection,
-                                DialectType sourceDialect,
-                                DialectType targetDialect) {
+    public TranslatorConnection(Connection realConnection, DialectType sourceDialect, DialectType targetDialect) {
         this(realConnection, sourceDialect, targetDialect, null);
     }
 
-    public TranslatorConnection(Connection realConnection,
-                                DialectType sourceDialect,
-                                DialectType targetDialect,
-                                TranslationConfig config) {
+    public TranslatorConnection(
+            Connection realConnection, DialectType sourceDialect, DialectType targetDialect, TranslationConfig config) {
         this.realConnection = realConnection;
         this.sourceDialect = sourceDialect;
         this.targetDialect = targetDialect;
@@ -77,90 +74,84 @@ public class TranslatorConnection implements Connection, AutoCloseable {
     @Override
     public CallableStatement prepareCall(String sql) throws SQLException {
         String translatedSql = translateSql(sql);
-        return new TranslatorCallableStatement(
-                realConnection.prepareCall(translatedSql), this, sql, translatedSql);
+        return new TranslatorCallableStatement(realConnection.prepareCall(translatedSql), this, sql, translatedSql);
     }
 
     @Override
-    public Statement createStatement(int resultSetType, int resultSetConcurrency)
+    public Statement createStatement(int resultSetType, int resultSetConcurrency) throws SQLException {
+        return new TranslatorStatement(realConnection.createStatement(resultSetType, resultSetConcurrency), this);
+    }
+
+    @Override
+    public PreparedStatement prepareStatement(String sql, int resultSetType, int resultSetConcurrency)
             throws SQLException {
-        return new TranslatorStatement(
-                realConnection.createStatement(resultSetType, resultSetConcurrency), this);
-    }
-
-    @Override
-    public PreparedStatement prepareStatement(String sql, int resultSetType,
-                                              int resultSetConcurrency) throws SQLException {
         String translatedSql = translateSql(sql);
         return new TranslatorPreparedStatement(
                 realConnection.prepareStatement(translatedSql, resultSetType, resultSetConcurrency),
-                this, sql, translatedSql);
+                this,
+                sql,
+                translatedSql);
     }
 
     @Override
-    public Statement createStatement(int resultSetType, int resultSetConcurrency,
-                                     int resultSetHoldability) throws SQLException {
+    public Statement createStatement(int resultSetType, int resultSetConcurrency, int resultSetHoldability)
+            throws SQLException {
         return new TranslatorStatement(
-                realConnection.createStatement(resultSetType, resultSetConcurrency,
-                        resultSetHoldability), this);
+                realConnection.createStatement(resultSetType, resultSetConcurrency, resultSetHoldability), this);
     }
 
     @Override
-    public PreparedStatement prepareStatement(String sql, int resultSetType,
-                                              int resultSetConcurrency,
-                                              int resultSetHoldability) throws SQLException {
+    public PreparedStatement prepareStatement(
+            String sql, int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
         String translatedSql = translateSql(sql);
         return new TranslatorPreparedStatement(
-                realConnection.prepareStatement(translatedSql, resultSetType, resultSetConcurrency,
-                        resultSetHoldability),
-                this, sql, translatedSql);
+                realConnection.prepareStatement(
+                        translatedSql, resultSetType, resultSetConcurrency, resultSetHoldability),
+                this,
+                sql,
+                translatedSql);
     }
 
     @Override
-    public PreparedStatement prepareStatement(String sql, int autoGeneratedKeys)
-            throws SQLException {
+    public PreparedStatement prepareStatement(String sql, int autoGeneratedKeys) throws SQLException {
         String translatedSql = translateSql(sql);
         return new TranslatorPreparedStatement(
-                realConnection.prepareStatement(translatedSql, autoGeneratedKeys),
-                this, sql, translatedSql);
+                realConnection.prepareStatement(translatedSql, autoGeneratedKeys), this, sql, translatedSql);
     }
 
     @Override
-    public PreparedStatement prepareStatement(String sql, int[] columnIndexes)
-            throws SQLException {
+    public PreparedStatement prepareStatement(String sql, int[] columnIndexes) throws SQLException {
         String translatedSql = translateSql(sql);
         return new TranslatorPreparedStatement(
-                realConnection.prepareStatement(translatedSql, columnIndexes),
-                this, sql, translatedSql);
+                realConnection.prepareStatement(translatedSql, columnIndexes), this, sql, translatedSql);
     }
 
     @Override
-    public PreparedStatement prepareStatement(String sql, String[] columnNames)
-            throws SQLException {
+    public PreparedStatement prepareStatement(String sql, String[] columnNames) throws SQLException {
         String translatedSql = translateSql(sql);
         return new TranslatorPreparedStatement(
-                realConnection.prepareStatement(translatedSql, columnNames),
-                this, sql, translatedSql);
+                realConnection.prepareStatement(translatedSql, columnNames), this, sql, translatedSql);
     }
 
     @Override
-    public CallableStatement prepareCall(String sql, int resultSetType,
-                                         int resultSetConcurrency) throws SQLException {
+    public CallableStatement prepareCall(String sql, int resultSetType, int resultSetConcurrency) throws SQLException {
         String translatedSql = translateSql(sql);
         return new TranslatorCallableStatement(
                 realConnection.prepareCall(translatedSql, resultSetType, resultSetConcurrency),
-                this, sql, translatedSql);
+                this,
+                sql,
+                translatedSql);
     }
 
     @Override
-    public CallableStatement prepareCall(String sql, int resultSetType,
-                                         int resultSetConcurrency,
-                                         int resultSetHoldability) throws SQLException {
+    public CallableStatement prepareCall(
+            String sql, int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
         String translatedSql = translateSql(sql);
         return new TranslatorCallableStatement(
-                realConnection.prepareCall(translatedSql, resultSetType, resultSetConcurrency,
-                        resultSetHoldability),
-                this, sql, translatedSql);
+                realConnection.prepareCall(translatedSql, resultSetType, resultSetConcurrency, resultSetHoldability),
+                this,
+                sql,
+                translatedSql);
     }
 
     // ===== 委托方法 =====

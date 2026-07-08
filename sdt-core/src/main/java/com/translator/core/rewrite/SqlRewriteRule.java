@@ -1,9 +1,10 @@
 package com.translator.core.rewrite;
 
-import com.translator.core.DialectType;
+import java.util.Set;
+
 import org.apache.calcite.sql.SqlNode;
 
-import java.util.Set;
+import com.translator.core.DialectType;
 
 /**
  * SQL 改写规则 SPI 接口。

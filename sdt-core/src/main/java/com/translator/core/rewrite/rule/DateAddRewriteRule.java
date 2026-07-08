@@ -1,16 +1,17 @@
 package com.translator.core.rewrite.rule;
 
-import com.translator.core.DialectType;
-import com.translator.core.rewrite.FunctionRewriteRule;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.dialect.AnsiSqlDialect;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.SqlTypeName;
 
-import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import com.translator.core.DialectType;
+import com.translator.core.rewrite.FunctionRewriteRule;
 
 /**
  * MySQL DATE_ADD/ADDDATE/DATE_SUB/SUBDATE 改写为 PostgreSQL TIMESTAMP + INTERVAL 形式。
@@ -20,11 +21,11 @@ import java.util.regex.Pattern;
  */
 public class DateAddRewriteRule extends FunctionRewriteRule {
 
-    private static final Set<String> FUNC_NAMES = Collections.unmodifiableSet(
-            new HashSet<>(Arrays.asList("DATE_ADD", "ADDDATE", "DATE_SUB", "SUBDATE")));
+    private static final Set<String> FUNC_NAMES =
+            Collections.unmodifiableSet(new HashSet<>(Arrays.asList("DATE_ADD", "ADDDATE", "DATE_SUB", "SUBDATE")));
 
-    private static final Pattern INTERVAL_PATTERN = Pattern.compile(
-            "INTERVAL?\\s+(-?\\s*\\d+)\\s+(\\w+)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern INTERVAL_PATTERN =
+            Pattern.compile("INTERVAL?\\s+(-?\\s*\\d+)\\s+(\\w+)", Pattern.CASE_INSENSITIVE);
 
     @Override
     protected Set<String> getFunctionNames() {
@@ -57,10 +58,7 @@ public class DateAddRewriteRule extends FunctionRewriteRule {
                 SqlParserPos.ZERO,
                 firstOperand,
                 new SqlDataTypeSpec(
-                        new SqlBasicTypeNameSpec(SqlTypeName.TIMESTAMP, SqlParserPos.ZERO),
-                        SqlParserPos.ZERO
-                )
-        );
+                        new SqlBasicTypeNameSpec(SqlTypeName.TIMESTAMP, SqlParserPos.ZERO), SqlParserPos.ZERO));
 
         // 2. 将第二个参数转换为 PostgreSQL 对应的字面量字符串
         SqlNode rightNode = null;
@@ -69,7 +67,9 @@ public class DateAddRewriteRule extends FunctionRewriteRule {
         // 无论 secondOperand 内部是何种 AST 结构（SqlIntervalLiteral 或是带一元负号的 SqlCall），
         // 都可以直接转为 SQL 字符串进行正则模式清洗提取，极具强壮性。
         try {
-            String sql = secondOperand.toSqlString(c -> c.withDialect(AnsiSqlDialect.DEFAULT)).getSql();
+            String sql = secondOperand
+                    .toSqlString(c -> c.withDialect(AnsiSqlDialect.DEFAULT))
+                    .getSql();
             sql = sql.replaceAll("['\"]", "").replaceAll("\\s+", " ").trim();
 
             Matcher matcher = INTERVAL_PATTERN.matcher(sql);
@@ -102,10 +102,6 @@ public class DateAddRewriteRule extends FunctionRewriteRule {
         }
 
         // 3. 构建二元 PLUS 节点
-        return SqlStdOperatorTable.PLUS.createCall(
-                call.getParserPosition(),
-                castNode,
-                rightNode
-        );
+        return SqlStdOperatorTable.PLUS.createCall(call.getParserPosition(), castNode, rightNode);
     }
 }

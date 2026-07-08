@@ -1,18 +1,19 @@
 package com.translator.proxy.backend.mapper;
 
-import com.translator.proxy.core.handler.CommandHandler;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.translator.metrics.BackendMetrics;
 import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
 import com.translator.proxy.protocol.constant.ServerStatus;
 import com.translator.proxy.protocol.util.BufferUtils;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
 
 /**
  * JDBC ResultSet → MySQL 线协议包编码器。
@@ -45,8 +46,7 @@ public final class ResultSetEncoder {
      * @param seqGen      sequence ID 生成器（从包 1 开始，每次递增）
      * @param backendName 后端名称（用于指标打点），可为 null
      */
-    public static void encodeAndWrite(ChannelHandlerContext ctx, ResultSet rs, SeqGenerator seqGen,
-                                       String backendName)
+    public static void encodeAndWrite(ChannelHandlerContext ctx, ResultSet rs, SeqGenerator seqGen, String backendName)
             throws SQLException {
 
         ResultSetMetaData meta = rs.getMetaData();
@@ -63,8 +63,11 @@ public final class ResultSetEncoder {
         // 2. Column Definition Packets
         for (int i = 1; i <= columnCount; i++) {
             ByteBuf colDef = buildColumnDef(ctx, meta, i);
-            log.debug("ColDef[{}] packet: {} bytes (seq={})",
-                    meta.getColumnLabel(i), colDef.readableBytes(), seqGen.peek());
+            log.debug(
+                    "ColDef[{}] packet: {} bytes (seq={})",
+                    meta.getColumnLabel(i),
+                    colDef.readableBytes(),
+                    seqGen.peek());
             ctx.write(new MySQLPacketEncoder.OutgoingPacket(colDef, seqGen.next()));
         }
 
@@ -124,8 +127,7 @@ public final class ResultSetEncoder {
 
     // ==================== Column Definition Builder ====================
 
-    private static ByteBuf buildColumnDef(ChannelHandlerContext ctx,
-                                           ResultSetMetaData meta, int colIndex)
+    private static ByteBuf buildColumnDef(ChannelHandlerContext ctx, ResultSetMetaData meta, int colIndex)
             throws SQLException {
         ByteBuf buf = ctx.alloc().buffer(128);
 
@@ -173,10 +175,8 @@ public final class ResultSetEncoder {
 
     // ==================== Text Row Builder ====================
 
-    private static ByteBuf buildTextRow(ChannelHandlerContext ctx,
-                                         ResultSet rs, int columnCount,
-                                         ResultSetMetaData meta)
-            throws SQLException {
+    private static ByteBuf buildTextRow(
+            ChannelHandlerContext ctx, ResultSet rs, int columnCount, ResultSetMetaData meta) throws SQLException {
         ByteBuf buf = ctx.alloc().buffer(256);
 
         for (int i = 1; i <= columnCount; i++) {
@@ -197,9 +197,9 @@ public final class ResultSetEncoder {
 
     private static ByteBuf buildEof(ChannelHandlerContext ctx) {
         ByteBuf buf = ctx.alloc().buffer(5);
-        buf.writeByte(0xFE);                                    // EOF header
-        buf.writeShortLE(0);                                    // warnings
-        buf.writeShortLE(ServerStatus.SERVER_STATUS_AUTOCOMMIT);// status_flags
+        buf.writeByte(0xFE); // EOF header
+        buf.writeShortLE(0); // warnings
+        buf.writeShortLE(ServerStatus.SERVER_STATUS_AUTOCOMMIT); // status_flags
         return buf;
     }
 

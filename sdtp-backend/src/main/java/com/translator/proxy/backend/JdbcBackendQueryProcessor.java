@@ -1,19 +1,21 @@
 package com.translator.proxy.backend;
 
-import com.translator.proxy.backend.mapper.ResultSetEncoder;
-import com.translator.proxy.core.handler.CommandHandler;
-import com.translator.proxy.core.session.FrontendSession;
-import com.translator.metrics.BackendMetrics;
-import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
-import com.translator.proxy.core.handler.AuthHandler;
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
-import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelHandlerContext;
+import java.sql.*;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.*;
+import com.translator.metrics.BackendMetrics;
+import com.translator.proxy.backend.mapper.ResultSetEncoder;
+import com.translator.proxy.core.handler.AuthHandler;
+import com.translator.proxy.core.handler.CommandHandler;
+import com.translator.proxy.core.session.FrontendSession;
+import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandlerContext;
 
 /**
  * 基于 JDBC 的后端查询处理器。
@@ -39,27 +41,25 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
     /**
      * 工厂方法：根据配置创建处理器。
      */
-    public static JdbcBackendQueryProcessor create(String jdbcUrl, String username,
-                                                    String password, int maxPoolSize,
-                                                    int minIdle) {
+    public static JdbcBackendQueryProcessor create(
+            String jdbcUrl, String username, String password, int maxPoolSize, int minIdle) {
         return create(null, jdbcUrl, username, password, maxPoolSize, minIdle);
     }
 
     /**
      * 工厂方法：根据配置创建处理器（带后端名称，用于指标打点）。
      */
-    public static JdbcBackendQueryProcessor create(String backendName, String jdbcUrl,
-                                                    String username, String password,
-                                                    int maxPoolSize, int minIdle) {
+    public static JdbcBackendQueryProcessor create(
+            String backendName, String jdbcUrl, String username, String password, int maxPoolSize, int minIdle) {
         HikariConfig hikariConfig = new HikariConfig();
         hikariConfig.setJdbcUrl(jdbcUrl);
         hikariConfig.setUsername(username);
         hikariConfig.setPassword(password);
         hikariConfig.setMaximumPoolSize(maxPoolSize);
         hikariConfig.setMinimumIdle(minIdle);
-        hikariConfig.setConnectionTimeout(10000);    // 10s
-        hikariConfig.setIdleTimeout(600000);          // 10min
-        hikariConfig.setMaxLifetime(1800000);         // 30min
+        hikariConfig.setConnectionTimeout(10000); // 10s
+        hikariConfig.setIdleTimeout(600000); // 10min
+        hikariConfig.setMaxLifetime(1800000); // 30min
 
         // 关键：设置事务为只读 + 自动提交（配合流式读取）
         hikariConfig.setReadOnly(true);
@@ -93,7 +93,7 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
         // JDBC 操作在 CommandHandler 所在的业务线程执行
         // （CommandHandler 已通过 DefaultEventExecutorGroup 与 IO 线程解耦）
         try (Connection conn = dataSource.getConnection();
-             Statement stmt = createStatement(conn)) {
+                Statement stmt = createStatement(conn)) {
 
             log.debug("Executing SQL: {}", sql);
 
@@ -154,13 +154,14 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
         int errorCode = e.getErrorCode();
         String sqlState = e.getSQLState();
         String message = e.getMessage();
-        writeError(ctx, errorCode != 0 ? errorCode : 1105,
+        writeError(
+                ctx,
+                errorCode != 0 ? errorCode : 1105,
                 sqlState != null ? sqlState : "HY000",
                 message != null ? message : "Unknown SQL error");
     }
 
-    private void writeError(ChannelHandlerContext ctx, int errorCode,
-                             String sqlState, String message) {
+    private void writeError(ChannelHandlerContext ctx, int errorCode, String sqlState, String message) {
         ByteBuf err = AuthHandler.buildErrPacket(ctx.alloc(), errorCode, sqlState, message);
         ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(err, (byte) 1));
     }

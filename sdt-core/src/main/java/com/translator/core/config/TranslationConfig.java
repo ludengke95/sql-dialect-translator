@@ -65,8 +65,7 @@ public class TranslationConfig {
     private ValidationMode validationMode = ValidationMode.STRICT;
     private int maxTables = 100;
 
-    public TranslationConfig() {
-    }
+    public TranslationConfig() {}
 
     public TranslationConfig(KeywordCase keywordCase, IdentifierCase identifierCase) {
         this.keywordCase = keywordCase;
@@ -79,7 +78,12 @@ public class TranslationConfig {
         this.enableValidation = enableValidation;
     }
 
-    public TranslationConfig(KeywordCase keywordCase, IdentifierCase identifierCase, boolean enableValidation, ValidationMode validationMode, int maxTables) {
+    public TranslationConfig(
+            KeywordCase keywordCase,
+            IdentifierCase identifierCase,
+            boolean enableValidation,
+            ValidationMode validationMode,
+            int maxTables) {
         this.keywordCase = keywordCase;
         this.identifierCase = identifierCase;
         this.enableValidation = enableValidation;
@@ -154,12 +158,11 @@ public class TranslationConfig {
 
     @Override
     public String toString() {
-        return "TranslationConfig{" +
-                "keywordCase=" + keywordCase +
-                ", identifierCase=" + identifierCase +
-                ", enableValidation=" + enableValidation +
-                ", validationMode=" + validationMode +
-                ", maxTables=" + maxTables +
-                '}';
+        return "TranslationConfig{" + "keywordCase="
+                + keywordCase + ", identifierCase="
+                + identifierCase + ", enableValidation="
+                + enableValidation + ", validationMode="
+                + validationMode + ", maxTables="
+                + maxTables + '}';
     }
 }

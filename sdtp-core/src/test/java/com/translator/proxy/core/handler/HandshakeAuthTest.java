@@ -1,21 +1,21 @@
 package com.translator.proxy.core.handler;
 
+import static org.junit.Assert.*;
+
+import org.junit.Test;
+
+import com.translator.proxy.core.session.FrontendSession;
 import com.translator.proxy.protocol.codec.MySQLPacketDecoder;
 import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
 import com.translator.proxy.protocol.constant.CapabilityFlags;
 import com.translator.proxy.protocol.constant.CommandType;
 import com.translator.proxy.protocol.util.BufferUtils;
 import com.translator.proxy.protocol.util.MySQLAuth;
-import com.translator.proxy.core.session.FrontendSession;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.embedded.EmbeddedChannel;
-import org.junit.Test;
-
-import java.nio.charset.StandardCharsets;
-
-import static org.junit.Assert.*;
 
 /**
  * 握手+认证集成测试：模拟客户端连接→握手→认证→命令的完整流程。
@@ -37,11 +37,8 @@ public class HandshakeAuthTest {
     @Test
     public void testFullHandshakeAndAuth() {
         // 创建服务端 EmbeddedChannel
-        EmbeddedChannel channel = new EmbeddedChannel(
-                new MySQLPacketDecoder(),
-                new MySQLPacketEncoder(),
-                new TestHandshakeHandler()
-        );
+        EmbeddedChannel channel =
+                new EmbeddedChannel(new MySQLPacketDecoder(), new MySQLPacketEncoder(), new TestHandshakeHandler());
 
         // Step 1: 服务端应发送 HandshakeV10（Encoder 已编码为 ByteBuf）
         ByteBuf handshakeRaw = channel.readOutbound();
@@ -66,18 +63,18 @@ public class HandshakeAuthTest {
         handshakePayload.readBytes(scramblePart1);
 
         // 跳过 filler + lower cap + charset + status + upper cap + auth-len + reserved
-        handshakePayload.skipBytes(1);  // filler
-        handshakePayload.skipBytes(2);  // lower capability
-        handshakePayload.skipBytes(1);  // charset
-        handshakePayload.skipBytes(2);  // status
-        handshakePayload.skipBytes(2);  // upper capability
-        handshakePayload.skipBytes(1);  // auth len (21)
+        handshakePayload.skipBytes(1); // filler
+        handshakePayload.skipBytes(2); // lower capability
+        handshakePayload.skipBytes(1); // charset
+        handshakePayload.skipBytes(2); // status
+        handshakePayload.skipBytes(2); // upper capability
+        handshakePayload.skipBytes(1); // auth len (21)
         handshakePayload.skipBytes(10); // reserved
 
         // auth-plugin-data-part-2 (13 bytes, last is NUL)
         byte[] scramblePart2 = new byte[12];
         handshakePayload.readBytes(scramblePart2);
-        handshakePayload.skipBytes(1);  // NUL terminator
+        handshakePayload.skipBytes(1); // NUL terminator
 
         // 拼接完整 scramble (20 bytes)
         byte[] handshakeScramble = new byte[20];
@@ -93,8 +90,7 @@ public class HandshakeAuthTest {
         byte[] clientToken = MySQLAuth.scramble411Sha256(TEST_PASSWORD, handshakeScramble);
 
         ByteBuf authPayload = buildHandshakeResponse41(
-                CapabilityFlags.SERVER_DEFAULT_CAPABILITIES,
-                TEST_USER, clientToken, null, "caching_sha2_password");
+                CapabilityFlags.SERVER_DEFAULT_CAPABILITIES, TEST_USER, clientToken, null, "caching_sha2_password");
         // 包装为完整 MySQL 包（4字节头 + payload），seq=1（客户端响应用 seq=1）
         ByteBuf authRequest = buildClientPacket(authPayload, (byte) 1);
         channel.writeInbound(authRequest);
@@ -178,11 +174,8 @@ public class HandshakeAuthTest {
 
     @Test
     public void testMySQL57NativeAuth() {
-        EmbeddedChannel channel = new EmbeddedChannel(
-                new MySQLPacketDecoder(),
-                new MySQLPacketEncoder(),
-                new TestHandshakeHandler()
-        );
+        EmbeddedChannel channel =
+                new EmbeddedChannel(new MySQLPacketDecoder(), new MySQLPacketEncoder(), new TestHandshakeHandler());
 
         // Step 1: 读取 HandshakeV10
         ByteBuf handshakeRaw = channel.readOutbound();
@@ -211,8 +204,7 @@ public class HandshakeAuthTest {
         byte[] nativeToken = MySQLAuth.scramble411(TEST_PASSWORD, scramble);
 
         ByteBuf authPayload = buildHandshakeResponse41(
-                CapabilityFlags.SERVER_DEFAULT_CAPABILITIES,
-                TEST_USER, nativeToken, null, "mysql_native_password");
+                CapabilityFlags.SERVER_DEFAULT_CAPABILITIES, TEST_USER, nativeToken, null, "mysql_native_password");
         ByteBuf authRequest = buildClientPacket(authPayload, (byte) 1);
         channel.writeInbound(authRequest);
 
@@ -241,11 +233,8 @@ public class HandshakeAuthTest {
 
     @Test
     public void testMySQL57NullPlugin() {
-        EmbeddedChannel channel = new EmbeddedChannel(
-                new MySQLPacketDecoder(),
-                new MySQLPacketEncoder(),
-                new TestHandshakeHandler()
-        );
+        EmbeddedChannel channel =
+                new EmbeddedChannel(new MySQLPacketDecoder(), new MySQLPacketEncoder(), new TestHandshakeHandler());
 
         // 读取 HandshakeV10
         ByteBuf handshakeRaw = channel.readOutbound();
@@ -299,11 +288,8 @@ public class HandshakeAuthTest {
 
     @Test
     public void testCachingSha2WrongPassword() {
-        EmbeddedChannel channel = new EmbeddedChannel(
-                new MySQLPacketDecoder(),
-                new MySQLPacketEncoder(),
-                new TestHandshakeHandler()
-        );
+        EmbeddedChannel channel =
+                new EmbeddedChannel(new MySQLPacketDecoder(), new MySQLPacketEncoder(), new TestHandshakeHandler());
 
         // 读取 HandshakeV10
         ByteBuf hpRaw = channel.readOutbound();
@@ -327,8 +313,7 @@ public class HandshakeAuthTest {
         byte[] wrongToken = MySQLAuth.scramble411Sha256("wrong_password", scramble);
 
         ByteBuf authPayload = buildHandshakeResponse41(
-                CapabilityFlags.SERVER_DEFAULT_CAPABILITIES,
-                TEST_USER, wrongToken, null, "caching_sha2_password");
+                CapabilityFlags.SERVER_DEFAULT_CAPABILITIES, TEST_USER, wrongToken, null, "caching_sha2_password");
         ByteBuf authRequest = buildClientPacket(authPayload, (byte) 1);
         channel.writeInbound(authRequest);
 
@@ -372,11 +357,8 @@ public class HandshakeAuthTest {
 
     @Test
     public void testNativePasswordWrongPassword() {
-        EmbeddedChannel channel = new EmbeddedChannel(
-                new MySQLPacketDecoder(),
-                new MySQLPacketEncoder(),
-                new TestHandshakeHandler()
-        );
+        EmbeddedChannel channel =
+                new EmbeddedChannel(new MySQLPacketDecoder(), new MySQLPacketEncoder(), new TestHandshakeHandler());
 
         // 读取 HandshakeV10
         ByteBuf hpRaw = channel.readOutbound();
@@ -400,8 +382,7 @@ public class HandshakeAuthTest {
         byte[] wrongToken = MySQLAuth.scramble411("wrong_password", scramble);
 
         ByteBuf authPayload = buildHandshakeResponse41(
-                CapabilityFlags.SERVER_DEFAULT_CAPABILITIES,
-                TEST_USER, wrongToken, null, "mysql_native_password");
+                CapabilityFlags.SERVER_DEFAULT_CAPABILITIES, TEST_USER, wrongToken, null, "mysql_native_password");
         ByteBuf authRequest = buildClientPacket(authPayload, (byte) 1);
         channel.writeInbound(authRequest);
 
@@ -434,8 +415,8 @@ public class HandshakeAuthTest {
     /**
      * 构造 HandshakeResponse41（含 CLIENT_PLUGIN_AUTH）。
      */
-    private ByteBuf buildHandshakeResponse41(int capabilities, String username,
-                                              byte[] authResponse, String database, String authPluginName) {
+    private ByteBuf buildHandshakeResponse41(
+            int capabilities, String username, byte[] authResponse, String database, String authPluginName) {
         ByteBuf buf = Unpooled.buffer(128);
 
         // 1. capability flags (4 bytes)
@@ -485,8 +466,8 @@ public class HandshakeAuthTest {
     /**
      * 构造 HandshakeResponse41（不含 CLIENT_PLUGIN_AUTH，模拟旧版客户端）。
      */
-    private ByteBuf buildHandshakeResponse41NoPlugin(int capabilities, String username,
-                                                      byte[] authResponse, String database) {
+    private ByteBuf buildHandshakeResponse41NoPlugin(
+            int capabilities, String username, byte[] authResponse, String database) {
         ByteBuf buf = Unpooled.buffer(128);
         buf.writeIntLE(capabilities);
         buf.writeIntLE(0x01000000);
@@ -526,8 +507,7 @@ public class HandshakeAuthTest {
             ByteBuf handshake = HandshakeHandler.buildHandshakeV10(ctx.alloc(), connectionId, scramble);
             ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(handshake, (byte) 0));
 
-            ctx.pipeline().replace(this, "authHandler",
-                    new AuthHandler(TEST_USER, TEST_PASSWORD));
+            ctx.pipeline().replace(this, "authHandler", new AuthHandler(TEST_USER, TEST_PASSWORD));
         }
     }
 }

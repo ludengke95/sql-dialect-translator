@@ -1,10 +1,11 @@
 package com.translator.jdbc;
 
-import com.translator.core.DialectType;
+import java.util.Properties;
+
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.Properties;
+import com.translator.core.DialectType;
 
 /**
  * JdbcUrlParser 测试。
@@ -95,12 +96,14 @@ public class JdbcUrlParserTest {
     @Test
     public void testParseMySqlToOracleThinTnsDescriptor() {
         // TNS Descriptor 格式：oracle:(DESCRIPTION=...)
-        String url = "jdbc:translator:mysql:oracle:(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=192.168.1.1)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=orcl)))";
+        String url =
+                "jdbc:translator:mysql:oracle:(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=192.168.1.1)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=orcl)))";
         JdbcUrlInfo info = JdbcUrlParser.parse(url, new Properties());
 
         Assert.assertEquals(DialectType.MYSQL, info.getSourceDialect());
         Assert.assertEquals(DialectType.ORACLE, info.getTargetDialect());
-        Assert.assertEquals("jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=192.168.1.1)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=orcl)))",
+        Assert.assertEquals(
+                "jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=192.168.1.1)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=orcl)))",
                 info.getRealUrl());
     }
 

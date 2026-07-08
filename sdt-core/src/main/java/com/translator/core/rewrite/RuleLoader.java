@@ -1,10 +1,10 @@
 package com.translator.core.rewrite;
 
-import com.translator.core.DialectType;
-
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+
+import com.translator.core.DialectType;
 
 /**
  * 规则加载器（包级可见）。
@@ -63,13 +63,10 @@ final class RuleLoader {
      * 筛选方言匹配的规则，结果包装为不可变列表。
      */
     private static List<SqlRewriteRule> filterByDialect(
-            List<SqlRewriteRule> allRules,
-            DialectType source,
-            DialectType target) {
+            List<SqlRewriteRule> allRules, DialectType source, DialectType target) {
         List<SqlRewriteRule> matched = new ArrayList<>();
         for (SqlRewriteRule rule : allRules) {
-            if (matchesDialect(rule.getSourceDialects(), source)
-                    && matchesDialect(rule.getTargetDialects(), target)) {
+            if (matchesDialect(rule.getSourceDialects(), source) && matchesDialect(rule.getTargetDialects(), target)) {
                 matched.add(rule);
             }
         }

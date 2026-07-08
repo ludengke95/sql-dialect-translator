@@ -1,6 +1,7 @@
 package com.translator.proxy.core.handler;
 
 import com.translator.proxy.core.session.FrontendSession;
+
 import io.netty.util.AttributeKey;
 
 /**
@@ -11,6 +12,5 @@ public final class SessionAttribute {
     private SessionAttribute() {}
 
     /** FrontendSession 在 Channel 上的 AttributeKey */
-    public static final AttributeKey<FrontendSession> SESSION_KEY =
-            AttributeKey.valueOf("frontendSession");
+    public static final AttributeKey<FrontendSession> SESSION_KEY = AttributeKey.valueOf("frontendSession");
 }

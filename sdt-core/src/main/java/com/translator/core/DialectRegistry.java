@@ -19,23 +19,28 @@ public class DialectRegistry {
 
     static {
         // PostgreSQL 方言组（10 个库）
-        register(DialectType.POSTGRESQL,
-                "PostgreSQL", "HighGo", "瀚高",
-                "KingbaseES", "PolarDB PG", "Greenplum",
-                "TimescaleDB", "PostGIS", "IvorySQL",
-                "QuestDB", "KaiwuDB");
+        register(
+                DialectType.POSTGRESQL,
+                "PostgreSQL",
+                "HighGo",
+                "瀚高",
+                "KingbaseES",
+                "PolarDB PG",
+                "Greenplum",
+                "TimescaleDB",
+                "PostGIS",
+                "IvorySQL",
+                "QuestDB",
+                "KaiwuDB");
 
         // MySQL 方言组（3 个库）
-        register(DialectType.MYSQL,
-                "MySQL", "Doris", "PolarDB MySQL");
+        register(DialectType.MYSQL, "MySQL", "Doris", "PolarDB MySQL");
 
         // Oracle 方言组（4 个库）
-        register(DialectType.ORACLE,
-                "Oracle", "Oracle RAC", "Oracle Spatial", "DM", "达梦");
+        register(DialectType.ORACLE, "Oracle", "Oracle RAC", "Oracle Spatial", "DM", "达梦");
 
         // SQL Server 方言组（1 个库）
-        register(DialectType.SQLSERVER,
-                "SQL Server", "Microsoft SQL Server");
+        register(DialectType.SQLSERVER, "SQL Server", "Microsoft SQL Server");
 
         // JDBC URL 前缀覆盖（仅非标准格式需注册）
         // 默认前缀：jdbc:<子协议>://

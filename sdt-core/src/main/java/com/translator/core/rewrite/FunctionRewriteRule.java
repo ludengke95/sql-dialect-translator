@@ -1,9 +1,9 @@
 package com.translator.core.rewrite;
 
+import java.util.Set;
+
 import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlNode;
-
-import java.util.Set;
 
 /**
  * 函数改写的便捷基类。

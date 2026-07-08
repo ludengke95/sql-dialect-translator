@@ -18,24 +18,20 @@ public final class SystemVariableInterceptor {
     private SystemVariableInterceptor() {}
 
     /** SELECT @@variable_name [LIMIT n] */
-    private static final Pattern SELECT_AT_AT = Pattern.compile(
-            "^\\s*SELECT\\s+@@(\\w+)(?:\\s+LIMIT\\s+\\d+)?\\s*$",
-            Pattern.CASE_INSENSITIVE);
+    private static final Pattern SELECT_AT_AT =
+            Pattern.compile("^\\s*SELECT\\s+@@(\\w+)(?:\\s+LIMIT\\s+\\d+)?\\s*$", Pattern.CASE_INSENSITIVE);
 
     /** SHOW VARIABLES LIKE 'xxx' */
-    private static final Pattern SHOW_VARIABLES_LIKE = Pattern.compile(
-            "^\\s*SHOW\\s+VARIABLES\\s+LIKE\\s+'([^']*)'\\s*$",
-            Pattern.CASE_INSENSITIVE);
+    private static final Pattern SHOW_VARIABLES_LIKE =
+            Pattern.compile("^\\s*SHOW\\s+VARIABLES\\s+LIKE\\s+'([^']*)'\\s*$", Pattern.CASE_INSENSITIVE);
 
     /** SELECT DATABASE() */
-    private static final Pattern SELECT_DATABASE = Pattern.compile(
-            "^\\s*SELECT\\s+DATABASE\\s*\\(\\s*\\)\\s*$",
-            Pattern.CASE_INSENSITIVE);
+    private static final Pattern SELECT_DATABASE =
+            Pattern.compile("^\\s*SELECT\\s+DATABASE\\s*\\(\\s*\\)\\s*$", Pattern.CASE_INSENSITIVE);
 
     /** SHOW WARNINGS — mysql CLI 常用，目标库可能不支持 */
-    private static final Pattern SHOW_WARNINGS = Pattern.compile(
-            "^\\s*SHOW\\s+WARNINGS\\s*$",
-            Pattern.CASE_INSENSITIVE);
+    private static final Pattern SHOW_WARNINGS =
+            Pattern.compile("^\\s*SHOW\\s+WARNINGS\\s*$", Pattern.CASE_INSENSITIVE);
 
     /**
      * 多列系统变量查询：SELECT @@session.var1 AS alias1, @@var2 AS alias2, ...
@@ -65,7 +61,9 @@ public final class SystemVariableInterceptor {
         SYSTEM_VARIABLES.put("max_allowed_packet", "16777216");
         SYSTEM_VARIABLES.put("wait_timeout", "28800");
         SYSTEM_VARIABLES.put("interactive_timeout", "28800");
-        SYSTEM_VARIABLES.put("sql_mode", "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION");
+        SYSTEM_VARIABLES.put(
+                "sql_mode",
+                "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION");
         SYSTEM_VARIABLES.put("lower_case_table_names", "1");
         SYSTEM_VARIABLES.put("license", "GPL");
         SYSTEM_VARIABLES.put("innodb_version", "5.7.38");
@@ -143,8 +141,7 @@ public final class SystemVariableInterceptor {
             String varName = m.group(1).toLowerCase();
             String value = SYSTEM_VARIABLES.get(varName);
             if (value != null) {
-                return new InterceptResult("Variable_name", "Value",
-                        varName, value);
+                return new InterceptResult("Variable_name", "Value", varName, value);
             }
         }
 
@@ -183,9 +180,7 @@ public final class SystemVariableInterceptor {
         List<ColumnInfo> columns = new ArrayList<>();
 
         // 匹配所有 @@session.var_name 或 @@var_name 模式
-        Pattern varPattern = Pattern.compile(
-                "@@(?:session\\.)?(\\w+)",
-                Pattern.CASE_INSENSITIVE);
+        Pattern varPattern = Pattern.compile("@@(?:session\\.)?(\\w+)", Pattern.CASE_INSENSITIVE);
         Matcher m = varPattern.matcher(sql);
 
         while (m.find()) {

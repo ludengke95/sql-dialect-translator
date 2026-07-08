@@ -1,13 +1,14 @@
 package com.translator.core.rewrite.rule;
 
-import com.translator.core.DialectType;
-import com.translator.core.rewrite.FunctionRewriteRule;
+import java.util.Collections;
+import java.util.Set;
+
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
 
-import java.util.Collections;
-import java.util.Set;
+import com.translator.core.DialectType;
+import com.translator.core.rewrite.FunctionRewriteRule;
 
 /**
  * GETDATE() → CURRENT_TIMESTAMP 改写规则（SQL Server → 其他方言）。

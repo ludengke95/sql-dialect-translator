@@ -1,8 +1,5 @@
 package com.translator.core.metadata;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
@@ -14,6 +11,9 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * 基于 JDBC 连接的元数据提供者。
  * 支持按需（Lazy-loading）加载、大小写自适应、防拖垮的最大表数量限制。
@@ -24,7 +24,7 @@ public class JdbcMetadataProvider implements MetadataProvider {
     private final Connection connection;
     private final int maxTables;
     private final Map<String, TableMetadata> cache = new ConcurrentHashMap<>();
-    
+
     // 所有已知的表名集合，支持大小写自适应
     private final Set<String> allTableNames = new CopyOnWriteArraySet<>();
     private volatile boolean initialized = false;
@@ -43,7 +43,7 @@ public class JdbcMetadataProvider implements MetadataProvider {
         if (tableName == null || tableName.trim().isEmpty()) {
             return null;
         }
-        
+
         // 快速判断表名是否是数据库中真实存在的表（排除大小写不匹配干扰）
         if (!getTableNames().contains(tableName)) {
             return null;
@@ -103,7 +103,7 @@ public class JdbcMetadataProvider implements MetadataProvider {
                     }
 
                     // 获取当前 catalog/schema 下的所有表和视图，快速加载表名
-                    try (ResultSet rs = metaData.getTables(catalog, schema, "%", new String[]{"TABLE", "VIEW"})) {
+                    try (ResultSet rs = metaData.getTables(catalog, schema, "%", new String[] {"TABLE", "VIEW"})) {
                         while (rs.next()) {
                             String tableName = rs.getString("TABLE_NAME");
                             if (tableName != null) {
@@ -180,7 +180,8 @@ public class JdbcMetadataProvider implements MetadataProvider {
         }
     }
 
-    private List<ColumnMetadata> fetchColumns(DatabaseMetaData metaData, String catalog, String schema, String tableName) throws SQLException {
+    private List<ColumnMetadata> fetchColumns(
+            DatabaseMetaData metaData, String catalog, String schema, String tableName) throws SQLException {
         List<ColumnMetadata> columns = new ArrayList<>();
         try (ResultSet rs = metaData.getColumns(catalog, schema, tableName, "%")) {
             readColumnsFromResultSet(rs, columns);

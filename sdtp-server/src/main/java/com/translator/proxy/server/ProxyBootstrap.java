@@ -1,18 +1,25 @@
 package com.translator.proxy.server;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.translator.core.config.TranslationConfig;
+import com.translator.metrics.MetricsConfig;
 import com.translator.proxy.backend.BackendEntry;
 import com.translator.proxy.backend.BackendPoolManager;
-import com.translator.proxy.metrics.MetricsModule;
-import com.translator.metrics.MetricsConfig;
 import com.translator.proxy.core.handler.BackendRouter;
 import com.translator.proxy.core.handler.CommandHandler;
 import com.translator.proxy.core.handler.HandshakeHandler;
+import com.translator.proxy.metrics.MetricsModule;
 import com.translator.proxy.protocol.codec.MySQLPacketDecoder;
 import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
 import com.translator.proxy.server.config.ConfigLoader;
 import com.translator.proxy.server.config.ConfigWatcher;
 import com.translator.proxy.server.config.ProxyConfig;
+
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -20,11 +27,6 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * MySQL Proxy 启动引导类（多后端版）。
@@ -47,6 +49,7 @@ public class ProxyBootstrap {
     private BackendPoolManager backendPoolManager;
     /** 配置文件监听器 */
     private MetricsModule metricsModule;
+
     private ConfigWatcher configWatcher;
 
     public ProxyBootstrap(ProxyConfig config) {
@@ -79,8 +82,8 @@ public class ProxyBootstrap {
         }
 
         // 初始化多后端连接池管理器（传入 reload 参数）
-        BackendPoolManager bpm = new BackendPoolManager(backends, defaultTranslationConfig,
-                config.getReloadQueueCapacity(), config.getReloadDrainTimeoutMs());
+        BackendPoolManager bpm = new BackendPoolManager(
+                backends, defaultTranslationConfig, config.getReloadQueueCapacity(), config.getReloadDrainTimeoutMs());
         backendPoolManager = bpm;
 
         // 将路由器注入 CommandHandler
@@ -97,10 +100,10 @@ public class ProxyBootstrap {
             metricsModule.start();
         }
 
-
         try {
             ServerBootstrap bootstrap = new ServerBootstrap();
-            bootstrap.group(bossGroup, workerGroup)
+            bootstrap
+                    .group(bossGroup, workerGroup)
                     .channel(NioServerSocketChannel.class)
                     .option(ChannelOption.SO_BACKLOG, 1024)
                     .childOption(ChannelOption.SO_KEEPALIVE, true)
@@ -113,25 +116,28 @@ public class ProxyBootstrap {
                             pipeline.addLast("decoder", new MySQLPacketDecoder());
                             pipeline.addLast("encoder", new MySQLPacketEncoder());
 
-                            pipeline.addLast("idleHandler",
-                                    new IdleStateHandler(28800, 28800, 0));
+                            pipeline.addLast("idleHandler", new IdleStateHandler(28800, 28800, 0));
 
-                            pipeline.addLast("handshakeHandler",
-                                    new HandshakeHandler(cachedAuthUser, cachedAuthPassword));
+                            pipeline.addLast(
+                                    "handshakeHandler", new HandshakeHandler(cachedAuthUser, cachedAuthPassword));
                         }
                     });
 
             ChannelFuture future = bootstrap.bind(config.getPort()).sync();
             log.info("========================================");
             log.info("  MySQL Proxy started on port {}", config.getPort());
-            log.info("  Backends: {} configured", backendPoolManager.getBackendNames().size());
+            log.info(
+                    "  Backends: {} configured",
+                    backendPoolManager.getBackendNames().size());
             for (String name : backendPoolManager.getBackendNames()) {
                 log.info("    - {}", name);
             }
             log.info("  Auth: user={}", config.getAuth().getUser());
             log.info("  Biz threads: {}", bizThreads);
-            log.info("  Reload: queue={}, drainTimeout={}ms, debounce={}ms",
-                    config.getReloadQueueCapacity(), config.getReloadDrainTimeoutMs(),
+            log.info(
+                    "  Reload: queue={}, drainTimeout={}ms, debounce={}ms",
+                    config.getReloadQueueCapacity(),
+                    config.getReloadDrainTimeoutMs(),
                     config.getReloadDebounceMs());
             log.info("========================================");
 
@@ -154,8 +160,7 @@ public class ProxyBootstrap {
             return;
         }
 
-        configWatcher = new ConfigWatcher(configPath, config.getReloadDebounceMs(),
-                backendPoolManager, config);
+        configWatcher = new ConfigWatcher(configPath, config.getReloadDebounceMs(), backendPoolManager, config);
         configWatcher.start();
     }
 

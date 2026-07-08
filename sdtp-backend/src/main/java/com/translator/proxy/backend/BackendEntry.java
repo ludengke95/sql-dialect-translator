@@ -20,13 +20,19 @@ public class BackendEntry {
 
     /** 翻译配置（可选，不设置时使用全局默认值） */
     private String keywordCase;
+
     private String identifierCase;
 
     public BackendEntry() {}
 
-    public BackendEntry(String name, String dialect, String jdbcUrl,
-                         String username, String password,
-                         int maxPoolSize, int minIdle) {
+    public BackendEntry(
+            String name,
+            String dialect,
+            String jdbcUrl,
+            String username,
+            String password,
+            int maxPoolSize,
+            int minIdle) {
         this.name = name;
         this.dialect = dialect;
         this.jdbcUrl = jdbcUrl;
@@ -39,41 +45,92 @@ public class BackendEntry {
     /**
      * 全参构造（含翻译配置）。
      */
-    public BackendEntry(String name, String dialect, String jdbcUrl,
-                         String username, String password,
-                         int maxPoolSize, int minIdle,
-                         String keywordCase, String identifierCase) {
+    public BackendEntry(
+            String name,
+            String dialect,
+            String jdbcUrl,
+            String username,
+            String password,
+            int maxPoolSize,
+            int minIdle,
+            String keywordCase,
+            String identifierCase) {
         this(name, dialect, jdbcUrl, username, password, maxPoolSize, minIdle);
         this.keywordCase = keywordCase;
         this.identifierCase = identifierCase;
     }
 
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
+    public String getName() {
+        return name;
+    }
 
-    public String getDialect() { return dialect; }
-    public void setDialect(String dialect) { this.dialect = dialect; }
+    public void setName(String name) {
+        this.name = name;
+    }
 
-    public String getJdbcUrl() { return jdbcUrl; }
-    public void setJdbcUrl(String jdbcUrl) { this.jdbcUrl = jdbcUrl; }
+    public String getDialect() {
+        return dialect;
+    }
 
-    public String getUsername() { return username; }
-    public void setUsername(String username) { this.username = username; }
+    public void setDialect(String dialect) {
+        this.dialect = dialect;
+    }
 
-    public String getPassword() { return password; }
-    public void setPassword(String password) { this.password = password; }
+    public String getJdbcUrl() {
+        return jdbcUrl;
+    }
 
-    public int getMaxPoolSize() { return maxPoolSize; }
-    public void setMaxPoolSize(int maxPoolSize) { this.maxPoolSize = maxPoolSize; }
+    public void setJdbcUrl(String jdbcUrl) {
+        this.jdbcUrl = jdbcUrl;
+    }
 
-    public int getMinIdle() { return minIdle; }
-    public void setMinIdle(int minIdle) { this.minIdle = minIdle; }
+    public String getUsername() {
+        return username;
+    }
 
-    public String getKeywordCase() { return keywordCase; }
-    public void setKeywordCase(String keywordCase) { this.keywordCase = keywordCase; }
+    public void setUsername(String username) {
+        this.username = username;
+    }
 
-    public String getIdentifierCase() { return identifierCase; }
-    public void setIdentifierCase(String identifierCase) { this.identifierCase = identifierCase; }
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public int getMaxPoolSize() {
+        return maxPoolSize;
+    }
+
+    public void setMaxPoolSize(int maxPoolSize) {
+        this.maxPoolSize = maxPoolSize;
+    }
+
+    public int getMinIdle() {
+        return minIdle;
+    }
+
+    public void setMinIdle(int minIdle) {
+        this.minIdle = minIdle;
+    }
+
+    public String getKeywordCase() {
+        return keywordCase;
+    }
+
+    public void setKeywordCase(String keywordCase) {
+        this.keywordCase = keywordCase;
+    }
+
+    public String getIdentifierCase() {
+        return identifierCase;
+    }
+
+    public void setIdentifierCase(String identifierCase) {
+        this.identifierCase = identifierCase;
+    }
 
     @Override
     public boolean equals(Object o) {
@@ -93,7 +150,7 @@ public class BackendEntry {
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, dialect, jdbcUrl, username, password,
-                maxPoolSize, minIdle, keywordCase, identifierCase);
+        return Objects.hash(
+                name, dialect, jdbcUrl, username, password, maxPoolSize, minIdle, keywordCase, identifierCase);
     }
 }

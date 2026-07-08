@@ -1,14 +1,15 @@
 package com.translator.core.rewrite.rule;
 
-import com.translator.core.DialectType;
-import com.translator.core.rewrite.FunctionRewriteRule;
-import org.apache.calcite.sql.*;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+
+import org.apache.calcite.sql.*;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+
+import com.translator.core.DialectType;
+import com.translator.core.rewrite.FunctionRewriteRule;
 
 /**
  * 空值处理函数 → COALESCE 改写规则。
@@ -20,8 +21,8 @@ import java.util.Set;
 public class NullToCoalesceRule extends FunctionRewriteRule {
 
     /** 需要改写的源函数名集合 */
-    private static final Set<String> FUNC_NAMES = Collections.unmodifiableSet(
-            new HashSet<>(Arrays.asList("IFNULL", "NVL", "ISNULL")));
+    private static final Set<String> FUNC_NAMES =
+            Collections.unmodifiableSet(new HashSet<>(Arrays.asList("IFNULL", "NVL", "ISNULL")));
 
     @Override
     protected Set<String> getFunctionNames() {
@@ -47,8 +48,6 @@ public class NullToCoalesceRule extends FunctionRewriteRule {
     @Override
     public SqlNode apply(SqlNode node) {
         SqlCall call = (SqlCall) node;
-        return SqlStdOperatorTable.COALESCE.createCall(
-                call.getParserPosition(),
-                call.getOperandList());
+        return SqlStdOperatorTable.COALESCE.createCall(call.getParserPosition(), call.getOperandList());
     }
 }

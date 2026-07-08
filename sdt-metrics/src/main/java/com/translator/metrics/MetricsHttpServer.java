@@ -1,10 +1,11 @@
 package com.translator.metrics;
 
-import io.prometheus.client.exporter.HTTPServer;
+import java.io.IOException;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
+import io.prometheus.client.exporter.HTTPServer;
 
 /**
  * Prometheus HTTP 指标端点服务器封装。

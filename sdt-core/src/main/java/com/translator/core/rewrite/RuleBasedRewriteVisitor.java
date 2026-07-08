@@ -1,10 +1,10 @@
 package com.translator.core.rewrite;
 
+import java.util.List;
+
 import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.util.SqlShuttle;
-
-import java.util.List;
 
 /**
  * 基于规则的改写 Visitor（包级可见）。

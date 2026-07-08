@@ -1,17 +1,18 @@
 package com.translator.core;
 
+import java.sql.Types;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
+
+import org.junit.Assert;
+import org.junit.Test;
+
 import com.translator.core.config.TranslationConfig;
 import com.translator.core.metadata.ColumnMetadata;
 import com.translator.core.metadata.JdbcMetadataProvider;
 import com.translator.core.metadata.MetadataProvider;
 import com.translator.core.metadata.TableMetadata;
-import org.junit.Assert;
-import org.junit.Test;
-
-import java.sql.Types;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Set;
 
 /**
  * SQL 校验测试。
@@ -25,18 +26,20 @@ public class SqlValidatorTest {
         public TableMetadata getTable(String tableName) {
             String upper = tableName.toUpperCase();
             if ("USERS".equals(upper)) {
-                return new TableMetadata("users", Arrays.asList(
-                        new ColumnMetadata("id", Types.INTEGER, 0, 0, false),
-                        new ColumnMetadata("name", Types.VARCHAR, 255, 0, true),
-                        new ColumnMetadata("age", Types.INTEGER, 0, 0, true)
-                ));
+                return new TableMetadata(
+                        "users",
+                        Arrays.asList(
+                                new ColumnMetadata("id", Types.INTEGER, 0, 0, false),
+                                new ColumnMetadata("name", Types.VARCHAR, 255, 0, true),
+                                new ColumnMetadata("age", Types.INTEGER, 0, 0, true)));
             } else if ("ORDERS".equals(upper)) {
-                return new TableMetadata("orders", Arrays.asList(
-                        new ColumnMetadata("order_id", Types.INTEGER, 0, 0, false),
-                        new ColumnMetadata("user_id", Types.INTEGER, 0, 0, false),
-                        new ColumnMetadata("amount", Types.DECIMAL, 10, 2, true),
-                        new ColumnMetadata("status", Types.VARCHAR, 50, 0, true)
-                ));
+                return new TableMetadata(
+                        "orders",
+                        Arrays.asList(
+                                new ColumnMetadata("order_id", Types.INTEGER, 0, 0, false),
+                                new ColumnMetadata("user_id", Types.INTEGER, 0, 0, false),
+                                new ColumnMetadata("amount", Types.DECIMAL, 10, 2, true),
+                                new ColumnMetadata("status", Types.VARCHAR, 50, 0, true)));
             }
             return null;
         }
@@ -50,7 +53,8 @@ public class SqlValidatorTest {
     @Test
     public void testValidSql() {
         TranslationConfig config = new TranslationConfig().withEnableValidation(true);
-        SqlTranslator translator = new SqlTranslator(DialectType.MYSQL, DialectType.POSTGRESQL, config, new MockMetadataProvider());
+        SqlTranslator translator =
+                new SqlTranslator(DialectType.MYSQL, DialectType.POSTGRESQL, config, new MockMetadataProvider());
 
         String sql = "SELECT id, name FROM users WHERE age > 18";
         String result = translator.translate(sql);
@@ -62,7 +66,8 @@ public class SqlValidatorTest {
     @Test
     public void testTableNotFoundThrows() {
         TranslationConfig config = new TranslationConfig().withEnableValidation(true);
-        SqlTranslator translator = new SqlTranslator(DialectType.MYSQL, DialectType.POSTGRESQL, config, new MockMetadataProvider());
+        SqlTranslator translator =
+                new SqlTranslator(DialectType.MYSQL, DialectType.POSTGRESQL, config, new MockMetadataProvider());
 
         String sql = "SELECT id FROM non_existing_table";
         try {
@@ -71,14 +76,16 @@ public class SqlValidatorTest {
         } catch (SqlTranslationException e) {
             System.err.println("=== testTableNotFoundThrows exception message: " + e.getMessage());
             Assert.assertTrue(e.getMessage().contains("SQL 校验失败"));
-            Assert.assertTrue(e.getMessage().toLowerCase().contains("non_existing_table") && e.getMessage().toLowerCase().contains("not found"));
+            Assert.assertTrue(e.getMessage().toLowerCase().contains("non_existing_table")
+                    && e.getMessage().toLowerCase().contains("not found"));
         }
     }
 
     @Test
     public void testColumnNotFoundThrows() {
         TranslationConfig config = new TranslationConfig().withEnableValidation(true);
-        SqlTranslator translator = new SqlTranslator(DialectType.MYSQL, DialectType.POSTGRESQL, config, new MockMetadataProvider());
+        SqlTranslator translator =
+                new SqlTranslator(DialectType.MYSQL, DialectType.POSTGRESQL, config, new MockMetadataProvider());
 
         String sql = "SELECT invalid_column FROM users";
         try {
@@ -87,14 +94,16 @@ public class SqlValidatorTest {
         } catch (SqlTranslationException e) {
             System.err.println("=== testColumnNotFoundThrows exception message: " + e.getMessage());
             Assert.assertTrue(e.getMessage().contains("SQL 校验失败"));
-            Assert.assertTrue(e.getMessage().toLowerCase().contains("invalid_column") && e.getMessage().toLowerCase().contains("not found"));
+            Assert.assertTrue(e.getMessage().toLowerCase().contains("invalid_column")
+                    && e.getMessage().toLowerCase().contains("not found"));
         }
     }
 
     @Test
     public void testFunctionArgTypeMismatchThrows() {
         TranslationConfig config = new TranslationConfig().withEnableValidation(true);
-        SqlTranslator translator = new SqlTranslator(DialectType.MYSQL, DialectType.POSTGRESQL, config, new MockMetadataProvider());
+        SqlTranslator translator =
+                new SqlTranslator(DialectType.MYSQL, DialectType.POSTGRESQL, config, new MockMetadataProvider());
 
         // SUBSTR(string, integer, integer)，第二个参数应当是数字，但传入了非数字
         String sql = "SELECT SUBSTR(name, 'not_an_integer') FROM users";
@@ -110,7 +119,8 @@ public class SqlValidatorTest {
     @Test
     public void testImplicitColumnResolution() {
         TranslationConfig config = new TranslationConfig().withEnableValidation(true);
-        SqlTranslator translator = new SqlTranslator(DialectType.MYSQL, DialectType.POSTGRESQL, config, new MockMetadataProvider());
+        SqlTranslator translator =
+                new SqlTranslator(DialectType.MYSQL, DialectType.POSTGRESQL, config, new MockMetadataProvider());
 
         // name 唯一属于 users，status 唯一属于 orders。
         // 多表关联时，Calcite 的校验器应该根据元数据自动把没有别名的列补齐它所在的表名称前缀。
@@ -126,7 +136,8 @@ public class SqlValidatorTest {
     @Test
     public void testDialectFunctionsValidation() {
         TranslationConfig config = new TranslationConfig().withEnableValidation(true);
-        SqlTranslator translator = new SqlTranslator(DialectType.MYSQL, DialectType.POSTGRESQL, config, new MockMetadataProvider());
+        SqlTranslator translator =
+                new SqlTranslator(DialectType.MYSQL, DialectType.POSTGRESQL, config, new MockMetadataProvider());
 
         // MySQL 的 IFNULL 函数应该在校验阶段被正确识别并通过校验
         String sql = "SELECT IFNULL(name, 'unknown') FROM users";
@@ -143,7 +154,8 @@ public class SqlValidatorTest {
     @Test
     public void testDateAddValidation() {
         TranslationConfig config = new TranslationConfig().withEnableValidation(true);
-        SqlTranslator translator = new SqlTranslator(DialectType.MYSQL, DialectType.POSTGRESQL, config, new MockMetadataProvider());
+        SqlTranslator translator =
+                new SqlTranslator(DialectType.MYSQL, DialectType.POSTGRESQL, config, new MockMetadataProvider());
 
         String sql = "SELECT DATE_ADD('1998-12-01', INTERVAL -90 DAY) FROM users";
         try {
@@ -164,7 +176,8 @@ public class SqlValidatorTest {
         TranslationConfig config = new TranslationConfig()
                 .withEnableValidation(true)
                 .withValidationMode(TranslationConfig.ValidationMode.WARN);
-        SqlTranslator translator = new SqlTranslator(DialectType.MYSQL, DialectType.POSTGRESQL, config, new MockMetadataProvider());
+        SqlTranslator translator =
+                new SqlTranslator(DialectType.MYSQL, DialectType.POSTGRESQL, config, new MockMetadataProvider());
 
         // 表不存在，在 STRICT 下会抛错，但在 WARN 下应当只记 log 并正常翻译，不抛异常
         String sql = "SELECT id FROM non_existing_table";
@@ -210,7 +223,7 @@ public class SqlValidatorTest {
     private static java.sql.Connection createMockConnection(List<String> tableNames) {
         return (java.sql.Connection) java.lang.reflect.Proxy.newProxyInstance(
                 SqlValidatorTest.class.getClassLoader(),
-                new Class<?>[]{java.sql.Connection.class},
+                new Class<?>[] {java.sql.Connection.class},
                 (proxy, method, args) -> {
                     if ("getMetaData".equals(method.getName())) {
                         return createMockDatabaseMetaData(tableNames);
@@ -222,14 +235,13 @@ public class SqlValidatorTest {
                         return handleDefaultPrimitive(method.getReturnType());
                     }
                     return null;
-                }
-        );
+                });
     }
 
     private static java.sql.DatabaseMetaData createMockDatabaseMetaData(List<String> tableNames) {
         return (java.sql.DatabaseMetaData) java.lang.reflect.Proxy.newProxyInstance(
                 SqlValidatorTest.class.getClassLoader(),
-                new Class<?>[]{java.sql.DatabaseMetaData.class},
+                new Class<?>[] {java.sql.DatabaseMetaData.class},
                 (proxy, method, args) -> {
                     if ("getTables".equals(method.getName())) {
                         return createMockTablesResultSet(tableNames);
@@ -241,15 +253,14 @@ public class SqlValidatorTest {
                         return handleDefaultPrimitive(method.getReturnType());
                     }
                     return null;
-                }
-        );
+                });
     }
 
     private static java.sql.ResultSet createMockTablesResultSet(List<String> tableNames) {
         final int[] index = {0};
         return (java.sql.ResultSet) java.lang.reflect.Proxy.newProxyInstance(
                 SqlValidatorTest.class.getClassLoader(),
-                new Class<?>[]{java.sql.ResultSet.class},
+                new Class<?>[] {java.sql.ResultSet.class},
                 (proxy, method, args) -> {
                     if ("next".equals(method.getName())) {
                         index[0]++;
@@ -265,15 +276,14 @@ public class SqlValidatorTest {
                         return handleDefaultPrimitive(method.getReturnType());
                     }
                     return null;
-                }
-        );
+                });
     }
 
     private static java.sql.ResultSet createMockColumnsResultSet() {
         final int[] index = {0};
         return (java.sql.ResultSet) java.lang.reflect.Proxy.newProxyInstance(
                 SqlValidatorTest.class.getClassLoader(),
-                new Class<?>[]{java.sql.ResultSet.class},
+                new Class<?>[] {java.sql.ResultSet.class},
                 (proxy, method, args) -> {
                     if ("next".equals(method.getName())) {
                         index[0]++;
@@ -295,8 +305,7 @@ public class SqlValidatorTest {
                         return handleDefaultPrimitive(method.getReturnType());
                     }
                     return null;
-                }
-        );
+                });
     }
 
     @Test
@@ -310,17 +319,22 @@ public class SqlValidatorTest {
         System.out.println("=== DIAGNOSTICS: publicSchema (sensitive) found: " + (publicSchemaSensitive != null));
         System.out.println("=== DIAGNOSTICS: publicSchema (insensitive) found: " + (publicSchemaInsensitive != null));
 
-        org.apache.calcite.jdbc.CalciteSchema targetSchema = publicSchemaSensitive != null ? publicSchemaSensitive : publicSchemaInsensitive;
+        org.apache.calcite.jdbc.CalciteSchema targetSchema =
+                publicSchemaSensitive != null ? publicSchemaSensitive : publicSchemaInsensitive;
         if (targetSchema != null) {
             org.apache.calcite.jdbc.CalciteSchema.TableEntry tableEntrySensitive = targetSchema.getTable("users", true);
-            org.apache.calcite.jdbc.CalciteSchema.TableEntry tableEntryInsensitive = targetSchema.getTable("users", false);
-            System.out.println("=== DIAGNOSTICS: tableEntry 'users' (sensitive) found: " + (tableEntrySensitive != null));
-            System.out.println("=== DIAGNOSTICS: tableEntry 'users' (insensitive) found: " + (tableEntryInsensitive != null));
+            org.apache.calcite.jdbc.CalciteSchema.TableEntry tableEntryInsensitive =
+                    targetSchema.getTable("users", false);
+            System.out.println(
+                    "=== DIAGNOSTICS: tableEntry 'users' (sensitive) found: " + (tableEntrySensitive != null));
+            System.out.println(
+                    "=== DIAGNOSTICS: tableEntry 'users' (insensitive) found: " + (tableEntryInsensitive != null));
         }
 
         // 手工调用 getTable
         try {
-            com.translator.core.metadata.CalciteMetadataSchema mySchema = new com.translator.core.metadata.CalciteMetadataSchema(new MockMetadataProvider());
+            com.translator.core.metadata.CalciteMetadataSchema mySchema =
+                    new com.translator.core.metadata.CalciteMetadataSchema(new MockMetadataProvider());
             org.apache.calcite.schema.Table t = mySchema.getTable("users");
             System.out.println("=== DIAGNOSTICS: schema.getTable(\"users\") manually called returned: " + t);
         } catch (Throwable ex) {
@@ -329,21 +343,27 @@ public class SqlValidatorTest {
         }
 
         // 尝试用 CalciteCatalogReader 来手工查找
-        org.apache.calcite.rel.type.RelDataTypeFactory typeFactory = new org.apache.calcite.sql.type.SqlTypeFactoryImpl(org.apache.calcite.rel.type.RelDataTypeSystem.DEFAULT);
-        org.apache.calcite.prepare.CalciteCatalogReader catalogReader = new org.apache.calcite.prepare.CalciteCatalogReader(
-                calciteSchema,
-                java.util.Collections.singletonList("PUBLIC"),
-                typeFactory,
-                org.apache.calcite.config.CalciteConnectionConfig.DEFAULT);
+        org.apache.calcite.rel.type.RelDataTypeFactory typeFactory = new org.apache.calcite.sql.type.SqlTypeFactoryImpl(
+                org.apache.calcite.rel.type.RelDataTypeSystem.DEFAULT);
+        org.apache.calcite.prepare.CalciteCatalogReader catalogReader =
+                new org.apache.calcite.prepare.CalciteCatalogReader(
+                        calciteSchema,
+                        java.util.Collections.singletonList("PUBLIC"),
+                        typeFactory,
+                        org.apache.calcite.config.CalciteConnectionConfig.DEFAULT);
 
         org.apache.calcite.plan.RelOptTable relOptTable = catalogReader.getTable(java.util.Arrays.asList("users"));
         System.out.println("=== DIAGNOSTICS: catalogReader.getTable([\"users\"]) found: " + (relOptTable != null));
 
         // 检查算子表
         org.apache.calcite.sql.SqlOperatorTable stdOpTable = org.apache.calcite.sql.fun.SqlStdOperatorTable.instance();
-        org.apache.calcite.sql.SqlOperatorTable libraryOpTable = org.apache.calcite.sql.fun.SqlLibraryOperatorTableFactory.INSTANCE
-                .getOperatorTable(org.apache.calcite.sql.fun.SqlLibrary.MYSQL, org.apache.calcite.sql.fun.SqlLibrary.ORACLE, org.apache.calcite.sql.fun.SqlLibrary.POSTGRESQL);
-        boolean hasIfnull = libraryOpTable.getOperatorList().stream().anyMatch(op -> "IFNULL".equalsIgnoreCase(op.getName()));
+        org.apache.calcite.sql.SqlOperatorTable libraryOpTable =
+                org.apache.calcite.sql.fun.SqlLibraryOperatorTableFactory.INSTANCE.getOperatorTable(
+                        org.apache.calcite.sql.fun.SqlLibrary.MYSQL,
+                        org.apache.calcite.sql.fun.SqlLibrary.ORACLE,
+                        org.apache.calcite.sql.fun.SqlLibrary.POSTGRESQL);
+        boolean hasIfnull =
+                libraryOpTable.getOperatorList().stream().anyMatch(op -> "IFNULL".equalsIgnoreCase(op.getName()));
         System.out.println("=== DIAGNOSTICS: libraryOpTable contains IFNULL: " + hasIfnull);
     }
 }

@@ -1,20 +1,19 @@
 package com.translator.proxy.backend;
 
-import com.translator.proxy.core.handler.CommandHandler;
-import com.translator.proxy.core.session.FrontendSession;
-import io.netty.channel.ChannelHandlerContext;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import static org.junit.Assert.*;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.Assert.*;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+import com.translator.proxy.core.handler.CommandHandler;
+import com.translator.proxy.core.session.FrontendSession;
+
+import io.netty.channel.ChannelHandlerContext;
 
 /**
  * ReloadableQueryProcessor 单元测试。
@@ -41,8 +40,7 @@ public class ReloadableQueryProcessorTest {
 
     @Test
     public void testActiveStateDelegates() {
-        assertSame("Should be ACTIVE on creation",
-                ReloadableQueryProcessor.State.ACTIVE, reloadable.getState());
+        assertSame("Should be ACTIVE on creation", ReloadableQueryProcessor.State.ACTIVE, reloadable.getState());
 
         reloadable.process(null, "SELECT 1", null);
 
@@ -95,8 +93,7 @@ public class ReloadableQueryProcessorTest {
         }
 
         // 队列大小不应超过容量
-        assertTrue("Queue should not exceed capacity",
-                reloadable.getQueueSize() <= queueCapacity);
+        assertTrue("Queue should not exceed capacity", reloadable.getQueueSize() <= queueCapacity);
     }
 
     // ==================== DRAINING 状态 ====================
@@ -155,8 +152,7 @@ public class ReloadableQueryProcessorTest {
     public void testDrainTimeoutWithSlowInFlight() throws InterruptedException {
         // 使用一个慢 processor 模拟 in-flight 请求
         SlowProcessor slowDelegate = new SlowProcessor(500); // 500ms delay
-        ReloadableQueryProcessor rp = new ReloadableQueryProcessor("slow",
-                slowDelegate, 10, 100); // 100ms timeout
+        ReloadableQueryProcessor rp = new ReloadableQueryProcessor("slow", slowDelegate, 10, 100); // 100ms timeout
 
         // 提交一个慢请求（在后台线程）
         Thread t = new Thread(() -> rp.process(null, "SLOW", null));
@@ -190,18 +186,21 @@ public class ReloadableQueryProcessorTest {
 
         for (int i = 0; i < threadCount; i++) {
             new Thread(() -> {
-                try { startLatch.await(); } catch (InterruptedException ignored) {}
-                for (int j = 0; j < requestsPerThread; j++) {
-                    reloadable.process(null, "CONCURRENT", null);
-                }
-                doneLatch.countDown();
-            }).start();
+                        try {
+                            startLatch.await();
+                        } catch (InterruptedException ignored) {
+                        }
+                        for (int j = 0; j < requestsPerThread; j++) {
+                            reloadable.process(null, "CONCURRENT", null);
+                        }
+                        doneLatch.countDown();
+                    })
+                    .start();
         }
 
         startLatch.countDown();
         assertTrue("All threads should finish", doneLatch.await(10, TimeUnit.SECONDS));
-        assertEquals("Delegate should have all requests",
-                threadCount * requestsPerThread, delegate.getCount());
+        assertEquals("Delegate should have all requests", threadCount * requestsPerThread, delegate.getCount());
     }
 
     // ==================== 内部测试辅助类 ====================
@@ -223,8 +222,13 @@ public class ReloadableQueryProcessorTest {
             closed = true;
         }
 
-        int getCount() { return count.get(); }
-        boolean isClosed() { return closed; }
+        int getCount() {
+            return count.get();
+        }
+
+        boolean isClosed() {
+            return closed;
+        }
     }
 
     /**
@@ -233,11 +237,16 @@ public class ReloadableQueryProcessorTest {
     static class SlowProcessor implements CommandHandler.QueryProcessor {
         private final long delayMs;
 
-        SlowProcessor(long delayMs) { this.delayMs = delayMs; }
+        SlowProcessor(long delayMs) {
+            this.delayMs = delayMs;
+        }
 
         @Override
         public void process(ChannelHandlerContext ctx, String sql, FrontendSession session) {
-            try { Thread.sleep(delayMs); } catch (InterruptedException ignored) {}
+            try {
+                Thread.sleep(delayMs);
+            } catch (InterruptedException ignored) {
+            }
         }
 
         @Override

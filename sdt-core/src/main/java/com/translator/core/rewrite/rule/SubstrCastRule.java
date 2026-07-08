@@ -1,13 +1,14 @@
 package com.translator.core.rewrite.rule;
 
-import com.translator.core.DialectType;
-import com.translator.core.rewrite.FunctionRewriteRule;
+import java.util.*;
+
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.SqlTypeName;
 
-import java.util.*;
+import com.translator.core.DialectType;
+import com.translator.core.rewrite.FunctionRewriteRule;
 
 /**
  * MySQL SUBSTR/SUBSTRING 第一个参数 → CAST AS VARCHAR 改写规则。
@@ -23,8 +24,8 @@ import java.util.*;
 public class SubstrCastRule extends FunctionRewriteRule {
 
     /** 需要处理的函数名集合 */
-    private static final Set<String> FUNC_NAMES = Collections.unmodifiableSet(
-            new HashSet<>(Arrays.asList("SUBSTR", "SUBSTRING")));
+    private static final Set<String> FUNC_NAMES =
+            Collections.unmodifiableSet(new HashSet<>(Arrays.asList("SUBSTR", "SUBSTRING")));
 
     @Override
     protected Set<String> getFunctionNames() {
@@ -61,18 +62,12 @@ public class SubstrCastRule extends FunctionRewriteRule {
                 SqlParserPos.ZERO,
                 firstOperand,
                 new SqlDataTypeSpec(
-                        new SqlBasicTypeNameSpec(SqlTypeName.VARCHAR, SqlParserPos.ZERO),
-                        SqlParserPos.ZERO
-                )
-        );
+                        new SqlBasicTypeNameSpec(SqlTypeName.VARCHAR, SqlParserPos.ZERO), SqlParserPos.ZERO));
 
         // 构建新的操作数列表：第一个替换为 CAST 节点，其余不变
         List<SqlNode> newOperands = new ArrayList<>(operands);
         newOperands.set(0, castNode);
 
-        return call.getOperator().createCall(
-                call.getParserPosition(),
-                newOperands
-        );
+        return call.getOperator().createCall(call.getParserPosition(), newOperands);
     }
 }

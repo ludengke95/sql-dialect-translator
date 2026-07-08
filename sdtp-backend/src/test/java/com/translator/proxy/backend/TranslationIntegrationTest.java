@@ -1,11 +1,12 @@
 package com.translator.proxy.backend;
 
+import static org.junit.Assert.*;
+
+import org.junit.Test;
+
 import com.translator.core.DialectType;
 import com.translator.core.SqlTranslator;
 import com.translator.proxy.core.handler.CommandHandler;
-import org.junit.Test;
-
-import static org.junit.Assert.*;
 
 /**
  * SQL 翻译集成测试：验证 Calcite 引擎在 Proxy 场景下的翻译正确性。
@@ -28,8 +29,7 @@ public class TranslationIntegrationTest {
 
         // LIMIT → FETCH NEXT (PostgreSQL)
         String result3 = translator.translate("SELECT * FROM users LIMIT 10");
-        assertTrue("LIMIT 应转为 FETCH NEXT: " + result3,
-                result3.contains("FETCH NEXT") || result3.contains("LIMIT"));
+        assertTrue("LIMIT 应转为 FETCH NEXT: " + result3, result3.contains("FETCH NEXT") || result3.contains("LIMIT"));
 
         // != → <>
         String result4 = translator.translate("SELECT * FROM users WHERE status != 'deleted'");
@@ -49,8 +49,8 @@ public class TranslationIntegrationTest {
     @Test
     public void testTranslationDisabledWhenSameDialect() {
         // MySQL → MySQL：TranslationQueryProcessor 应跳过翻译
-        TranslationQueryProcessor processor = new TranslationQueryProcessor(
-                CommandHandler.QueryProcessor.NOOP, "mysql");
+        TranslationQueryProcessor processor =
+                new TranslationQueryProcessor(CommandHandler.QueryProcessor.NOOP, "mysql");
 
         // 通过 NOOP 委托执行，不会抛异常
         // 由于 NOOP 会返回错误，这里只验证翻译逻辑不抛异常

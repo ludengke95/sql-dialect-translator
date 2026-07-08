@@ -1,17 +1,16 @@
 package com.translator.proxy.server.config;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.yaml.snakeyaml.Yaml;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.yaml.snakeyaml.Yaml;
 
 /**
  * YAML 配置文件加载器。
@@ -46,10 +45,12 @@ public final class ConfigLoader {
             return configPath;
         }
         // classpath 资源没有文件路径
-        InputStream classpathStream = ConfigLoader.class.getClassLoader()
-                .getResourceAsStream("proxy-config.yml");
+        InputStream classpathStream = ConfigLoader.class.getClassLoader().getResourceAsStream("proxy-config.yml");
         if (classpathStream != null) {
-            try { classpathStream.close(); } catch (IOException ignored) {}
+            try {
+                classpathStream.close();
+            } catch (IOException ignored) {
+            }
             return null; // classpath 资源不可文件监听
         }
         // 当前目录下的文件
@@ -66,8 +67,7 @@ public final class ConfigLoader {
             return loadFromFile(configPath);
         }
 
-        InputStream classpathStream = ConfigLoader.class.getClassLoader()
-                .getResourceAsStream("proxy-config.yml");
+        InputStream classpathStream = ConfigLoader.class.getClassLoader().getResourceAsStream("proxy-config.yml");
         if (classpathStream != null) {
             log.info("Loading config from classpath:proxy-config.yml");
             return loadFromStream(classpathStream);
@@ -208,7 +208,6 @@ public final class ConfigLoader {
         return config;
     }
 
-    @SuppressWarnings("unchecked")
     private static ProxyConfig.TargetConfig parseTargetConfig(Map<String, Object> map) {
         ProxyConfig.TargetConfig tc = new ProxyConfig.TargetConfig();
         if (map.get("name") != null) tc.setName((String) map.get("name"));

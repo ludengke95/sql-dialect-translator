@@ -1,20 +1,22 @@
 package com.translator.proxy.backend;
 
-import com.translator.proxy.core.handler.AuthHandler;
-import com.translator.proxy.core.handler.CommandHandler;
-import com.translator.proxy.core.session.FrontendSession;
-import com.translator.proxy.metrics.ReloadMetrics;
-import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
-import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelHandlerContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.Objects;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.translator.proxy.core.handler.AuthHandler;
+import com.translator.proxy.core.handler.CommandHandler;
+import com.translator.proxy.core.session.FrontendSession;
+import com.translator.proxy.metrics.ReloadMetrics;
+import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandlerContext;
 
 /**
  * 支持热 reload 的查询处理器包装器。
@@ -45,6 +47,7 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
 
     /** 错误码：ER_SERVER_SHUTDOWN */
     private static final int ERR_SERVER_SHUTDOWN = 1053;
+
     private static final String SQL_STATE = "HY000";
 
     /** 状态枚举 */
@@ -83,10 +86,8 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
      * @param queueCapacity reload 期间请求队列容量
      * @param drainTimeoutMs drain 超时（毫秒）
      */
-    public ReloadableQueryProcessor(String backendName,
-                                     CommandHandler.QueryProcessor delegate,
-                                     int queueCapacity,
-                                     int drainTimeoutMs) {
+    public ReloadableQueryProcessor(
+            String backendName, CommandHandler.QueryProcessor delegate, int queueCapacity, int drainTimeoutMs) {
         this.backendName = backendName;
         this.delegate = delegate;
         this.pendingQueue = new LinkedBlockingQueue<>(queueCapacity);
@@ -144,8 +145,11 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
         long deadline = System.currentTimeMillis() + drainTimeoutMs;
         while (inFlightCount.get() > 0) {
             if (System.currentTimeMillis() >= deadline) {
-                log.warn("Backend '{}': drain timeout after {}ms, forcing close ({} in-flight)",
-                        backendName, drainTimeoutMs, inFlightCount.get());
+                log.warn(
+                        "Backend '{}': drain timeout after {}ms, forcing close ({} in-flight)",
+                        backendName,
+                        drainTimeoutMs,
+                        inFlightCount.get());
                 break;
             }
             try {
@@ -158,8 +162,11 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
         }
 
         boolean drained = inFlightCount.get() <= 0;
-        log.info("Backend '{}': drain {} ({} remaining in-flight)",
-                backendName, drained ? "complete" : "timeout", inFlightCount.get());
+        log.info(
+                "Backend '{}': drain {} ({} remaining in-flight)",
+                backendName,
+                drained ? "complete" : "timeout",
+                inFlightCount.get());
         ReloadMetrics.recordDrain(backendName, drained);
 
         // 关闭旧连接池
@@ -183,8 +190,7 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
         Objects.requireNonNull(newDelegate, "newDelegate must not be null");
         this.delegate = newDelegate;
         state.set(State.ACTIVE);
-        log.info("Backend '{}': new delegate activated, draining {} queued requests",
-                backendName, pendingQueue.size());
+        log.info("Backend '{}': new delegate activated, draining {} queued requests", backendName, pendingQueue.size());
 
         // 处理队列中的请求
         PendingRequest pr;
@@ -233,11 +239,13 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
     private void enqueue(ChannelHandlerContext ctx, String sql, FrontendSession session) {
         PendingRequest pr = new PendingRequest(ctx, sql, session);
         if (!pendingQueue.offer(pr)) {
-            log.warn("Backend '{}': reload queue full (capacity={}), rejecting request",
-                    backendName, pendingQueue.size() + pendingQueue.remainingCapacity());
+            log.warn(
+                    "Backend '{}': reload queue full (capacity={}), rejecting request",
+                    backendName,
+                    pendingQueue.size() + pendingQueue.remainingCapacity());
             ReloadMetrics.recordQueueRejection(backendName, "full");
-            writeError(ctx, "Server shutdown in progress, backend '" + backendName
-                    + "' is reloading, please retry later");
+            writeError(
+                    ctx, "Server shutdown in progress, backend '" + backendName + "' is reloading, please retry later");
         } else {
             log.debug("Backend '{}': request queued (queue size={})", backendName, pendingQueue.size());
         }
@@ -250,8 +258,9 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
         PendingRequest pr;
         int count = 0;
         while ((pr = pendingQueue.poll()) != null) {
-            writeError(pr.ctx, "Server shutdown in progress, backend '" + backendName
-                    + "' reload timed out, please retry");
+            writeError(
+                    pr.ctx,
+                    "Server shutdown in progress, backend '" + backendName + "' reload timed out, please retry");
             count++;
         }
         if (count > 0) {

@@ -1,8 +1,8 @@
 package com.translator.proxy.protocol.util;
 
-import io.netty.buffer.ByteBuf;
-
 import java.nio.charset.StandardCharsets;
+
+import io.netty.buffer.ByteBuf;
 
 /**
  * MySQL 协议字节操作工具类：长度编码整数/字符串读写、小端序辅助、null-bitmap 等。
@@ -89,7 +89,7 @@ public final class BufferUtils {
      */
     public static String readLengthEncodedString(ByteBuf buf) {
         long len = readLengthEncodedInt(buf);
-        if (len == 0xFB) {  // NULL marker (251 unsigned)
+        if (len == 0xFB) { // NULL marker (251 unsigned)
             return null;
         }
         if (len < 0) {

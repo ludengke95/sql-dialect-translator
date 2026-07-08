@@ -1,10 +1,10 @@
 package com.translator.proxy.core.session;
 
-import io.netty.channel.Channel;
-
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import io.netty.channel.Channel;
 
 /**
  * 前端连接的会话上下文。

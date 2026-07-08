@@ -1,18 +1,17 @@
 package com.translator.proxy.backend;
 
-import com.translator.core.config.TranslationConfig;
-import com.translator.proxy.core.session.FrontendSession;
+import static org.junit.Assert.*;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Set;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
-
-import static org.junit.Assert.*;
+import com.translator.core.config.TranslationConfig;
+import com.translator.proxy.core.session.FrontendSession;
 
 /**
  * BackendPoolManager 单元测试 —— 测试动态增删改。
@@ -49,8 +48,7 @@ public class BackendPoolManagerTest {
 
     @Test
     public void testConstructorSkipsEmptyName() {
-        BackendEntry emptyName = new BackendEntry("", "POSTGRESQL",
-                "jdbc:h2:mem:skip", "sa", "", 5, 1);
+        BackendEntry emptyName = new BackendEntry("", "POSTGRESQL", "jdbc:h2:mem:skip", "sa", "", 5, 1);
 
         manager = new BackendPoolManager(Arrays.asList(emptyName), defaultTr);
 
@@ -59,8 +57,7 @@ public class BackendPoolManagerTest {
 
     @Test
     public void testConstructorWithValidBackend() {
-        BackendEntry be = new BackendEntry("h2db", "MYSQL",
-                "jdbc:h2:mem:constr", "sa", "", 5, 1);
+        BackendEntry be = new BackendEntry("h2db", "MYSQL", "jdbc:h2:mem:constr", "sa", "", 5, 1);
 
         manager = new BackendPoolManager(Arrays.asList(be), defaultTr);
 
@@ -72,8 +69,7 @@ public class BackendPoolManagerTest {
 
     @Test
     public void testResolveReturnsDefaultForUnknownDatabase() {
-        BackendEntry be = new BackendEntry("h2db", "MYSQL",
-                "jdbc:h2:mem:route1", "sa", "", 5, 1);
+        BackendEntry be = new BackendEntry("h2db", "MYSQL", "jdbc:h2:mem:route1", "sa", "", 5, 1);
         manager = new BackendPoolManager(Arrays.asList(be), defaultTr);
 
         FrontendSession session = createSession(null);
@@ -85,10 +81,8 @@ public class BackendPoolManagerTest {
 
     @Test
     public void testResolveReturnsNamedBackend() {
-        BackendEntry h2db = new BackendEntry("h2db", "MYSQL",
-                "jdbc:h2:mem:route2_h2db", "sa", "", 5, 1);
-        BackendEntry pgdb = new BackendEntry("pgdb", "MYSQL",
-                "jdbc:h2:mem:route2_pgdb", "sa", "", 5, 1);
+        BackendEntry h2db = new BackendEntry("h2db", "MYSQL", "jdbc:h2:mem:route2_h2db", "sa", "", 5, 1);
+        BackendEntry pgdb = new BackendEntry("pgdb", "MYSQL", "jdbc:h2:mem:route2_pgdb", "sa", "", 5, 1);
         manager = new BackendPoolManager(Arrays.asList(h2db, pgdb), defaultTr);
 
         FrontendSession session = createSession("pgdb");
@@ -105,8 +99,7 @@ public class BackendPoolManagerTest {
     public void testAddBackend() {
         manager = new BackendPoolManager(Collections.<BackendEntry>emptyList(), defaultTr);
 
-        BackendEntry newBe = new BackendEntry("newdb", "MYSQL",
-                "jdbc:h2:mem:add1", "sa", "", 5, 1);
+        BackendEntry newBe = new BackendEntry("newdb", "MYSQL", "jdbc:h2:mem:add1", "sa", "", 5, 1);
 
         boolean added = manager.addBackend(newBe);
         assertTrue("Should add successfully", added);
@@ -116,13 +109,11 @@ public class BackendPoolManagerTest {
 
     @Test
     public void testAddBackendDuplicateNameReturnsFalse() {
-        BackendEntry be = new BackendEntry("dupdb", "MYSQL",
-                "jdbc:h2:mem:dup1", "sa", "", 5, 1);
+        BackendEntry be = new BackendEntry("dupdb", "MYSQL", "jdbc:h2:mem:dup1", "sa", "", 5, 1);
         manager = new BackendPoolManager(Arrays.asList(be), defaultTr);
 
         // 尝试添加同名
-        BackendEntry dup = new BackendEntry("dupdb", "MYSQL",
-                "jdbc:h2:mem:dup2", "sa", "", 5, 1);
+        BackendEntry dup = new BackendEntry("dupdb", "MYSQL", "jdbc:h2:mem:dup2", "sa", "", 5, 1);
         boolean added = manager.addBackend(dup);
         assertFalse("Should not add duplicate name", added);
         assertEquals("Should still have 1 backend", 1, manager.getBackendNames().size());
@@ -132,8 +123,7 @@ public class BackendPoolManagerTest {
     public void testAddBackendEmptyNameReturnsFalse() {
         manager = new BackendPoolManager(Collections.<BackendEntry>emptyList(), defaultTr);
 
-        BackendEntry emptyName = new BackendEntry("", "MYSQL",
-                "jdbc:h2:mem:empty", "sa", "", 1, 1);
+        BackendEntry emptyName = new BackendEntry("", "MYSQL", "jdbc:h2:mem:empty", "sa", "", 1, 1);
 
         boolean added = manager.addBackend(emptyName);
         assertFalse("Should not add empty name", added);
@@ -144,8 +134,7 @@ public class BackendPoolManagerTest {
 
     @Test
     public void testRemoveBackend() {
-        BackendEntry be = new BackendEntry("rmdb", "MYSQL",
-                "jdbc:h2:mem:rm1", "sa", "", 5, 1);
+        BackendEntry be = new BackendEntry("rmdb", "MYSQL", "jdbc:h2:mem:rm1", "sa", "", 5, 1);
         manager = new BackendPoolManager(Arrays.asList(be), defaultTr);
         assertEquals("Should have 1 backend", 1, manager.getBackendNames().size());
 
@@ -166,13 +155,11 @@ public class BackendPoolManagerTest {
 
     @Test
     public void testReloadBackend() {
-        BackendEntry be = new BackendEntry("reloaddb", "MYSQL",
-                "jdbc:h2:mem:reload1", "sa", "", 5, 1);
+        BackendEntry be = new BackendEntry("reloaddb", "MYSQL", "jdbc:h2:mem:reload1", "sa", "", 5, 1);
         manager = new BackendPoolManager(Arrays.asList(be), defaultTr);
 
         // 修改配置
-        BackendEntry updated = new BackendEntry("reloaddb", "POSTGRESQL",
-                "jdbc:h2:mem:reload2", "sa", "", 10, 3);
+        BackendEntry updated = new BackendEntry("reloaddb", "POSTGRESQL", "jdbc:h2:mem:reload2", "sa", "", 10, 3);
 
         boolean reloaded = manager.reloadBackend(updated);
         assertTrue("Should reload successfully", reloaded);
@@ -183,8 +170,7 @@ public class BackendPoolManagerTest {
     public void testReloadNonexistentBackendReturnsFalse() {
         manager = new BackendPoolManager(Collections.<BackendEntry>emptyList(), defaultTr);
 
-        BackendEntry be = new BackendEntry("nosuch", "MYSQL",
-                "jdbc:h2:mem:nosuch", "sa", "", 5, 1);
+        BackendEntry be = new BackendEntry("nosuch", "MYSQL", "jdbc:h2:mem:nosuch", "sa", "", 5, 1);
         boolean reloaded = manager.reloadBackend(be);
         assertFalse("Should return false for nonexistent", reloaded);
     }
@@ -193,15 +179,16 @@ public class BackendPoolManagerTest {
 
     @Test
     public void testCloseAll() {
-        BackendEntry be1 = new BackendEntry("db1", "MYSQL",
-                "jdbc:h2:mem:close1", "sa", "", 5, 1);
-        BackendEntry be2 = new BackendEntry("db2", "MYSQL",
-                "jdbc:h2:mem:close2", "sa", "", 5, 1);
+        BackendEntry be1 = new BackendEntry("db1", "MYSQL", "jdbc:h2:mem:close1", "sa", "", 5, 1);
+        BackendEntry be2 = new BackendEntry("db2", "MYSQL", "jdbc:h2:mem:close2", "sa", "", 5, 1);
         manager = new BackendPoolManager(Arrays.asList(be1, be2), defaultTr);
 
         manager.close();
         // close 不应抛异常，且不应影响 map（keySet 仍可访问，但 processor 已关闭）
-        assertEquals("Backend names should still be accessible", 2, manager.getBackendNames().size());
+        assertEquals(
+                "Backend names should still be accessible",
+                2,
+                manager.getBackendNames().size());
     }
 
     // ==================== 辅助方法 ====================

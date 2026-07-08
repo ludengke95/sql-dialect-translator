@@ -1,18 +1,20 @@
 package com.translator.proxy.backend;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.translator.core.DialectType;
 import com.translator.core.SqlTranslationException;
 import com.translator.core.SqlTranslator;
 import com.translator.core.config.TranslationConfig;
+import com.translator.metrics.TranslationMetrics;
 import com.translator.proxy.core.handler.CommandHandler;
 import com.translator.proxy.core.session.FrontendSession;
-import com.translator.metrics.TranslationMetrics;
-import io.netty.channel.ChannelHandlerContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import io.netty.channel.ChannelHandlerContext;
 
 /**
  * SQL 翻译装饰器 —— 在执行前将源 SQL（MySQL 方言）翻译为目标方言 SQL。
@@ -43,14 +45,12 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
     private static final Logger log = LoggerFactory.getLogger(TranslationQueryProcessor.class);
 
     /** 直通标记：-- direct 或 -- sdtp:direct */
-    private static final Pattern DIRECT_LINE_HINT = Pattern.compile(
-            "^\\s*--\\s*(?:sdtp:)?direct\\s*\\n?(.*)",
-            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    private static final Pattern DIRECT_LINE_HINT =
+            Pattern.compile("^\\s*--\\s*(?:sdtp:)?direct\\s*\\n?(.*)", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
     /** 直通标记：/* sdtp:direct *{@literal /} */
     private static final Pattern DIRECT_BLOCK_HINT = Pattern.compile(
-            "^\\s*/\\*\\s*(?:sdtp:)?direct\\s*\\*/\\s*\\n?(.*)",
-            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+            "^\\s*/\\*\\s*(?:sdtp:)?direct\\s*\\*/\\s*\\n?(.*)", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
     /** 被包装的实际后端处理器 */
     private final CommandHandler.QueryProcessor delegate;
@@ -76,17 +76,15 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
      * @param delegate        实际后端查询处理器
      * @param targetDialectId 目标方言标识符（如 "postgresql"）
      */
-    public TranslationQueryProcessor(CommandHandler.QueryProcessor delegate,
-                                      String targetDialectId) {
+    public TranslationQueryProcessor(CommandHandler.QueryProcessor delegate, String targetDialectId) {
         this(delegate, targetDialectId, TranslationConfig.DEFAULT, null);
     }
 
     /**
      * 创建翻译处理器（带自定义大小写配置，不指定后端名）。
      */
-    public TranslationQueryProcessor(CommandHandler.QueryProcessor delegate,
-                                      String targetDialectId,
-                                      TranslationConfig translationConfig) {
+    public TranslationQueryProcessor(
+            CommandHandler.QueryProcessor delegate, String targetDialectId, TranslationConfig translationConfig) {
         this(delegate, targetDialectId, translationConfig, null);
     }
 
@@ -98,10 +96,11 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
      * @param translationConfig 翻译配置（关键词/标识符大小写策略）
      * @param backendName       后端名称（用于指标打点），可为 null
      */
-    public TranslationQueryProcessor(CommandHandler.QueryProcessor delegate,
-                                      String targetDialectId,
-                                      TranslationConfig translationConfig,
-                                      String backendName) {
+    public TranslationQueryProcessor(
+            CommandHandler.QueryProcessor delegate,
+            String targetDialectId,
+            TranslationConfig translationConfig,
+            String backendName) {
         this.delegate = delegate;
         this.enabled = !SOURCE_DIALECT.getIdentifier().equalsIgnoreCase(targetDialectId);
         this.translationConfig = translationConfig != null ? translationConfig : TranslationConfig.DEFAULT;
@@ -111,20 +110,22 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
 
         if (enabled) {
             this.targetDialect = DialectType.fromIdentifier(targetDialectId);
-            log.info("SQL translation enabled: {} → {} (config: {}, backend: {})",
-                    SOURCE_DIALECT.getIdentifier(), targetDialect.getIdentifier(),
-                    this.translationConfig, this.backendName);
+            log.info(
+                    "SQL translation enabled: {} → {} (config: {}, backend: {})",
+                    SOURCE_DIALECT.getIdentifier(),
+                    targetDialect.getIdentifier(),
+                    this.translationConfig,
+                    this.backendName);
         } else {
             this.targetDialect = SOURCE_DIALECT;
-            log.info("SQL translation disabled (source == target: {}, backend: {})",
-                    targetDialectId, this.backendName);
+            log.info("SQL translation disabled (source == target: {}, backend: {})", targetDialectId, this.backendName);
         }
     }
 
     @Override
     public void process(ChannelHandlerContext ctx, String sql, FrontendSession session) {
         log.info("SQL: {}", sql);
-        
+
         if (!enabled) {
             TranslationMetrics.recordDisabled();
             delegate.process(ctx, sql, session);
@@ -152,8 +153,7 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
             TranslationMetrics.recordDuration(targetDialect.getIdentifier(), backendName, seconds);
             log.info("Translated: {} → {}", sql, translatedSql);
         } catch (Exception e) {
-            log.warn("Translation failed for SQL: {}. Falling back to original. Error: {}",
-                    sql, e.getMessage());
+            log.warn("Translation failed for SQL: {}. Falling back to original. Error: {}", sql, e.getMessage());
             TranslationMetrics.recordFallback();
             translatedSql = sql;
         }

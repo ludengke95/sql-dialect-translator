@@ -1,13 +1,13 @@
 package com.translator.proxy.protocol.codec;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.ByteToMessageDecoder;
+import java.util.List;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.codec.ByteToMessageDecoder;
 
 /**
  * MySQL 协议拆包器。
@@ -94,8 +94,8 @@ public class MySQLPacketDecoder extends ByteToMessageDecoder {
 
         @Override
         public String toString() {
-            return "RawMySQLPacket{seq=" + sequenceId + ", len="
-                    + (payload != null ? payload.readableBytes() : 0) + "}";
+            return "RawMySQLPacket{seq=" + sequenceId + ", len=" + (payload != null ? payload.readableBytes() : 0)
+                    + "}";
         }
     }
 }

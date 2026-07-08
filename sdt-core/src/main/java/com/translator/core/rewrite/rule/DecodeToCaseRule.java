@@ -1,12 +1,13 @@
 package com.translator.core.rewrite.rule;
 
-import com.translator.core.DialectType;
-import com.translator.core.rewrite.FunctionRewriteRule;
+import java.util.*;
+
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.fun.SqlCase;
 import org.apache.calcite.sql.parser.SqlParserPos;
 
-import java.util.*;
+import com.translator.core.DialectType;
+import com.translator.core.rewrite.FunctionRewriteRule;
 
 /**
  * Oracle DECODE → CASE WHEN 改写规则。
@@ -58,7 +59,7 @@ public class DecodeToCaseRule extends FunctionRewriteRule {
 
         int pairEnd = hasDefault ? remaining - 1 : remaining;
         for (int i = 1; i <= pairEnd; i += 2) {
-            whenList.add(operands.get(i));     // search
+            whenList.add(operands.get(i)); // search
             thenList.add(operands.get(i + 1)); // result
         }
         if (hasDefault) {

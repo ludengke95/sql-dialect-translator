@@ -1,12 +1,12 @@
 package com.translator.jdbc;
 
-import com.translator.metrics.BackendMetrics;
-import com.translator.metrics.TranslationMetrics;
+import java.sql.*;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.*;
-import java.util.List;
+import com.translator.metrics.BackendMetrics;
+import com.translator.metrics.TranslationMetrics;
 
 /**
  * 翻译 Statement 实现。
@@ -19,8 +19,7 @@ public class TranslatorStatement implements Statement {
     protected final Statement realStatement;
     protected final TranslatorConnection translatorConnection;
 
-    public TranslatorStatement(Statement realStatement,
-                               TranslatorConnection translatorConnection) {
+    public TranslatorStatement(Statement realStatement, TranslatorConnection translatorConnection) {
         this.realStatement = realStatement;
         this.translatorConnection = translatorConnection;
     }
@@ -363,8 +362,6 @@ public class TranslatorStatement implements Statement {
         String translatedSql = translateSql(sql);
         return realStatement.executeLargeUpdate(translatedSql, columnNames);
     }
-
-
 
     @Override
     public <T> T unwrap(Class<T> iface) throws SQLException {

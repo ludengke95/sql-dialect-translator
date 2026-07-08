@@ -43,18 +43,15 @@ public class SqlTranslatorTest {
     public void testIfnullToCoalesce() {
         String mysqlSql = "SELECT IFNULL(name, 'unknown') FROM users";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
-        Assert.assertTrue("应包含 COALESCE: " + pgResult,
-                pgResult.toUpperCase().contains("COALESCE"));
-        Assert.assertFalse("不应包含 IFNULL: " + pgResult,
-                pgResult.toUpperCase().contains("IFNULL"));
+        Assert.assertTrue("应包含 COALESCE: " + pgResult, pgResult.toUpperCase().contains("COALESCE"));
+        Assert.assertFalse("不应包含 IFNULL: " + pgResult, pgResult.toUpperCase().contains("IFNULL"));
     }
 
     @Test
     public void testIfnullNested() {
         String mysqlSql = "SELECT IFNULL(IFNULL(a, b), c) FROM t";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
-        Assert.assertTrue("应包含 COALESCE: " + pgResult,
-                pgResult.toUpperCase().contains("COALESCE"));
+        Assert.assertTrue("应包含 COALESCE: " + pgResult, pgResult.toUpperCase().contains("COALESCE"));
     }
 
     // ==================== NVL → COALESCE ====================
@@ -63,8 +60,7 @@ public class SqlTranslatorTest {
     public void testNvlToCoalesce() {
         String oracleSql = "SELECT NVL(name, 'unknown') FROM users";
         String pgResult = SqlTranslator.translate(oracleSql, DialectType.ORACLE, DialectType.POSTGRESQL);
-        Assert.assertTrue("应包含 COALESCE: " + pgResult,
-                pgResult.toUpperCase().contains("COALESCE"));
+        Assert.assertTrue("应包含 COALESCE: " + pgResult, pgResult.toUpperCase().contains("COALESCE"));
     }
 
     // ==================== ISNULL → COALESCE (SQL Server) ====================
@@ -73,10 +69,8 @@ public class SqlTranslatorTest {
     public void testIsnullToCoalesce() {
         String sqlServerSql = "SELECT ISNULL(name, 'unknown') FROM users";
         String pgResult = SqlTranslator.translate(sqlServerSql, DialectType.SQLSERVER, DialectType.POSTGRESQL);
-        Assert.assertTrue("应包含 COALESCE: " + pgResult,
-                pgResult.toUpperCase().contains("COALESCE"));
-        Assert.assertFalse("不应包含 ISNULL: " + pgResult,
-                pgResult.toUpperCase().contains("ISNULL"));
+        Assert.assertTrue("应包含 COALESCE: " + pgResult, pgResult.toUpperCase().contains("COALESCE"));
+        Assert.assertFalse("不应包含 ISNULL: " + pgResult, pgResult.toUpperCase().contains("ISNULL"));
     }
 
     // ==================== DECODE → CASE WHEN ====================
@@ -120,18 +114,17 @@ public class SqlTranslatorTest {
     public void testNowToCurrentTimestamp() {
         String mysqlSql = "SELECT NOW() FROM dual";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
-        Assert.assertTrue("应包含 CURRENT_TIMESTAMP: " + pgResult,
-                pgResult.toUpperCase().contains("CURRENT_TIMESTAMP"));
-        Assert.assertFalse("不应包含 NOW(): " + pgResult,
-                pgResult.toUpperCase().contains("NOW()"));
+        Assert.assertTrue(
+                "应包含 CURRENT_TIMESTAMP: " + pgResult, pgResult.toUpperCase().contains("CURRENT_TIMESTAMP"));
+        Assert.assertFalse("不应包含 NOW(): " + pgResult, pgResult.toUpperCase().contains("NOW()"));
     }
 
     @Test
     public void testGetdateToCurrentTimestamp() {
         String sqlServerSql = "SELECT GETDATE()";
         String pgResult = SqlTranslator.translate(sqlServerSql, DialectType.SQLSERVER, DialectType.POSTGRESQL);
-        Assert.assertTrue("应包含 CURRENT_TIMESTAMP: " + pgResult,
-                pgResult.toUpperCase().contains("CURRENT_TIMESTAMP"));
+        Assert.assertTrue(
+                "应包含 CURRENT_TIMESTAMP: " + pgResult, pgResult.toUpperCase().contains("CURRENT_TIMESTAMP"));
     }
 
     @Test
@@ -139,8 +132,8 @@ public class SqlTranslatorTest {
         // SYSDATE 必须带括号，否则 Calcite 解析为标识符
         String oracleSql = "SELECT SYSDATE() FROM dual";
         String pgResult = SqlTranslator.translate(oracleSql, DialectType.ORACLE, DialectType.POSTGRESQL);
-        Assert.assertTrue("应包含 CURRENT_TIMESTAMP: " + pgResult,
-                pgResult.toUpperCase().contains("CURRENT_TIMESTAMP"));
+        Assert.assertTrue(
+                "应包含 CURRENT_TIMESTAMP: " + pgResult, pgResult.toUpperCase().contains("CURRENT_TIMESTAMP"));
     }
 
     // ==================== 同方言直接返回 ====================
@@ -161,17 +154,17 @@ public class SqlTranslatorTest {
     public void testLimitOffset() {
         String pgSql = "SELECT id, name FROM users ORDER BY id LIMIT 10 OFFSET 5";
         String mysqlResult = SqlTranslator.translate(pgSql, DialectType.POSTGRESQL, DialectType.MYSQL);
-        Assert.assertTrue("应包含 LIMIT: " + mysqlResult,
-                mysqlResult.toUpperCase().contains("LIMIT"));
-        Assert.assertTrue("应包含 OFFSET: " + mysqlResult,
-                mysqlResult.toUpperCase().contains("OFFSET"));
+        Assert.assertTrue("应包含 LIMIT: " + mysqlResult, mysqlResult.toUpperCase().contains("LIMIT"));
+        Assert.assertTrue(
+                "应包含 OFFSET: " + mysqlResult, mysqlResult.toUpperCase().contains("OFFSET"));
     }
 
     @Test
     public void testLimitOnly() {
         String pgSql = "SELECT name FROM users LIMIT 5";
         String mysqlResult = SqlTranslator.translate(pgSql, DialectType.POSTGRESQL, DialectType.MYSQL);
-        Assert.assertTrue("应包含 LIMIT 或 FETCH: " + mysqlResult,
+        Assert.assertTrue(
+                "应包含 LIMIT 或 FETCH: " + mysqlResult,
                 mysqlResult.toUpperCase().contains("LIMIT")
                         || mysqlResult.toUpperCase().contains("FETCH"));
     }
@@ -183,22 +176,22 @@ public class SqlTranslatorTest {
         String sqlServerSql = "SELECT TOP 10 id, name FROM users";
         String pgResult = SqlTranslator.translate(sqlServerSql, DialectType.SQLSERVER, DialectType.POSTGRESQL);
         // PG dialect 将 LIMIT 渲染为 FETCH NEXT n ROWS ONLY
-        Assert.assertTrue("应包含 FETCH NEXT 或 LIMIT: " + pgResult,
+        Assert.assertTrue(
+                "应包含 FETCH NEXT 或 LIMIT: " + pgResult,
                 pgResult.toUpperCase().contains("FETCH NEXT")
                         || pgResult.toUpperCase().contains("LIMIT"));
-        Assert.assertFalse("不应包含 TOP: " + pgResult,
-                pgResult.toUpperCase().contains("TOP"));
+        Assert.assertFalse("不应包含 TOP: " + pgResult, pgResult.toUpperCase().contains("TOP"));
     }
 
     @Test
     public void testSqlServerTopWithOrderBy() {
         String sqlServerSql = "SELECT TOP 5 name, age FROM users ORDER BY age DESC";
         String pgResult = SqlTranslator.translate(sqlServerSql, DialectType.SQLSERVER, DialectType.POSTGRESQL);
-        Assert.assertTrue("应包含 FETCH NEXT 或 LIMIT: " + pgResult,
+        Assert.assertTrue(
+                "应包含 FETCH NEXT 或 LIMIT: " + pgResult,
                 pgResult.toUpperCase().contains("FETCH NEXT")
                         || pgResult.toUpperCase().contains("LIMIT"));
-        Assert.assertTrue("应包含 ORDER BY: " + pgResult,
-                pgResult.toUpperCase().contains("ORDER BY"));
+        Assert.assertTrue("应包含 ORDER BY: " + pgResult, pgResult.toUpperCase().contains("ORDER BY"));
     }
 
     // ==================== 标识符引用 ====================
@@ -235,10 +228,8 @@ public class SqlTranslatorTest {
         // 只要不出现大写的 "A" 引用即可
         String upper = pgResult.toUpperCase();
         // 确保 ON 子句不会使用大写 "A" 引用
-        Assert.assertFalse("不应引用大写别名 \"A\": " + pgResult,
-                pgResult.contains("\"A\""));
-        Assert.assertFalse("不应引用大写别名 \"B\": " + pgResult,
-                pgResult.contains("\"B\""));
+        Assert.assertFalse("不应引用大写别名 \"A\": " + pgResult, pgResult.contains("\"A\""));
+        Assert.assertFalse("不应引用大写别名 \"B\": " + pgResult, pgResult.contains("\"B\""));
         // 应包含 AS "a" 或 AS a（大小写保留）
         Assert.assertTrue("应包含 SELECT: " + pgResult, upper.contains("SELECT"));
         Assert.assertTrue("应包含 LEFT JOIN: " + pgResult, upper.contains("LEFT JOIN"));
@@ -256,10 +247,8 @@ public class SqlTranslatorTest {
                 + "ORDER BY `a`.`create_time` DESC";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
         // 不应出现大写引用的 "A" 或 "B"
-        Assert.assertFalse("不应引用大写别名 \"A\": " + pgResult,
-                pgResult.contains("\"A\""));
-        Assert.assertFalse("不应引用大写别名 \"B\": " + pgResult,
-                pgResult.contains("\"B\""));
+        Assert.assertFalse("不应引用大写别名 \"A\": " + pgResult, pgResult.contains("\"A\""));
+        Assert.assertFalse("不应引用大写别名 \"B\": " + pgResult, pgResult.contains("\"B\""));
         // 应包含子查询关键字
         String upper = pgResult.toUpperCase();
         Assert.assertTrue("应包含 IN: " + pgResult, upper.contains(" IN "));
@@ -274,8 +263,7 @@ public class SqlTranslatorTest {
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
         // 验证 a.* 中的 a 已被引用（大小写保留），而 * 未引用
         // 期望结果：SELECT "a".*, "a"."name" FROM ... （a 保持小写）
-        Assert.assertTrue("a.* 的 a 应被引用却未被引用: " + pgResult,
-                pgResult.contains("\"a\".*"));
+        Assert.assertTrue("a.* 的 a 应被引用却未被引用: " + pgResult, pgResult.contains("\"a\".*"));
         // * 不应被单独加引号
         Assert.assertFalse("* 不应被引用: " + pgResult, pgResult.contains("\".*\""));
     }
@@ -288,8 +276,7 @@ public class SqlTranslatorTest {
         // 翻译应成功，不会抛 SqlParseException
         Assert.assertNotNull("翻译结果不应为 null", pgResult);
         String upper = pgResult.toUpperCase();
-        Assert.assertTrue("应包含 LIMIT 或 FETCH: " + pgResult,
-                upper.contains("LIMIT") || upper.contains("FETCH"));
+        Assert.assertTrue("应包含 LIMIT 或 FETCH: " + pgResult, upper.contains("LIMIT") || upper.contains("FETCH"));
     }
 
     @Test
@@ -298,8 +285,8 @@ public class SqlTranslatorTest {
         String oracleSql = "SELECT SYSDATE() FROM dual";
         String pgResult = SqlTranslator.translate(oracleSql, DialectType.ORACLE, DialectType.POSTGRESQL);
         Assert.assertNotNull("翻译结果不应为 null", pgResult);
-        Assert.assertTrue("应包含 CURRENT_TIMESTAMP: " + pgResult,
-                pgResult.toUpperCase().contains("CURRENT_TIMESTAMP"));
+        Assert.assertTrue(
+                "应包含 CURRENT_TIMESTAMP: " + pgResult, pgResult.toUpperCase().contains("CURRENT_TIMESTAMP"));
     }
 
     @Test(expected = com.translator.core.SqlTranslationException.class)
@@ -347,8 +334,7 @@ public class SqlTranslatorTest {
     public void testInsertWithFunctions() {
         String mysqlSql = "INSERT INTO users (name, created_at) VALUES ('test', NOW())";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
-        Assert.assertTrue("不应包含 NOW: " + pgResult,
-                pgResult.toUpperCase().contains("CURRENT_TIMESTAMP"));
+        Assert.assertTrue("不应包含 NOW: " + pgResult, pgResult.toUpperCase().contains("CURRENT_TIMESTAMP"));
     }
 
     // ==================== 跨方言函数组合 ====================
@@ -357,10 +343,9 @@ public class SqlTranslatorTest {
     public void testCombinedFunctions() {
         String mysqlSql = "SELECT IFNULL(a, 0), NOW(), CONCAT(x, y) FROM t";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
-        Assert.assertTrue("应包含 COALESCE: " + pgResult,
-                pgResult.toUpperCase().contains("COALESCE"));
-        Assert.assertTrue("应包含 CURRENT_TIMESTAMP: " + pgResult,
-                pgResult.toUpperCase().contains("CURRENT_TIMESTAMP"));
+        Assert.assertTrue("应包含 COALESCE: " + pgResult, pgResult.toUpperCase().contains("COALESCE"));
+        Assert.assertTrue(
+                "应包含 CURRENT_TIMESTAMP: " + pgResult, pgResult.toUpperCase().contains("CURRENT_TIMESTAMP"));
     }
 
     @Test
@@ -434,13 +419,10 @@ public class SqlTranslatorTest {
         String mysqlSql = "SELECT category FROM `integrated_data_resource` WHERE category != ''";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
         // category 应转为 "category"（小写），而非 "CATEGORY"（大写）
-        Assert.assertTrue("category 应小写引用: " + pgResult,
-                pgResult.contains("\"category\""));
-        Assert.assertFalse("不应大写引用 CATEGORY: " + pgResult,
-                pgResult.contains("\"CATEGORY\""));
+        Assert.assertTrue("category 应小写引用: " + pgResult, pgResult.contains("\"category\""));
+        Assert.assertFalse("不应大写引用 CATEGORY: " + pgResult, pgResult.contains("\"CATEGORY\""));
         // 表名保持反引号转过来的小写
-        Assert.assertTrue("表名应引用: " + pgResult,
-                pgResult.contains("\"integrated_data_resource\""));
+        Assert.assertTrue("表名应引用: " + pgResult, pgResult.contains("\"integrated_data_resource\""));
     }
 
     @Test
@@ -450,8 +432,7 @@ public class SqlTranslatorTest {
                 .withIdentifierCase(com.translator.core.config.TranslationConfig.IdentifierCase.UPPER);
         String mysqlSql = "SELECT category FROM `integrated_data_resource` WHERE category != ''";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL, config);
-        Assert.assertTrue("category 应大写引用: " + pgResult,
-                pgResult.contains("\"CATEGORY\""));
+        Assert.assertTrue("category 应大写引用: " + pgResult, pgResult.contains("\"CATEGORY\""));
     }
 
     @Test
@@ -461,8 +442,7 @@ public class SqlTranslatorTest {
                 .withIdentifierCase(com.translator.core.config.TranslationConfig.IdentifierCase.UNCHANGED);
         String mysqlSql = "SELECT category FROM `integrated_data_resource`";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL, config);
-        Assert.assertTrue("category 应保留原始大小写: " + pgResult,
-                pgResult.contains("\"category\""));
+        Assert.assertTrue("category 应保留原始大小写: " + pgResult, pgResult.contains("\"category\""));
     }
 
     @Test
@@ -494,8 +474,7 @@ public class SqlTranslatorTest {
         String mysqlSql = "SELECT a.name FROM `users` a";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL, config);
         // a.name → "A"."NAME"（大写）
-        Assert.assertTrue("a.name 应转为大写引用: " + pgResult,
-                pgResult.contains("\"A\".\"NAME\""));
+        Assert.assertTrue("a.name 应转为大写引用: " + pgResult, pgResult.contains("\"A\".\"NAME\""));
     }
 
     @Test
@@ -504,10 +483,8 @@ public class SqlTranslatorTest {
         String mysqlSql = "SELECT IFNULL(name, 'N/A') FROM users";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
         // IFNULL 应转为 COALESCE（函数转换），不应被引用
-        Assert.assertTrue("应包含 COALESCE: " + pgResult,
-                pgResult.contains("COALESCE"));
-        Assert.assertFalse("不应包含被引用的函数: " + pgResult,
-                pgResult.contains("\"IFNULL\""));
+        Assert.assertTrue("应包含 COALESCE: " + pgResult, pgResult.contains("COALESCE"));
+        Assert.assertFalse("不应包含被引用的函数: " + pgResult, pgResult.contains("\"IFNULL\""));
     }
 
     @Test
@@ -516,8 +493,7 @@ public class SqlTranslatorTest {
         String mysqlSql = "SELECT a.task_code FROM `task` a";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
         // alias.column 应被引用且小写
-        Assert.assertTrue("a.task_code 应小写引用: " + pgResult,
-                pgResult.contains("\"a\".\"task_code\""));
+        Assert.assertTrue("a.task_code 应小写引用: " + pgResult, pgResult.contains("\"a\".\"task_code\""));
     }
 
     // ==================== TPC-H Q21 翻译诊断 ====================
@@ -526,8 +502,7 @@ public class SqlTranslatorTest {
     public void testTpcHQ21Translation() {
         // TPC-H Q21: 未能及时供应的供应商
         // 多表 JOIN + orders 表无别名，验证 Calcite 是否能为 o_orderkey 添加 orders 前缀
-        String mysqlSql =
-                "SELECT s_name, COUNT(*) AS numwait\n"
+        String mysqlSql = "SELECT s_name, COUNT(*) AS numwait\n"
                 + "FROM supplier, lineitem l1, orders, nation\n"
                 + "WHERE s_suppkey = l1.l_suppkey\n"
                 + "    AND o_orderkey = l1.l_orderkey\n"
@@ -566,8 +541,8 @@ public class SqlTranslatorTest {
         Assert.assertTrue("应包含 FROM: " + pgResult, upper.contains("FROM"));
         Assert.assertTrue("应包含 GROUP BY: " + pgResult, upper.contains("GROUP BY"));
         Assert.assertTrue("应包含 ORDER BY: " + pgResult, upper.contains("ORDER BY"));
-        Assert.assertTrue("应包含 FETCH NEXT 或 LIMIT: " + pgResult,
-                upper.contains("LIMIT") || upper.contains("FETCH NEXT"));
+        Assert.assertTrue(
+                "应包含 FETCH NEXT 或 LIMIT: " + pgResult, upper.contains("LIMIT") || upper.contains("FETCH NEXT"));
         Assert.assertTrue("应包含 EXISTS: " + pgResult, upper.contains("EXISTS"));
 
         // 字符串字面量应正确保留（不被加引号破坏）
@@ -596,12 +571,9 @@ public class SqlTranslatorTest {
         // 核心场景：SUBSTR(数字字面量, 1, 3) → SUBSTR(CAST(数字字面量 AS VARCHAR), 1, 3)
         String mysqlSql = "SELECT SUBSTR(12312312313, 1, 3)";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
-        Assert.assertTrue("应包含 CAST: " + pgResult,
-                pgResult.toUpperCase().contains("CAST"));
-        Assert.assertTrue("应包含 SUBSTR: " + pgResult,
-                pgResult.toUpperCase().contains("SUBSTR"));
-        Assert.assertTrue("应包含原始数字: " + pgResult,
-                pgResult.contains("12312312313"));
+        Assert.assertTrue("应包含 CAST: " + pgResult, pgResult.toUpperCase().contains("CAST"));
+        Assert.assertTrue("应包含 SUBSTR: " + pgResult, pgResult.toUpperCase().contains("SUBSTR"));
+        Assert.assertTrue("应包含原始数字: " + pgResult, pgResult.contains("12312312313"));
     }
 
     @Test
@@ -609,10 +581,8 @@ public class SqlTranslatorTest {
         // 字符串字面量也包 CAST（PG 中幂等，安全）
         String mysqlSql = "SELECT SUBSTR('hello world', 1, 5)";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
-        Assert.assertTrue("应包含 CAST: " + pgResult,
-                pgResult.toUpperCase().contains("CAST"));
-        Assert.assertTrue("应包含 SUBSTR: " + pgResult,
-                pgResult.toUpperCase().contains("SUBSTR"));
+        Assert.assertTrue("应包含 CAST: " + pgResult, pgResult.toUpperCase().contains("CAST"));
+        Assert.assertTrue("应包含 SUBSTR: " + pgResult, pgResult.toUpperCase().contains("SUBSTR"));
     }
 
     @Test
@@ -620,10 +590,8 @@ public class SqlTranslatorTest {
         // 列引用也包 CAST — 无法确定列类型，无条件 CAST 最安全
         String mysqlSql = "SELECT SUBSTR(phone_number, 1, 3) FROM users";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
-        Assert.assertTrue("应包含 CAST: " + pgResult,
-                pgResult.toUpperCase().contains("CAST"));
-        Assert.assertTrue("应包含 SUBSTR: " + pgResult,
-                pgResult.toUpperCase().contains("SUBSTR"));
+        Assert.assertTrue("应包含 CAST: " + pgResult, pgResult.toUpperCase().contains("CAST"));
+        Assert.assertTrue("应包含 SUBSTR: " + pgResult, pgResult.toUpperCase().contains("SUBSTR"));
     }
 
     @Test
@@ -631,8 +599,7 @@ public class SqlTranslatorTest {
         // SUBSTR 只有两个参数时也生效
         String mysqlSql = "SELECT SUBSTR(12345, 2)";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
-        Assert.assertTrue("应包含 CAST: " + pgResult,
-                pgResult.toUpperCase().contains("CAST"));
+        Assert.assertTrue("应包含 CAST: " + pgResult, pgResult.toUpperCase().contains("CAST"));
     }
 
     @Test
@@ -640,8 +607,7 @@ public class SqlTranslatorTest {
         // 嵌套 SUBSTR：每层第一个参数都独立包 CAST
         String mysqlSql = "SELECT SUBSTR(SUBSTR('abcdef', 1, 3), 2, 1)";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
-        Assert.assertTrue("应包含 CAST: " + pgResult,
-                pgResult.toUpperCase().contains("CAST"));
+        Assert.assertTrue("应包含 CAST: " + pgResult, pgResult.toUpperCase().contains("CAST"));
         // 嵌套两层应该有两个 CAST
         int castCount = pgResult.toUpperCase().split("CAST").length - 1;
         Assert.assertEquals("嵌套 SUBSTR 应有两个 CAST: " + pgResult, 2, castCount);
@@ -652,8 +618,7 @@ public class SqlTranslatorTest {
         // SUBSTRING 函数同样处理
         String mysqlSql = "SELECT SUBSTRING(9876543210, 1, 5)";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
-        Assert.assertTrue("应包含 CAST: " + pgResult,
-                pgResult.toUpperCase().contains("CAST"));
+        Assert.assertTrue("应包含 CAST: " + pgResult, pgResult.toUpperCase().contains("CAST"));
     }
 
     @Test
@@ -661,7 +626,8 @@ public class SqlTranslatorTest {
         // 目标方言不是 PostgreSQL 时，不应用此规则
         String mysqlSql = "SELECT SUBSTR(123, 1, 2)";
         String oracleResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.ORACLE);
-        Assert.assertFalse("Oracle 目标不应包含 CAST: " + oracleResult,
+        Assert.assertFalse(
+                "Oracle 目标不应包含 CAST: " + oracleResult,
                 oracleResult.toUpperCase().contains("CAST"));
     }
 
@@ -678,10 +644,8 @@ public class SqlTranslatorTest {
         // WHERE 子句中的 SUBSTR 也正确处理
         String mysqlSql = "SELECT * FROM orders WHERE SUBSTR(order_code, 1, 2) = 'AB'";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
-        Assert.assertTrue("应包含 CAST: " + pgResult,
-                pgResult.toUpperCase().contains("CAST"));
-        Assert.assertTrue("应包含 WHERE: " + pgResult,
-                pgResult.toUpperCase().contains("WHERE"));
+        Assert.assertTrue("应包含 CAST: " + pgResult, pgResult.toUpperCase().contains("CAST"));
+        Assert.assertTrue("应包含 WHERE: " + pgResult, pgResult.toUpperCase().contains("WHERE"));
     }
 
     @Test
@@ -689,8 +653,7 @@ public class SqlTranslatorTest {
         // 表达式作为第一个参数也包 CAST
         String mysqlSql = "SELECT SUBSTR(price + tax, 1, 3) FROM orders";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
-        Assert.assertTrue("应包含 CAST: " + pgResult,
-                pgResult.toUpperCase().contains("CAST"));
+        Assert.assertTrue("应包含 CAST: " + pgResult, pgResult.toUpperCase().contains("CAST"));
     }
 
     @Test

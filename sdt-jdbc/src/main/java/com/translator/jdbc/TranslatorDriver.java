@@ -1,12 +1,12 @@
 package com.translator.jdbc;
 
-import com.translator.metrics.ConnectionMetrics;
+import java.sql.*;
+import java.util.Properties;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.*;
-import java.util.Properties;
-import java.util.logging.LoggingPermission;
+import com.translator.metrics.ConnectionMetrics;
 
 /**
  * 翻译驱动入口类。
@@ -24,6 +24,7 @@ public class TranslatorDriver implements Driver {
 
     /** JDBC 驱动版本 */
     private static final int MAJOR_VERSION = 1;
+
     private static final int MINOR_VERSION = 0;
 
     static {
@@ -48,24 +49,18 @@ public class TranslatorDriver implements Driver {
 
         // 获取真实驱动并创建连接
         Driver realDriver = DriverManager.getDriver(urlInfo.getRealUrl());
-        Connection realConnection = realDriver.connect(
-                urlInfo.getRealUrl(), urlInfo.getRealProperties());
+        Connection realConnection = realDriver.connect(urlInfo.getRealUrl(), urlInfo.getRealProperties());
 
         if (realConnection == null) {
             throw new SQLException("无法获取真实数据库连接: " + urlInfo.getRealUrl());
         }
 
-        log.info("成功创建翻译连接: {} → {}",
-                urlInfo.getSourceDialect(), urlInfo.getTargetDialect());
+        log.info("成功创建翻译连接: {} → {}", urlInfo.getSourceDialect(), urlInfo.getTargetDialect());
 
         ConnectionMetrics.onConnect();
 
         return new TranslatorConnection(
-                realConnection,
-                urlInfo.getSourceDialect(),
-                urlInfo.getTargetDialect(),
-                urlInfo.getTranslationConfig()
-        );
+                realConnection, urlInfo.getSourceDialect(), urlInfo.getTargetDialect(), urlInfo.getTranslationConfig());
     }
 
     @Override

@@ -1,23 +1,5 @@
 package com.translator.proxy.core.handler;
 
-import com.translator.proxy.core.intercept.SystemVariableInterceptor;
-import com.translator.proxy.core.session.FrontendSession;
-import com.translator.proxy.metrics.CommandMetrics;
-import com.translator.metrics.ConnectionMetrics;
-import com.translator.proxy.metrics.NettyMetrics;
-import com.translator.proxy.protocol.codec.MySQLPacketDecoder;
-import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
-import com.translator.proxy.protocol.constant.CommandType;
-import com.translator.proxy.protocol.constant.ServerStatus;
-import com.translator.proxy.protocol.util.BufferUtils;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
-import io.netty.buffer.Unpooled;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -26,6 +8,25 @@ import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.translator.metrics.ConnectionMetrics;
+import com.translator.proxy.core.intercept.SystemVariableInterceptor;
+import com.translator.proxy.core.session.FrontendSession;
+import com.translator.proxy.metrics.CommandMetrics;
+import com.translator.proxy.metrics.NettyMetrics;
+import com.translator.proxy.protocol.codec.MySQLPacketDecoder;
+import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
+import com.translator.proxy.protocol.constant.CommandType;
+import com.translator.proxy.protocol.constant.ServerStatus;
+import com.translator.proxy.protocol.util.BufferUtils;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
 
 /**
  * 命令处理器 —— 认证完成后处理客户端各类 MySQL 命令。
@@ -49,8 +50,7 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
 
     /** SHOW DATABASES / SHOW SCHEMAS [LIKE 'xxx'] */
     private static final Pattern SHOW_DATABASES = Pattern.compile(
-            "^\\s*SHOW\\s+(DATABASES|SCHEMAS)(?:\\s+LIKE\\s+'([^']*)')?\\s*$",
-            Pattern.CASE_INSENSITIVE);
+            "^\\s*SHOW\\s+(DATABASES|SCHEMAS)(?:\\s+LIKE\\s+'([^']*)')?\\s*$", Pattern.CASE_INSENSITIVE);
 
     /** 后端路由器（多后端模式下按数据库名路由） */
     private static volatile BackendRouter backendRouter = null;
@@ -90,7 +90,8 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
             CommandMetrics.recordCommand(cmdName);
 
             // 每个命令开始时，客户端重置 seq 为 0
-            FrontendSession session = ctx.channel().attr(SessionAttribute.SESSION_KEY).get();
+            FrontendSession session =
+                    ctx.channel().attr(SessionAttribute.SESSION_KEY).get();
 
             switch (command) {
                 case CommandType.COM_QUERY:
@@ -151,8 +152,7 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
         }
 
         // 3. 检查是否为系统变量查询
-        SystemVariableInterceptor.InterceptResult ir =
-                SystemVariableInterceptor.intercept(sql, session.getDatabase());
+        SystemVariableInterceptor.InterceptResult ir = SystemVariableInterceptor.intercept(sql, session.getDatabase());
         if (ir != null) {
             log.debug("Intercepted system variable query: {}", sql);
             CommandMetrics.recordSystemVarInterception();
@@ -227,7 +227,7 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
 
         // Rows
         for (String name : sorted) {
-            ByteBuf row = buildTextRow(ctx.alloc(), new String[]{name});
+            ByteBuf row = buildTextRow(ctx.alloc(), new String[] {name});
             ctx.write(new MySQLPacketEncoder.OutgoingPacket(row, seq++));
         }
 
@@ -296,8 +296,7 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
 
     // ==================== 系统变量拦截结果 → MySQL 结果集包 ====================
 
-    private void writeInterceptedResult(ChannelHandlerContext ctx,
-                                         SystemVariableInterceptor.InterceptResult ir) {
+    private void writeInterceptedResult(ChannelHandlerContext ctx, SystemVariableInterceptor.InterceptResult ir) {
         // 检查是否为多列模式
         if (ir.isMultiColumn()) {
             writeMultiColumnResult(ctx, ir);
@@ -335,10 +334,10 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
         // Row (skip if empty)
         if (!isEmpty) {
             if (ir.twoColumns) {
-                ByteBuf row = buildTextRow(ctx.alloc(), new String[]{ir.value1, ir.value2});
+                ByteBuf row = buildTextRow(ctx.alloc(), new String[] {ir.value1, ir.value2});
                 ctx.write(new MySQLPacketEncoder.OutgoingPacket(row, seq++));
             } else {
-                ByteBuf row = buildTextRow(ctx.alloc(), new String[]{ir.value1});
+                ByteBuf row = buildTextRow(ctx.alloc(), new String[] {ir.value1});
                 ctx.write(new MySQLPacketEncoder.OutgoingPacket(row, seq++));
             }
         }
@@ -357,8 +356,7 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
      * @param ctx Netty ChannelHandlerContext
      * @param ir   拦截结果（多列模式）
      */
-    private void writeMultiColumnResult(ChannelHandlerContext ctx,
-                                         SystemVariableInterceptor.InterceptResult ir) {
+    private void writeMultiColumnResult(ChannelHandlerContext ctx, SystemVariableInterceptor.InterceptResult ir) {
         List<SystemVariableInterceptor.ColumnInfo> columns = ir.columns;
         int colCount = columns.size();
 
@@ -396,24 +394,29 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
     /**
      * 构造 ColumnDefinition41 包。
      */
-    static ByteBuf buildColumnDef(ByteBufAllocator alloc,
-                                   String catalog, String schema, String table,
-                                   String name, int columnLength, int columnType,
-                                   int charset) {
+    static ByteBuf buildColumnDef(
+            ByteBufAllocator alloc,
+            String catalog,
+            String schema,
+            String table,
+            String name,
+            int columnLength,
+            int columnType,
+            int charset) {
         ByteBuf buf = alloc.buffer(64);
-        BufferUtils.writeLengthEncodedString(buf, "def");  // catalog
+        BufferUtils.writeLengthEncodedString(buf, "def"); // catalog
         BufferUtils.writeLengthEncodedString(buf, schema); // schema
-        BufferUtils.writeLengthEncodedString(buf, table);  // table
-        BufferUtils.writeLengthEncodedString(buf, table);  // org_table
-        BufferUtils.writeLengthEncodedString(buf, name);   // name
-        BufferUtils.writeLengthEncodedString(buf, name);   // org_name
-        buf.writeByte(0x0C);                               // length of fixed-length fields (12)
-        buf.writeShortLE(charset);                         // character set
-        buf.writeIntLE(columnLength);                      // column length
-        buf.writeByte(columnType);                         // column type
-        buf.writeShortLE(0);                               // flags
-        buf.writeByte(0);                                  // decimals
-        buf.writeZero(2);                                  // filler
+        BufferUtils.writeLengthEncodedString(buf, table); // table
+        BufferUtils.writeLengthEncodedString(buf, table); // org_table
+        BufferUtils.writeLengthEncodedString(buf, name); // name
+        BufferUtils.writeLengthEncodedString(buf, name); // org_name
+        buf.writeByte(0x0C); // length of fixed-length fields (12)
+        buf.writeShortLE(charset); // character set
+        buf.writeIntLE(columnLength); // column length
+        buf.writeByte(columnType); // column type
+        buf.writeShortLE(0); // flags
+        buf.writeByte(0); // decimals
+        buf.writeZero(2); // filler
         return buf;
     }
 
@@ -434,15 +437,15 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
 
     static ByteBuf buildEof(ByteBufAllocator alloc) {
         ByteBuf buf = alloc.buffer(5);
-        buf.writeByte(0xFE);                                    // EOF header
-        buf.writeShortLE(0);                                    // warnings
-        buf.writeShortLE(ServerStatus.SERVER_STATUS_AUTOCOMMIT);// status_flags
+        buf.writeByte(0xFE); // EOF header
+        buf.writeShortLE(0); // warnings
+        buf.writeShortLE(ServerStatus.SERVER_STATUS_AUTOCOMMIT); // status_flags
         return buf;
     }
 
     void writeOk(ChannelHandlerContext ctx, long affectedRows, long lastInsertId, String info) {
-        ByteBuf ok = AuthHandler.buildOkPacket(ctx.alloc(), affectedRows, lastInsertId,
-                ServerStatus.SERVER_STATUS_AUTOCOMMIT, 0, info);
+        ByteBuf ok = AuthHandler.buildOkPacket(
+                ctx.alloc(), affectedRows, lastInsertId, ServerStatus.SERVER_STATUS_AUTOCOMMIT, 0, info);
         ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(ok, (byte) 1));
     }
 
@@ -455,7 +458,9 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         if (isConnectionReset(cause)) {
             // 客户端主动断开（RST），正常现象，DEBUG 级别
-            log.debug("Client {} disconnected: {}", ctx.channel().remoteAddress(),
+            log.debug(
+                    "Client {} disconnected: {}",
+                    ctx.channel().remoteAddress(),
                     cause.getMessage() != null ? cause.getMessage() : "connection reset");
         } else {
             log.error("Exception in CommandHandler", cause);
@@ -474,10 +479,11 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
     private static boolean isConnectionReset(Throwable cause) {
         if (cause instanceof java.io.IOException) {
             String msg = cause.getMessage();
-            return msg != null && (msg.contains("reset by peer")
-                    || msg.contains("connection reset")
-                    || msg.contains("中止了一个已建立的连接")
-                    || msg.contains("abort"));
+            return msg != null
+                    && (msg.contains("reset by peer")
+                            || msg.contains("connection reset")
+                            || msg.contains("中止了一个已建立的连接")
+                            || msg.contains("abort"));
         }
         return false;
     }
@@ -491,8 +497,7 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
     public interface QueryProcessor {
         /** 空实现（Phase 3 占位，PostgreSQL 后端在 Phase 4 中实现） */
         QueryProcessor NOOP = (ctx, sql, session) -> {
-            ByteBuf err = AuthHandler.buildErrPacket(ctx.alloc(),
-                    1105, "HY000", "Backend not configured");
+            ByteBuf err = AuthHandler.buildErrPacket(ctx.alloc(), 1105, "HY000", "Backend not configured");
             ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(err, (byte) 1));
         };
 

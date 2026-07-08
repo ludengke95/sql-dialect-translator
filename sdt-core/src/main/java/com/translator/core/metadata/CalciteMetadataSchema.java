@@ -1,5 +1,12 @@
 package com.translator.core.metadata;
 
+import java.sql.Types;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
 import org.apache.calcite.linq4j.tree.Expression;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
@@ -11,13 +18,6 @@ import org.apache.calcite.schema.Schemas;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractTable;
 import org.apache.calcite.sql.type.SqlTypeName;
-
-import java.sql.Types;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 适配 Calcite 的 Schema，从自定义的 {@link MetadataProvider} 中按需加载表元数据。
@@ -37,7 +37,7 @@ public class CalciteMetadataSchema implements Schema {
         if (name == null) {
             return null;
         }
-        
+
         Table cached = tableCache.get(name);
         if (cached != null) {
             return cached;

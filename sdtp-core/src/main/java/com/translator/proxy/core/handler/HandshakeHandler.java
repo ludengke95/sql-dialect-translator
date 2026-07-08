@@ -1,20 +1,22 @@
 package com.translator.proxy.core.handler;
 
+import java.util.concurrent.atomic.AtomicLong;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.translator.metrics.ConnectionMetrics;
+import com.translator.proxy.core.session.FrontendSession;
+import com.translator.proxy.metrics.NettyMetrics;
 import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
 import com.translator.proxy.protocol.constant.CapabilityFlags;
 import com.translator.proxy.protocol.util.BufferUtils;
 import com.translator.proxy.protocol.util.MySQLAuth;
-import com.translator.proxy.core.session.FrontendSession;
-import com.translator.metrics.ConnectionMetrics;
-import com.translator.proxy.metrics.NettyMetrics;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 握手处理器 —— MySQL 连接建立后的第一个 Handler。

@@ -28,29 +28,69 @@ public class ProxyConfig {
     private TranslationConf translation = new TranslationConf(); // 全局默认值
     private MetricsConf metrics = new MetricsConf(); // 指标暴露配置
 
-    public int getPort() { return port; }
-    public void setPort(int port) { this.port = port; }
+    public int getPort() {
+        return port;
+    }
 
-    public int getReloadQueueCapacity() { return reloadQueueCapacity; }
-    public void setReloadQueueCapacity(int reloadQueueCapacity) { this.reloadQueueCapacity = reloadQueueCapacity; }
+    public void setPort(int port) {
+        this.port = port;
+    }
 
-    public int getReloadDrainTimeoutMs() { return reloadDrainTimeoutMs; }
-    public void setReloadDrainTimeoutMs(int reloadDrainTimeoutMs) { this.reloadDrainTimeoutMs = reloadDrainTimeoutMs; }
+    public int getReloadQueueCapacity() {
+        return reloadQueueCapacity;
+    }
 
-    public int getReloadDebounceMs() { return reloadDebounceMs; }
-    public void setReloadDebounceMs(int reloadDebounceMs) { this.reloadDebounceMs = reloadDebounceMs; }
+    public void setReloadQueueCapacity(int reloadQueueCapacity) {
+        this.reloadQueueCapacity = reloadQueueCapacity;
+    }
 
-    public AuthConfig getAuth() { return auth; }
-    public void setAuth(AuthConfig auth) { this.auth = auth; }
+    public int getReloadDrainTimeoutMs() {
+        return reloadDrainTimeoutMs;
+    }
 
-    public List<TargetConfig> getBackends() { return backends; }
-    public void setBackends(List<TargetConfig> backends) { this.backends = backends; }
+    public void setReloadDrainTimeoutMs(int reloadDrainTimeoutMs) {
+        this.reloadDrainTimeoutMs = reloadDrainTimeoutMs;
+    }
 
-    public TranslationConf getTranslation() { return translation; }
-    public void setTranslation(TranslationConf translation) { this.translation = translation; }
+    public int getReloadDebounceMs() {
+        return reloadDebounceMs;
+    }
 
-    public MetricsConf getMetrics() { return metrics; }
-    public void setMetrics(MetricsConf metrics) { this.metrics = metrics; }
+    public void setReloadDebounceMs(int reloadDebounceMs) {
+        this.reloadDebounceMs = reloadDebounceMs;
+    }
+
+    public AuthConfig getAuth() {
+        return auth;
+    }
+
+    public void setAuth(AuthConfig auth) {
+        this.auth = auth;
+    }
+
+    public List<TargetConfig> getBackends() {
+        return backends;
+    }
+
+    public void setBackends(List<TargetConfig> backends) {
+        this.backends = backends;
+    }
+
+    public TranslationConf getTranslation() {
+        return translation;
+    }
+
+    public void setTranslation(TranslationConf translation) {
+        this.translation = translation;
+    }
+
+    public MetricsConf getMetrics() {
+        return metrics;
+    }
+
+    public void setMetrics(MetricsConf metrics) {
+        this.metrics = metrics;
+    }
 
     // ==================== 内嵌配置类 ====================
 
@@ -58,10 +98,21 @@ public class ProxyConfig {
         private String user = "root";
         private String password = "proxy_password";
 
-        public String getUser() { return user; }
-        public void setUser(String user) { this.user = user; }
-        public String getPassword() { return password; }
-        public void setPassword(String password) { this.password = password; }
+        public String getUser() {
+            return user;
+        }
+
+        public void setUser(String user) {
+            this.user = user;
+        }
+
+        public String getPassword() {
+            return password;
+        }
+
+        public void setPassword(String password) {
+            this.password = password;
+        }
     }
 
     /**
@@ -93,22 +144,69 @@ public class ProxyConfig {
         /** 翻译配置（可选，不设置时使用全局默认值） */
         private TranslationConf translation;
 
-        public String getName() { return name; }
-        public void setName(String name) { this.name = name; }
-        public String getDialect() { return dialect; }
-        public void setDialect(String dialect) { this.dialect = dialect; }
-        public String getJdbcUrl() { return jdbcUrl; }
-        public void setJdbcUrl(String jdbcUrl) { this.jdbcUrl = jdbcUrl; }
-        public String getUsername() { return username; }
-        public void setUsername(String username) { this.username = username; }
-        public String getPassword() { return password; }
-        public void setPassword(String password) { this.password = password; }
-        public int getMaxPoolSize() { return maxPoolSize; }
-        public void setMaxPoolSize(int maxPoolSize) { this.maxPoolSize = maxPoolSize; }
-        public int getMinIdle() { return minIdle; }
-        public void setMinIdle(int minIdle) { this.minIdle = minIdle; }
-        public TranslationConf getTranslation() { return translation; }
-        public void setTranslation(TranslationConf translation) { this.translation = translation; }
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getDialect() {
+            return dialect;
+        }
+
+        public void setDialect(String dialect) {
+            this.dialect = dialect;
+        }
+
+        public String getJdbcUrl() {
+            return jdbcUrl;
+        }
+
+        public void setJdbcUrl(String jdbcUrl) {
+            this.jdbcUrl = jdbcUrl;
+        }
+
+        public String getUsername() {
+            return username;
+        }
+
+        public void setUsername(String username) {
+            this.username = username;
+        }
+
+        public String getPassword() {
+            return password;
+        }
+
+        public void setPassword(String password) {
+            this.password = password;
+        }
+
+        public int getMaxPoolSize() {
+            return maxPoolSize;
+        }
+
+        public void setMaxPoolSize(int maxPoolSize) {
+            this.maxPoolSize = maxPoolSize;
+        }
+
+        public int getMinIdle() {
+            return minIdle;
+        }
+
+        public void setMinIdle(int minIdle) {
+            this.minIdle = minIdle;
+        }
+
+        public TranslationConf getTranslation() {
+            return translation;
+        }
+
+        public void setTranslation(TranslationConf translation) {
+            this.translation = translation;
+        }
 
         @Override
         public boolean equals(Object o) {
@@ -127,8 +225,7 @@ public class ProxyConfig {
 
         @Override
         public int hashCode() {
-            return Objects.hash(name, dialect, jdbcUrl, username, password,
-                    maxPoolSize, minIdle, translation);
+            return Objects.hash(name, dialect, jdbcUrl, username, password, maxPoolSize, minIdle, translation);
         }
     }
 
@@ -139,18 +236,28 @@ public class ProxyConfig {
         private String keywordCase = "UPPER";
         private String identifierCase = "LOWER";
 
-        public String getKeywordCase() { return keywordCase; }
-        public void setKeywordCase(String keywordCase) { this.keywordCase = keywordCase; }
-        public String getIdentifierCase() { return identifierCase; }
-        public void setIdentifierCase(String identifierCase) { this.identifierCase = identifierCase; }
+        public String getKeywordCase() {
+            return keywordCase;
+        }
+
+        public void setKeywordCase(String keywordCase) {
+            this.keywordCase = keywordCase;
+        }
+
+        public String getIdentifierCase() {
+            return identifierCase;
+        }
+
+        public void setIdentifierCase(String identifierCase) {
+            this.identifierCase = identifierCase;
+        }
 
         @Override
         public boolean equals(Object o) {
             if (this == o) return true;
             if (!(o instanceof TranslationConf)) return false;
             TranslationConf that = (TranslationConf) o;
-            return Objects.equals(keywordCase, that.keywordCase)
-                    && Objects.equals(identifierCase, that.identifierCase);
+            return Objects.equals(keywordCase, that.keywordCase) && Objects.equals(identifierCase, that.identifierCase);
         }
 
         @Override
@@ -167,9 +274,20 @@ public class ProxyConfig {
         /** 0 表示自动计算（proxy端口 + 10000），> 0 表示显式指定 */
         private int port = 0;
 
-        public boolean isEnabled() { return enabled; }
-        public void setEnabled(boolean enabled) { this.enabled = enabled; }
-        public int getPort() { return port; }
-        public void setPort(int port) { this.port = port; }
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getPort() {
+            return port;
+        }
+
+        public void setPort(int port) {
+            this.port = port;
+        }
     }
 }

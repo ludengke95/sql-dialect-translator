@@ -83,16 +83,25 @@ public final class BackendMetrics {
     public static String classifyQueryType(String sql) {
         if (sql == null) return "OTHER";
         String trimmed = sql.trim().toUpperCase();
-        if (trimmed.startsWith("SELECT") || trimmed.startsWith("WITH") || trimmed.startsWith("SHOW")
-                || trimmed.startsWith("DESCRIBE") || trimmed.startsWith("EXPLAIN")) {
+        if (trimmed.startsWith("SELECT")
+                || trimmed.startsWith("WITH")
+                || trimmed.startsWith("SHOW")
+                || trimmed.startsWith("DESCRIBE")
+                || trimmed.startsWith("EXPLAIN")) {
             return "SELECT";
         }
-        if (trimmed.startsWith("INSERT") || trimmed.startsWith("UPDATE") || trimmed.startsWith("DELETE")
-                || trimmed.startsWith("REPLACE") || trimmed.startsWith("MERGE")) {
+        if (trimmed.startsWith("INSERT")
+                || trimmed.startsWith("UPDATE")
+                || trimmed.startsWith("DELETE")
+                || trimmed.startsWith("REPLACE")
+                || trimmed.startsWith("MERGE")) {
             return "DML";
         }
-        if (trimmed.startsWith("CREATE") || trimmed.startsWith("ALTER") || trimmed.startsWith("DROP")
-                || trimmed.startsWith("TRUNCATE") || trimmed.startsWith("RENAME")) {
+        if (trimmed.startsWith("CREATE")
+                || trimmed.startsWith("ALTER")
+                || trimmed.startsWith("DROP")
+                || trimmed.startsWith("TRUNCATE")
+                || trimmed.startsWith("RENAME")) {
             return "DDL";
         }
         return "OTHER";

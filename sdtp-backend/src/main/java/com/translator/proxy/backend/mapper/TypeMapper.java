@@ -1,8 +1,8 @@
 package com.translator.proxy.backend.mapper;
 
-import com.translator.proxy.protocol.constant.ColumnType;
-
 import java.sql.Types;
+
+import com.translator.proxy.protocol.constant.ColumnType;
 
 /**
  * JDBC Types → MySQL ColumnType 映射器。
@@ -127,6 +127,7 @@ public final class TypeMapper {
      * MySQL 字符集编号（33 = utf8mb4_general_ci）。
      */
     public static final int CHARSET_UTF8MB4 = 33;
+
     public static final int CHARSET_BINARY = 63;
 
     /**
