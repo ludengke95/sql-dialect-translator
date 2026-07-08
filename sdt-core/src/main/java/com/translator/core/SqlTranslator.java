@@ -610,6 +610,38 @@ public class SqlTranslator {
                         null,
                         org.apache.calcite.sql.type.OperandTypes.family(org.apache.calcite.sql.type.SqlTypeFamily.ANY, org.apache.calcite.sql.type.SqlTypeFamily.ANY),
                         org.apache.calcite.sql.SqlFunctionCategory.SYSTEM
+                    ),
+                    new org.apache.calcite.sql.SqlFunction(
+                        "DATE_ADD",
+                        org.apache.calcite.sql.SqlKind.OTHER_FUNCTION,
+                        org.apache.calcite.sql.type.ReturnTypes.ARG0,
+                        null,
+                        org.apache.calcite.sql.type.OperandTypes.family(org.apache.calcite.sql.type.SqlTypeFamily.ANY, org.apache.calcite.sql.type.SqlTypeFamily.ANY),
+                        org.apache.calcite.sql.SqlFunctionCategory.SYSTEM
+                    ),
+                    new org.apache.calcite.sql.SqlFunction(
+                        "ADDDATE",
+                        org.apache.calcite.sql.SqlKind.OTHER_FUNCTION,
+                        org.apache.calcite.sql.type.ReturnTypes.ARG0,
+                        null,
+                        org.apache.calcite.sql.type.OperandTypes.family(org.apache.calcite.sql.type.SqlTypeFamily.ANY, org.apache.calcite.sql.type.SqlTypeFamily.ANY),
+                        org.apache.calcite.sql.SqlFunctionCategory.SYSTEM
+                    ),
+                    new org.apache.calcite.sql.SqlFunction(
+                        "DATE_SUB",
+                        org.apache.calcite.sql.SqlKind.OTHER_FUNCTION,
+                        org.apache.calcite.sql.type.ReturnTypes.ARG0,
+                        null,
+                        org.apache.calcite.sql.type.OperandTypes.family(org.apache.calcite.sql.type.SqlTypeFamily.ANY, org.apache.calcite.sql.type.SqlTypeFamily.ANY),
+                        org.apache.calcite.sql.SqlFunctionCategory.SYSTEM
+                    ),
+                    new org.apache.calcite.sql.SqlFunction(
+                        "SUBDATE",
+                        org.apache.calcite.sql.SqlKind.OTHER_FUNCTION,
+                        org.apache.calcite.sql.type.ReturnTypes.ARG0,
+                        null,
+                        org.apache.calcite.sql.type.OperandTypes.family(org.apache.calcite.sql.type.SqlTypeFamily.ANY, org.apache.calcite.sql.type.SqlTypeFamily.ANY),
+                        org.apache.calcite.sql.SqlFunctionCategory.SYSTEM
                     )
                 );
 

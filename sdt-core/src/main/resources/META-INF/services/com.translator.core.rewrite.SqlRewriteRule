@@ -5,3 +5,4 @@ com.translator.core.rewrite.rule.SysdateToCurrentTimestampRule
 com.translator.core.rewrite.rule.TodayToCurrentDateRule
 com.translator.core.rewrite.rule.DecodeToCaseRule
 com.translator.core.rewrite.rule.SubstrCastRule
+com.translator.core.rewrite.rule.DateAddRewriteRule

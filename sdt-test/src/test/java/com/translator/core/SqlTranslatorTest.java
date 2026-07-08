@@ -692,4 +692,22 @@ public class SqlTranslatorTest {
         Assert.assertTrue("应包含 CAST: " + pgResult,
                 pgResult.toUpperCase().contains("CAST"));
     }
+
+    @Test
+    public void testDateAddRewrite() {
+        String mysqlSql = "SELECT DATE_ADD('1998-12-01', INTERVAL -90 DAY)";
+        String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
+        Assert.assertTrue("应包含 CAST: " + pgResult, pgResult.toUpperCase().contains("CAST"));
+        Assert.assertTrue("应包含 TIMESTAMP: " + pgResult, pgResult.toUpperCase().contains("TIMESTAMP"));
+        Assert.assertTrue("应包含 -90 DAYS: " + pgResult, pgResult.contains("-90 DAYS"));
+        Assert.assertTrue("应为二元加法: " + pgResult, pgResult.contains("+"));
+    }
+
+    @Test
+    public void testDateSubRewrite() {
+        String mysqlSql = "SELECT DATE_SUB('1998-12-01', INTERVAL 90 DAY)";
+        String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
+        Assert.assertTrue("应包含 -90 DAYS: " + pgResult, pgResult.contains("-90 DAYS"));
+        Assert.assertTrue("应为二元加法: " + pgResult, pgResult.contains("+"));
+    }
 }

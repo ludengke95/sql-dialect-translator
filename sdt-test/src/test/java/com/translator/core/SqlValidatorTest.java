@@ -141,6 +141,24 @@ public class SqlValidatorTest {
     }
 
     @Test
+    public void testDateAddValidation() {
+        TranslationConfig config = new TranslationConfig().withEnableValidation(true);
+        SqlTranslator translator = new SqlTranslator(DialectType.MYSQL, DialectType.POSTGRESQL, config, new MockMetadataProvider());
+
+        String sql = "SELECT DATE_ADD('1998-12-01', INTERVAL -90 DAY) FROM users";
+        try {
+            String result = translator.translate(sql);
+            Assert.assertTrue("应包含 CAST: " + result, result.toUpperCase().contains("CAST"));
+            Assert.assertTrue("应包含 TIMESTAMP: " + result, result.toUpperCase().contains("TIMESTAMP"));
+            Assert.assertTrue("应包含 -90 DAYS: " + result, result.contains("-90 DAYS"));
+        } catch (Exception e) {
+            System.err.println("=== testDateAddValidation exception stack trace:");
+            e.printStackTrace();
+            Assert.fail("DateAddValidation failed: " + e.getMessage());
+        }
+    }
+
+    @Test
     public void testValidationModeWarnFallbacks() {
         // 设置校验模式为 WARN (不阻断模式)
         TranslationConfig config = new TranslationConfig()
