@@ -207,6 +207,9 @@ class TpchDataGenerator:
         self.order_dates = {}
         for i in range(1, n + 1):
             cust = rng.randint(1, n_cust)
+            # 官方 TPC-H 规范：o_custkey % 3 != 0，以确保有 1/3 的客户从来不下任何订单
+            while cust % 3 == 0:
+                cust = rng.randint(1, n_cust)
             od = self._rand_date(start_date, end_date, rng)
             self.order_dates[i] = od
             rows.append((

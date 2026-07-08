@@ -15,7 +15,7 @@ WHERE
         SELECT l_orderkey
         FROM lineitem
         GROUP BY l_orderkey
-        HAVING SUM(l_quantity) > 300
+        HAVING SUM(l_quantity) > 100
     )
     AND c_custkey = o_custkey
     AND o_orderkey = l_orderkey
