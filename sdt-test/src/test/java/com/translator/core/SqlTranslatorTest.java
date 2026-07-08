@@ -673,4 +673,12 @@ public class SqlTranslatorTest {
         Assert.assertTrue("应包含 -90 DAYS: " + pgResult, pgResult.contains("-90 DAYS"));
         Assert.assertTrue("应为二元加法: " + pgResult, pgResult.contains("+"));
     }
+
+    @Test
+    public void testFunctionNamesAreNotQuoted() {
+        String mysqlSql = "SELECT SUBSTR(c_phone, 1, 2) FROM users";
+        String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
+        Assert.assertFalse("函数名不应带有双引号: " + pgResult, pgResult.contains("\"SUBSTR\""));
+        Assert.assertTrue("函数名应为未加引号形式: " + pgResult, pgResult.toUpperCase().contains("SUBSTR("));
+    }
 }

@@ -152,6 +152,9 @@ public class SqlTranslator {
             long elapsed = (System.nanoTime() - start) / 1_000_000;
             log.debug("SQL 翻译完成 ({}ms): [{}] → [{}]", elapsed, sql, result);
 
+            // 消除由于 withQuoteAllIdentifiers(true) 导致的函数名被误加双引号问题（例如把 "SUBSTR"( 还原为 SUBSTR( ）
+            result = result.replaceAll("\"([A-Za-z_][A-Za-z0-9_]*)\"\\(", "$1(");
+
             return result;
         } catch (SqlTranslationException e) {
             throw e; // 已知翻译或校验异常，不重复包裹
