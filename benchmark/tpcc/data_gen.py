@@ -174,33 +174,34 @@ class TpccDataGenerator:
                 rng = random.Random(w_id * 100000 + d_id * 1000)
 
                 # 为每个 district 生成 3000 个订单
-                # 前 900 个订单进入 new_orders（未发货）
-                # 注意：TPC-C 要求 o_c_id 是随机排列的客户 ID
+                # 最后的 900 个订单 (o_id > 2100) 进入 new_orders（未发货）
                 customer_ids = list(range(1, 3001))
                 rng.shuffle(customer_ids)
 
                 for o_id in range(1, 3001):
                     c_id = customer_ids[o_id - 1]
                     ol_cnt = rng.randint(5, 15)  # 5-15 个商品每单
-                    carrier_id = None if o_id <= 900 else rng.randint(1, 10)
+                    is_new_order = o_id > 2100
+                    carrier_id = None if is_new_order else rng.randint(1, 10)
+                    entry_date = datetime.now()
 
                     row = (
                         o_id, d_id, w_id, c_id,
-                        datetime.now(),
+                        entry_date,
                         carrier_id,
                         ol_cnt,
                         0,  # all_local
                     )
                     order_rows.append(row)
 
-                    if o_id <= 900:
+                    if is_new_order:
                         new_order_rows.append((o_id, d_id, w_id))
 
                     # 生成 order_line
                     for ol_num in range(1, ol_cnt + 1):
                         i_id = rng.randint(1, 100000)
                         ol_amount = round(rng.uniform(0.01, 9999.99), 2)
-                        ol_delivery = None if o_id <= 900 else datetime.now()
+                        ol_delivery = None if is_new_order else entry_date
                         order_line_rows.append((
                             o_id, d_id, w_id, ol_num,
                             i_id, w_id,

@@ -204,9 +204,11 @@ class TpchDataGenerator:
         statuses = ['F', 'O', 'P']
         start_date = date(1992, 1, 1)
         end_date = date(1998, 12, 31)
+        self.order_dates = {}
         for i in range(1, n + 1):
             cust = rng.randint(1, n_cust)
             od = self._rand_date(start_date, end_date, rng)
+            self.order_dates[i] = od
             rows.append((
                 i, cust,
                 rng.choice(statuses),
@@ -231,7 +233,6 @@ class TpchDataGenerator:
         statuses = ['F', 'O']
         return_flags = ['A', 'N', 'R']
         start_date = date(1992, 1, 1)
-        end_date = date(1998, 12, 31)
         seen = set()
         while len(rows) < n:
             ok = rng.randint(1, n_orders)
@@ -246,9 +247,13 @@ class TpchDataGenerator:
             ep = round(qty * rng.uniform(10, 2000), 2)
             disc = round(rng.uniform(0, 0.1), 2)
             tax = round(rng.uniform(0, 0.08), 2)
-            sd = self._rand_date(start_date, end_date, rng)
-            cd = sd + timedelta(days=rng.randint(30, 120))
+            
+            # 官方 TPC-H 规格：以订单日期 (o_orderdate) 为基准生成发货、承诺与签收日期
+            od = getattr(self, 'order_dates', {}).get(ok, start_date)
+            sd = od + timedelta(days=rng.randint(1, 121))
+            cd = od + timedelta(days=rng.randint(30, 90))
             rd = sd + timedelta(days=rng.randint(1, 30))
+            
             rows.append((
                 ok, pk, sk, ln, qty, ep, disc, tax,
                 rng.choice(return_flags),
