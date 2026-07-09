@@ -2,6 +2,7 @@ package com.translator.proxy.core.handler;
 
 import static org.junit.Assert.*;
 
+import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 

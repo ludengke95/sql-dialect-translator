@@ -1,5 +1,6 @@
 package com.translator.core;
 
+import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
