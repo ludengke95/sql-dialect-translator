@@ -1,6 +1,7 @@
 package com.translator.proxy.core.handler;
 
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -143,6 +144,9 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
         // 1. 检查是否 USE 语句
         String useDb = SystemVariableInterceptor.extractUseDatabase(sql);
         if (useDb != null) {
+            if (!useDb.equalsIgnoreCase(session.getDatabase())) {
+                rollbackActiveTransaction(ctx, session);
+            }
             session.setDatabase(useDb);
             writeOk(ctx, 0, 0, "");
             return;
@@ -338,13 +342,30 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
     // ==================== COM_INIT_DB ====================
 
     private void handleInitDb(ChannelHandlerContext ctx, ByteBuf payload, FrontendSession session) {
-        String dbName = BufferUtils.readNullTerminatedString(payload);
+        String dbName = BufferUtils.readEofString(payload);
         log.debug("COM_INIT_DB: {}", dbName);
+
+        if (dbName != null && !dbName.equalsIgnoreCase(session.getDatabase())) {
+            rollbackActiveTransaction(ctx, session);
+        }
 
         // 多后端模式下验证该数据库名是否有对应的后端
         // 即使没有匹配的后端，也允许设置，SQL 执行时会解析到默认后端
         session.setDatabase(dbName);
         writeOk(ctx, 0, 0, "");
+    }
+
+    private void rollbackActiveTransaction(ChannelHandlerContext ctx, FrontendSession session) {
+        Connection conn = ctx.channel().attr(SessionAttribute.BACKEND_CONN_KEY).get();
+        if (conn != null) {
+            log.info("Implicit rollback of active transaction due to database switch");
+            try {
+                QueryProcessor processor = resolveProcessor(session);
+                processor.rollback(ctx, session);
+            } catch (Exception e) {
+                log.error("Failed to implicitly rollback transaction during database switch", e);
+            }
+        }
     }
 
     // ==================== COM_FIELD_LIST / Unsupported ====================

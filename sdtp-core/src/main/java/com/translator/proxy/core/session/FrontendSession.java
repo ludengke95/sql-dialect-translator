@@ -30,9 +30,6 @@ public class FrontendSession {
     /** 是否自动提交 */
     private volatile boolean autoCommit;
 
-    /** 当前事务中已绑定的活跃后端名称（用于事务锁，防止越库/跨池事务执行） */
-    private volatile String activeTxBackend;
-
     /** 服务端生成的 scramble（20 字节），用于认证校验 */
     private final byte[] scramble;
 
@@ -123,14 +120,6 @@ public class FrontendSession {
 
     public void setAutoCommit(boolean autoCommit) {
         this.autoCommit = autoCommit;
-    }
-
-    public String getActiveTxBackend() {
-        return activeTxBackend;
-    }
-
-    public void setActiveTxBackend(String activeTxBackend) {
-        this.activeTxBackend = activeTxBackend;
     }
 
     @Override

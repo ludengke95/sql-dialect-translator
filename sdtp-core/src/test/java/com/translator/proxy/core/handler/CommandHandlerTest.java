@@ -17,6 +17,7 @@ import com.translator.proxy.protocol.util.MySQLAuth;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.embedded.EmbeddedChannel;
 
 /**
@@ -283,8 +284,82 @@ public class CommandHandlerTest {
         assertEquals("SYSTEM", ir2.columns.get(2).value); // time_zone
     }
 
+    @Test
+    public void testInitDb() {
+        channel.pipeline().addLast(new CommandHandler());
+        FrontendSession session = FrontendSession.create(channel, 1, scramble);
+        channel.attr(SessionAttribute.SESSION_KEY).set(session);
+
+        // 1. 发送不带 NUL 结束符的 COM_INIT_DB payload
+        ByteBuf payload = Unpooled.buffer();
+        payload.writeByte(CommandType.COM_INIT_DB);
+        payload.writeBytes("tpcc".getBytes(StandardCharsets.UTF_8));
+
+        channel.writeInbound(wrapPacket(payload, (byte) 0));
+
+        // 验证返回 OK 报文 (header = 0x00)
+        assertEquals(0x00, readResponseHeader());
+        assertEquals("tpcc", session.getDatabase());
+    }
+
+    @Test
+    public void testImplicitRollbackOnDatabaseSwitch() throws Exception {
+        CommandHandler.setBackendRouter(null);
+        channel.pipeline().addLast(new CommandHandler());
+        FrontendSession session = FrontendSession.create(channel, 1, scramble);
+        channel.attr(SessionAttribute.SESSION_KEY).set(session);
+
+        final boolean[] rolledBack = new boolean[1];
+        CommandHandler.QueryProcessor mockProcessor = new CommandHandler.QueryProcessor() {
+            @Override
+            public void process(ChannelHandlerContext ctx, String sql, FrontendSession session) {}
+
+            @Override
+            public void rollback(ChannelHandlerContext ctx, FrontendSession session) throws Exception {
+                rolledBack[0] = true;
+            }
+        };
+        CommandHandler.setQueryProcessor(mockProcessor);
+
+        // 1. 测试 USE 语句触发回滚
+        session.setDatabase("tpcc");
+        java.sql.Connection mockConn = (java.sql.Connection) java.lang.reflect.Proxy.newProxyInstance(
+                java.sql.Connection.class.getClassLoader(),
+                new Class<?>[] {java.sql.Connection.class},
+                (proxy, method, args) -> null);
+        channel.attr(SessionAttribute.BACKEND_CONN_KEY).set(mockConn);
+        rolledBack[0] = false;
+
+        sendQuery("USE tpch", (byte) 0);
+        channel.runPendingTasks();
+        assertEquals(0x00, readResponseHeader()); // OK response
+        assertTrue("Switching via USE statement should trigger rollback", rolledBack[0]);
+        assertEquals("tpch", session.getDatabase());
+
+        // 2. 测试 COM_INIT_DB 触发回滚
+        session.setDatabase("tpcc");
+        java.sql.Connection mockConn2 = (java.sql.Connection) java.lang.reflect.Proxy.newProxyInstance(
+                java.sql.Connection.class.getClassLoader(),
+                new Class<?>[] {java.sql.Connection.class},
+                (proxy, method, args) -> null);
+        channel.attr(SessionAttribute.BACKEND_CONN_KEY).set(mockConn2);
+        rolledBack[0] = false;
+
+        ByteBuf payload = Unpooled.buffer();
+        payload.writeByte(CommandType.COM_INIT_DB);
+        payload.writeBytes("tpch".getBytes(StandardCharsets.UTF_8));
+        channel.writeInbound(wrapPacket(payload, (byte) 0));
+
+        channel.runPendingTasks();
+        assertEquals(0x00, readResponseHeader()); // OK response
+        assertTrue("Switching via COM_INIT_DB should trigger rollback", rolledBack[0]);
+        assertEquals("tpch", session.getDatabase());
+    }
+
     @After
     public void tearDown() {
+        CommandHandler.setQueryProcessor(null);
+        CommandHandler.setBackendRouter(null);
         channel.finish();
     }
 }

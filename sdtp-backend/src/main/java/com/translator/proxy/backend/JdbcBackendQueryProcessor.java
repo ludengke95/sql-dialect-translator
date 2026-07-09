@@ -97,16 +97,6 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
 
         try {
             if (isTx) {
-                // 事务检查：防止跨物理库或跨连接池事务操作
-                String activeBackend = session.getActiveTxBackend();
-                if (activeBackend != null && !activeBackend.equals(backendName)) {
-                    throw new SQLException(
-                            "Cross-database/pool transaction is not allowed. Current active transaction backend: "
-                                    + activeBackend,
-                            "25000",
-                            1290);
-                }
-
                 conn = ctx.channel()
                         .attr(com.translator.proxy.core.handler.SessionAttribute.BACKEND_CONN_KEY)
                         .get();
@@ -116,7 +106,6 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
                     ctx.channel()
                             .attr(com.translator.proxy.core.handler.SessionAttribute.BACKEND_CONN_KEY)
                             .set(conn);
-                    session.setActiveTxBackend(backendName); // 锁定当前活跃后端
                     isNewConnection = true;
                 }
             } else {
@@ -265,12 +254,7 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
             ctx.channel()
                     .attr(com.translator.proxy.core.handler.SessionAttribute.BACKEND_CONN_KEY)
                     .set(null);
-            FrontendSession session = ctx.channel()
-                    .attr(com.translator.proxy.core.handler.SessionAttribute.SESSION_KEY)
-                    .get();
-            if (session != null) {
-                session.setActiveTxBackend(null);
-            }
+            // FrontendSession no longer tracks activeTxBackend
         }
     }
 
