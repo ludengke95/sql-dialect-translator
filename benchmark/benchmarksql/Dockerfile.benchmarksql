@@ -1,7 +1,7 @@
 FROM eclipse-temurin:8-jdk
 
 # 安装工具和依赖
-RUN apt-get update && apt-get install -y git ant wget postgresql-client && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y git ant wget postgresql-client python3 && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt
 
