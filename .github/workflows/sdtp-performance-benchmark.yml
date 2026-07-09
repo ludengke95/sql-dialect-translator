@@ -131,7 +131,7 @@ jobs:
 
       - name: Copy TPC-C PG Log out
         run: |
-          docker cp tpcc-runner:/opt/benchmarksql/run_pg.log /tmp/run_pg.log
+          docker cp tpcc-runner:/opt/benchmarksql/run/run_pg.log /tmp/run_pg.log
 
       - name: Upload TPC-C PG Log
         uses: actions/upload-artifact@v4
@@ -233,7 +233,7 @@ jobs:
 
       - name: Copy TPC-C MySQL 8 Log out
         run: |
-          docker cp tpcc-mysql8-runner:/opt/benchmarksql/run_mysql.log /tmp/run_mysql8.log
+          docker cp tpcc-mysql8-runner:/opt/benchmarksql/run/run_mysql.log /tmp/run_mysql8.log
 
       - name: Upload TPC-C MySQL 8 Log
         uses: actions/upload-artifact@v4
@@ -335,7 +335,7 @@ jobs:
 
       - name: Copy TPC-C MySQL 5 Log out
         run: |
-          docker cp tpcc-mysql5-runner:/opt/benchmarksql/run_mysql.log /tmp/run_mysql5.log
+          docker cp tpcc-mysql5-runner:/opt/benchmarksql/run/run_mysql.log /tmp/run_mysql5.log
 
       - name: Upload TPC-C MySQL 5 Log
         uses: actions/upload-artifact@v4

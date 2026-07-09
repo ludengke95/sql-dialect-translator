@@ -15,7 +15,7 @@ RUN cd benchmarksql/lib && \
     wget https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/8.0.33/mysql-connector-j-8.0.33.jar && \
     wget https://repo1.maven.org/maven2/mysql/mysql-connector-java/5.1.49/mysql-connector-java-5.1.49.jar
 
-WORKDIR /opt/benchmarksql
+WORKDIR /opt/benchmarksql/run
 
 # 拷贝配置文件模板与压测启动脚本
 COPY props.pg.tpl props.mysql.tpl run_tpcc.sh ./
