@@ -220,7 +220,7 @@ jobs:
         if: always()
         run: |
           mkdir -p /tmp/sdtp-logs
-          docker logs sdtp --tail 300 > /tmp/sdtp-logs/sdtp.log 2>&1 || true
+          docker logs sdtp > /tmp/sdtp-logs/sdtp.log 2>&1 || true
 
       - name: Upload test reports
         if: always()
