@@ -106,7 +106,7 @@ def main():
     try:
         # 2. 依次执行 22 个查询
         for q in range(1, 23):
-            q_file = os.path.join(args.queries-dir, f"q{q:02d}.sql")
+            q_file = os.path.join(args.queries_dir, f"q{q:02d}.sql")
             if not os.path.exists(q_file):
                 print(f"警告: 找不到查询文件 {q_file}，跳过。")
                 continue
