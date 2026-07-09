@@ -5,7 +5,7 @@ package com.translator.core.metadata;
  */
 public class ColumnMetadata {
     private final String columnName;
-    private final int dataType; // java.sql.Types
+    private final int dataType; // Types
     private final int precision;
     private final int scale;
     private final boolean nullable;

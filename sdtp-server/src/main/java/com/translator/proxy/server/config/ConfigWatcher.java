@@ -3,6 +3,8 @@ package com.translator.proxy.server.config;
 import java.io.File;
 import java.nio.file.*;
 import java.util.*;
+import java.util.HashSet;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.slf4j.Logger;
@@ -28,18 +30,14 @@ import com.translator.proxy.metrics.ReloadMetrics;
  * <p>作为 daemon 线程运行，可通过 {@link #stop()} 优雅停止。
  */
 public class ConfigWatcher implements Runnable {
-
     private static final Logger log = LoggerFactory.getLogger(ConfigWatcher.class);
-
     private final String configFilePath;
     private final int debounceMs;
     private final BackendPoolManager poolManager;
     private ProxyConfig currentConfig;
-
     private final AtomicBoolean running = new AtomicBoolean(true);
     private WatchService watchService;
     private Thread watcherThread;
-
     /**
      * 创建配置文件监听器。
      *
@@ -55,7 +53,6 @@ public class ConfigWatcher implements Runnable {
         this.poolManager = poolManager;
         this.currentConfig = currentConfig;
     }
-
     /**
      * 启动 watcher 线程（daemon）。
      */
@@ -64,19 +61,16 @@ public class ConfigWatcher implements Runnable {
             log.info("No config file path to watch (using classpath or defaults), watcher disabled");
             return;
         }
-
         File configFile = new File(configFilePath);
         if (!configFile.exists()) {
             log.warn("Config file {} does not exist, watcher disabled", configFilePath);
             return;
         }
-
         watcherThread = new Thread(this, "config-watcher");
         watcherThread.setDaemon(true);
         watcherThread.start();
         log.info("ConfigWatcher started, watching: {}", configFilePath);
     }
-
     /**
      * 停止 watcher。
      */
@@ -106,25 +100,20 @@ public class ConfigWatcher implements Runnable {
             File configFile = new File(configFilePath);
             Path configDir = configFile.getAbsoluteFile().getParentFile().toPath();
             String configFileName = configFile.getName();
-
             configDir.register(
                     watchService, StandardWatchEventKinds.ENTRY_MODIFY, StandardWatchEventKinds.ENTRY_CREATE);
-
             log.info("Watching directory: {} for file: {}", configDir, configFileName);
-
             while (running.get()) {
                 WatchKey key;
                 try {
-                    key = watchService.poll(1, java.util.concurrent.TimeUnit.SECONDS);
+                    key = watchService.poll(1, TimeUnit.SECONDS);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     break;
                 }
-
                 if (key == null) {
                     continue;
                 }
-
                 boolean relevant = false;
                 for (WatchEvent<?> event : key.pollEvents()) {
                     WatchEvent.Kind<?> kind = event.kind();
@@ -139,18 +128,14 @@ public class ConfigWatcher implements Runnable {
                     }
                 }
                 key.reset();
-
                 if (!relevant) {
                     continue;
                 }
-
                 // 防抖：等待 debounceMs，期间新事件重置计时器
                 debounceWait();
-
                 if (!running.get()) {
                     break;
                 }
-
                 // 重新加载配置
                 reloadIfChanged();
             }
@@ -160,9 +145,7 @@ public class ConfigWatcher implements Runnable {
             }
         }
     }
-
     // ==================== 内部逻辑 ====================
-
     /**
      * 防抖等待：持续等待直到 debounceMs 内无新事件。
      */
@@ -178,32 +161,25 @@ public class ConfigWatcher implements Runnable {
             }
         }
     }
-
     /**
      * 重新加载配置并与当前配置对比，分派变更。
      */
     private void reloadIfChanged() {
         long startNanos = System.nanoTime();
         log.info("Reloading config from: {}", configFilePath);
-
         ProxyConfig newConfig = ConfigLoader.loadFromFileOrNull(configFilePath);
         if (newConfig == null) {
             log.error("Failed to load config, keeping current configuration");
             ReloadMetrics.recordReloadFailure();
             return;
         }
-
         ProxyConfig oldConfig = currentConfig;
-
         // === 检查不可热更的配置项 ===
         checkNonReloadableChanges(oldConfig, newConfig);
-
         // === 对比 backends 列表（按 name 匹配） ===
         Map<String, ProxyConfig.TargetConfig> oldBackends = indexByName(oldConfig.getBackends());
         Map<String, ProxyConfig.TargetConfig> newBackends = indexByName(newConfig.getBackends());
-
         int totalChanges = 0;
-
         // 1. 新增：new 有、old 无
         for (Map.Entry<String, ProxyConfig.TargetConfig> entry : newBackends.entrySet()) {
             String name = entry.getKey();
@@ -216,7 +192,6 @@ public class ConfigWatcher implements Runnable {
                 }
             }
         }
-
         // 2. 删除：old 有、new 无
         for (String name : oldBackends.keySet()) {
             if (!newBackends.containsKey(name)) {
@@ -227,7 +202,6 @@ public class ConfigWatcher implements Runnable {
                 }
             }
         }
-
         // 3. 变更：同名但配置不同
         for (Map.Entry<String, ProxyConfig.TargetConfig> entry : newBackends.entrySet()) {
             String name = entry.getKey();
@@ -248,7 +222,6 @@ public class ConfigWatcher implements Runnable {
                 }
             }
         }
-
         if (totalChanges > 0) {
             log.info("Config reload complete: {} backends updated", totalChanges);
             double seconds = (System.nanoTime() - startNanos) / 1_000_000_000.0;
@@ -262,7 +235,7 @@ public class ConfigWatcher implements Runnable {
                 }
             }
             // 被删除的后端
-            Set<String> removed = new java.util.HashSet<>(oldBackends.keySet());
+            Set<String> removed = new HashSet<>(oldBackends.keySet());
             removed.removeAll(newBackends.keySet());
             for (String name : removed) {
                 ReloadMetrics.observeDuration(name, "remove", seconds);
@@ -273,7 +246,6 @@ public class ConfigWatcher implements Runnable {
             currentConfig = newConfig;
         }
     }
-
     /**
      * 检查不可热更新的配置项变更，记录 WARN。
      */
@@ -298,7 +270,6 @@ public class ConfigWatcher implements Runnable {
             log.warn("Global translation config changed (requires restart to take effect)");
         }
     }
-
     /**
      * 将后端列表按 name 索引为 Map。
      */
@@ -312,7 +283,6 @@ public class ConfigWatcher implements Runnable {
         }
         return map;
     }
-
     /**
      * ProxyConfig.TargetConfig → BackendEntry。
      */

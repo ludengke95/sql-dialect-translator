@@ -9,7 +9,9 @@ import com.translator.metrics.BackendMetrics;
 import com.translator.proxy.backend.mapper.ResultSetEncoder;
 import com.translator.proxy.core.handler.AuthHandler;
 import com.translator.proxy.core.handler.CommandHandler;
+import com.translator.proxy.core.handler.SessionAttribute;
 import com.translator.proxy.core.session.FrontendSession;
+import com.translator.proxy.metrics.HikariMetricsTrackerFactory;
 import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -26,18 +28,14 @@ import io.netty.channel.ChannelHandlerContext;
  * <p>线程安全：连接池本身是线程安全的，每个查询从池中获取连接后独立执行。
  */
 public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor {
-
     private static final Logger log = LoggerFactory.getLogger(JdbcBackendQueryProcessor.class);
-
     private final HikariDataSource dataSource;
-
     /** 后端名称（用于指标打点） */
     private volatile String backendName = "unknown";
 
     private JdbcBackendQueryProcessor(HikariDataSource dataSource) {
         this.dataSource = dataSource;
     }
-
     /**
      * 工厂方法：根据配置创建处理器。
      */
@@ -45,7 +43,6 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
             String jdbcUrl, String username, String password, int maxPoolSize, int minIdle) {
         return create(null, jdbcUrl, username, password, maxPoolSize, minIdle);
     }
-
     /**
      * 工厂方法：根据配置创建处理器（带后端名称，用于指标打点）。
      */
@@ -60,22 +57,17 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
         hikariConfig.setConnectionTimeout(10000); // 10s
         hikariConfig.setIdleTimeout(600000); // 10min
         hikariConfig.setMaxLifetime(1800000); // 30min
-
         // 关键：为了支持事务写操作，默认为非只读
         hikariConfig.setReadOnly(false);
         hikariConfig.setAutoCommit(true);
-
         // 设置连接池名称（用于 HikariMetricsTracker 的 pool_name label）
         if (backendName != null) {
             hikariConfig.setPoolName(backendName);
         }
-
         // 注册 HikariCP MetricsTracker
-        hikariConfig.setMetricsTrackerFactory(new com.translator.proxy.metrics.HikariMetricsTrackerFactory());
-
+        hikariConfig.setMetricsTrackerFactory(new HikariMetricsTrackerFactory());
         HikariDataSource ds = new HikariDataSource(hikariConfig);
         log.info("HikariCP pool created: jdbcUrl={}, maxPoolSize={}", jdbcUrl, maxPoolSize);
-
         JdbcBackendQueryProcessor processor = new JdbcBackendQueryProcessor(ds);
         if (backendName != null) {
             processor.backendName = backendName;
@@ -87,37 +79,27 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
     public void process(ChannelHandlerContext ctx, String sql, FrontendSession session) {
         String queryType = BackendMetrics.classifyQueryType(sql);
         BackendMetrics.recordQuery(backendName, queryType);
-
         long startNanos = System.nanoTime();
-
         // 1. 判断是否处于事务上下文中
         boolean isTx = !session.isAutoCommit() || session.isInTransaction();
         Connection conn = null;
         boolean isNewConnection = false;
-
         try {
             if (isTx) {
-                conn = ctx.channel()
-                        .attr(com.translator.proxy.core.handler.SessionAttribute.BACKEND_CONN_KEY)
-                        .get();
+                conn = ctx.channel().attr(SessionAttribute.BACKEND_CONN_KEY).get();
                 if (conn == null) {
                     conn = dataSource.getConnection();
                     conn.setAutoCommit(false);
-                    ctx.channel()
-                            .attr(com.translator.proxy.core.handler.SessionAttribute.BACKEND_CONN_KEY)
-                            .set(conn);
+                    ctx.channel().attr(SessionAttribute.BACKEND_CONN_KEY).set(conn);
                     isNewConnection = true;
                 }
             } else {
                 conn = dataSource.getConnection();
                 isNewConnection = true;
             }
-
             log.debug("Executing SQL [isTx={}, isNew={}]: {}", isTx, isNewConnection, sql);
-
             try (Statement stmt = createStatement(conn)) {
                 boolean isResultSet = stmt.execute(sql);
-
                 if (isResultSet) {
                     try (ResultSet rs = stmt.getResultSet()) {
                         ResultSetEncoder.encodeAndWrite(ctx, rs, new ResultSetEncoder.SeqGenerator(), backendName);
@@ -129,10 +111,8 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
                     BackendMetrics.observeAffectedRows(backendName, Math.max(updateCount, 0));
                 }
             }
-
             double elapsed = (System.nanoTime() - startNanos) / 1_000_000_000.0;
             BackendMetrics.recordQueryDuration(backendName, elapsed);
-
         } catch (SQLException e) {
             log.error("SQL execution failed: {}", sql, e);
             String sqlState = e.getSQLState() != null ? e.getSQLState() : "HY000";
@@ -157,14 +137,12 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
             }
         }
     }
-
     /**
      * 设置后端名称（用于指标打点）。
      */
     public void setBackendName(String backendName) {
         this.backendName = backendName;
     }
-
     /**
      * 创建 Statement 并配置流式读取。
      */
@@ -176,9 +154,7 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
         stmt.setFetchSize(1000);
         return stmt;
     }
-
     // ==================== 错误处理 ====================
-
     private void writeError(ChannelHandlerContext ctx, SQLException e) {
         int errorCode = e.getErrorCode();
         String sqlState = e.getSQLState();
@@ -197,9 +173,7 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
 
     @Override
     public void commit(ChannelHandlerContext ctx, FrontendSession session) throws SQLException {
-        Connection conn = ctx.channel()
-                .attr(com.translator.proxy.core.handler.SessionAttribute.BACKEND_CONN_KEY)
-                .get();
+        Connection conn = ctx.channel().attr(SessionAttribute.BACKEND_CONN_KEY).get();
         if (conn != null) {
             try {
                 log.debug("Committing physical connection: {}", conn);
@@ -212,9 +186,7 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
 
     @Override
     public void rollback(ChannelHandlerContext ctx, FrontendSession session) throws SQLException {
-        Connection conn = ctx.channel()
-                .attr(com.translator.proxy.core.handler.SessionAttribute.BACKEND_CONN_KEY)
-                .get();
+        Connection conn = ctx.channel().attr(SessionAttribute.BACKEND_CONN_KEY).get();
         if (conn != null) {
             try {
                 log.debug("Rolling back physical connection: {}", conn);
@@ -227,9 +199,7 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
 
     @Override
     public void closeSessionConnection(ChannelHandlerContext ctx, FrontendSession session) {
-        Connection conn = ctx.channel()
-                .attr(com.translator.proxy.core.handler.SessionAttribute.BACKEND_CONN_KEY)
-                .get();
+        Connection conn = ctx.channel().attr(SessionAttribute.BACKEND_CONN_KEY).get();
         if (conn != null) {
             try {
                 log.warn("Force closing session bound connection due to inactive/exception");
@@ -251,13 +221,10 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
         } catch (SQLException e) {
             log.error("Error cleaning up session connection", e);
         } finally {
-            ctx.channel()
-                    .attr(com.translator.proxy.core.handler.SessionAttribute.BACKEND_CONN_KEY)
-                    .set(null);
+            ctx.channel().attr(SessionAttribute.BACKEND_CONN_KEY).set(null);
             // FrontendSession no longer tracks activeTxBackend
         }
     }
-
     /**
      * 关闭连接池。
      */

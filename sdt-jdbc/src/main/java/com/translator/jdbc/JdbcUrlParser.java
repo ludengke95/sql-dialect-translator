@@ -1,5 +1,6 @@
 package com.translator.jdbc;
 
+import java.util.Locale;
 import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -24,9 +25,7 @@ import com.translator.core.config.TranslationConfig;
  * 2. 通过 DialectRegistry 查找对应的方言组
  */
 public class JdbcUrlParser {
-
     private static final Logger log = LoggerFactory.getLogger(JdbcUrlParser.class);
-
     /**
      * URL 格式：jdbc:translator:<source_dialect>:<target_subprotocol>:<real_address>
      * group(1) = 源方言标识符
@@ -35,7 +34,6 @@ public class JdbcUrlParser {
      */
     private static final Pattern URL_PATTERN =
             Pattern.compile("^jdbc:translator:([a-zA-Z0-9_]+):([a-zA-Z0-9_]+):(.+)$");
-
     /**
      * 解析 JDBC URL。
      *
@@ -48,44 +46,36 @@ public class JdbcUrlParser {
         if (url == null || !url.startsWith("jdbc:translator:")) {
             throw new IllegalArgumentException("URL 必须以 jdbc:translator: 开头: " + url);
         }
-
         Matcher matcher = URL_PATTERN.matcher(url);
         if (!matcher.matches()) {
             throw new IllegalArgumentException(
                     "URL 格式不正确，期望: " + "jdbc:translator:<源方言>:<目标数据库子协议>:<真实地址>, 实际: " + url);
         }
-
         // 提取源方言标识符
         String sourceId = matcher.group(1);
         DialectType sourceDialect = DialectType.fromIdentifier(sourceId);
-
         // 提取目标数据库子协议，构造真实 JDBC URL
         String targetProduct = matcher.group(2);
         // 通过注册表获取 JDBC URL 前缀（默认 jdbc:<子协议>://，Oracle 为 jdbc:oracle:thin:@）
         String jdbcPrefix = DialectRegistry.getJdbcUrlPrefix(targetProduct);
         // group(3) = 真实地址，如 //host:port/db 或 @host:1521:orcl 等，直接拼接
         String realUrl = jdbcPrefix + matcher.group(3);
-
         // 通过注册表查找目标数据库对应的方言组
         DialectType targetDialect = DialectRegistry.getDialectForProduct(targetProduct);
         if (targetDialect == null) {
             throw new IllegalArgumentException("未知的目标数据库子协议: " + targetProduct
                     + "，支持的数据库: PostgreSQL/HighGo/瀚高, MySQL/Doris, Oracle/DM/达梦, SQL Server");
         }
-
         log.debug(
                 "解析 JDBC URL: source={}, targetProduct={}, targetDialect={}, realUrl={}",
                 sourceDialect,
                 targetProduct,
                 targetDialect,
                 realUrl);
-
         // 从 URL 查询参数中提取翻译配置
         TranslationConfig translationConfig = parseTranslationConfig(matcher.group(3), properties);
-
         return new JdbcUrlInfo(sourceDialect, targetDialect, realUrl, properties, translationConfig);
     }
-
     /**
      * 从 JDBC URL 的查询参数或 Properties 中提取 {@link TranslationConfig}。
      * <p>
@@ -113,7 +103,6 @@ public class JdbcUrlParser {
                 }
             }
         }
-
         String keywordCaseStr = params.getProperty("keywordCase");
         if (keywordCaseStr == null && properties != null) {
             keywordCaseStr = properties.getProperty("keywordCase");
@@ -122,24 +111,20 @@ public class JdbcUrlParser {
         if (identifierCaseStr == null && properties != null) {
             identifierCaseStr = properties.getProperty("identifierCase");
         }
-
         if (keywordCaseStr == null && identifierCaseStr == null) {
             return null; // 使用默认配置
         }
-
         TranslationConfig config = new TranslationConfig();
         if (keywordCaseStr != null) {
-            config.setKeywordCase(
-                    TranslationConfig.KeywordCase.valueOf(keywordCaseStr.toUpperCase(java.util.Locale.ROOT)));
+            config.setKeywordCase(TranslationConfig.KeywordCase.valueOf(keywordCaseStr.toUpperCase(Locale.ROOT)));
         }
         if (identifierCaseStr != null) {
             config.setIdentifierCase(
-                    TranslationConfig.IdentifierCase.valueOf(identifierCaseStr.toUpperCase(java.util.Locale.ROOT)));
+                    TranslationConfig.IdentifierCase.valueOf(identifierCaseStr.toUpperCase(Locale.ROOT)));
         }
         log.debug("翻译配置: {}", config);
         return config;
     }
-
     /**
      * 检查 URL 是否由本驱动处理。
      */

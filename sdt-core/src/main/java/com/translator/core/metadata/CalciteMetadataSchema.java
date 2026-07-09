@@ -10,18 +10,20 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.calcite.linq4j.tree.Expression;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.rel.type.RelProtoDataType;
 import org.apache.calcite.schema.Function;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.schema.SchemaVersion;
 import org.apache.calcite.schema.Schemas;
 import org.apache.calcite.schema.Table;
+import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.schema.impl.AbstractTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 
 /**
  * 适配 Calcite 的 Schema，从自定义的 {@link MetadataProvider} 中按需加载表元数据。
- * 直接实现 {@link Schema} 接口以完全摆脱 {@link org.apache.calcite.schema.impl.AbstractSchema}
+ * 直接实现 {@link Schema} 接口以完全摆脱 {@link AbstractSchema}
  * 中的 final 方法限制，保障 Lazy-loading 和大小写自适应的完美运作。
  */
 public class CalciteMetadataSchema implements Schema {
@@ -37,22 +39,18 @@ public class CalciteMetadataSchema implements Schema {
         if (name == null) {
             return null;
         }
-
         Table cached = tableCache.get(name);
         if (cached != null) {
             return cached;
         }
-
         // 校验该表名是否在我们的所有表名列表中（自适应各种大小写）
         if (!getTableNames().contains(name)) {
             return null;
         }
-
         TableMetadata tableMeta = metadataProvider.getTable(name);
         if (tableMeta == null) {
             return null;
         }
-
         Table table = new CalciteTableAdapter(tableMeta);
         tableCache.put(name, table);
         return table;
@@ -64,7 +62,7 @@ public class CalciteMetadataSchema implements Schema {
     }
 
     @Override
-    public org.apache.calcite.rel.type.RelProtoDataType getType(String name) {
+    public RelProtoDataType getType(String name) {
         return null;
     }
 
@@ -107,7 +105,6 @@ public class CalciteMetadataSchema implements Schema {
     public Schema snapshot(SchemaVersion version) {
         return this;
     }
-
     /**
      * 适配 Calcite Table 的包装器。
      */
@@ -124,7 +121,6 @@ public class CalciteMetadataSchema implements Schema {
             for (ColumnMetadata col : metadata.getColumns()) {
                 SqlTypeName sqlTypeName = mapJdbcTypeToCalcite(col.getDataType());
                 RelDataType type;
-
                 // 根据数据类型处理精度和标度
                 if (sqlTypeName == SqlTypeName.VARCHAR || sqlTypeName == SqlTypeName.CHAR) {
                     int precision = col.getPrecision() > 0 ? col.getPrecision() : 255;
@@ -136,7 +132,6 @@ public class CalciteMetadataSchema implements Schema {
                 } else {
                     type = typeFactory.createSqlType(sqlTypeName);
                 }
-
                 // 处理可空性
                 if (col.isNullable()) {
                     type = typeFactory.createTypeWithNullability(type, true);

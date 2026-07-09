@@ -1,5 +1,6 @@
 package com.translator.core.rewrite;
 
+import java.util.ServiceLoader;
 import java.util.Set;
 
 import org.apache.calcite.sql.SqlNode;
@@ -11,7 +12,7 @@ import com.translator.core.DialectType;
  * <p>
  * 每条规则自描述适用的方言范围、节点匹配条件和改写逻辑。
  * 实现类需通过 {@code META-INF/services/} 注册，
- * 由 Java {@link java.util.ServiceLoader} 自动发现。
+ * 由 Java {@link ServiceLoader} 自动发现。
  * </p>
  *
  * <h3>方言匹配规则</h3>
@@ -28,21 +29,18 @@ import com.translator.core.DialectType;
  * @see FunctionRewriteRule
  */
 public interface SqlRewriteRule {
-
     /**
      * 获取适用的源方言集合。
      *
      * @return 适用的源方言集合，空集合表示通配所有方言
      */
     Set<DialectType> getSourceDialects();
-
     /**
      * 获取适用的目标方言集合。
      *
      * @return 适用的目标方言集合，空集合表示通配所有方言
      */
     Set<DialectType> getTargetDialects();
-
     /**
      * 判断当前 AST 节点是否匹配此规则。
      * 仅在方言筛选通过后才会调用。
@@ -51,7 +49,6 @@ public interface SqlRewriteRule {
      * @return true 表示匹配，将调用 {@link #apply(SqlNode)} 进行改写
      */
     boolean matches(SqlNode node);
-
     /**
      * 执行改写，返回改写后的 SqlNode。
      * 仅在 {@link #matches(SqlNode)} 返回 true 时调用。

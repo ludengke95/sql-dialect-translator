@@ -3,6 +3,7 @@ package com.translator.proxy.core.handler;
 import static org.junit.Assert.*;
 
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
 
 import org.junit.After;
 import org.junit.Before;
@@ -24,7 +25,6 @@ import io.netty.channel.embedded.EmbeddedChannel;
  * CommandHandler 测试：系统变量拦截、SET 语句、COM_PING/QUIT 等。
  */
 public class CommandHandlerTest {
-
     private EmbeddedChannel channel;
     private byte[] scramble;
 
@@ -33,33 +33,27 @@ public class CommandHandlerTest {
         channel = new EmbeddedChannel(new MySQLPacketDecoder(), new MySQLPacketEncoder());
         scramble = MySQLAuth.generateScramble();
     }
-
     // ==================== 辅助方法 ====================
-
     /** 发送 COM_QUERY 包到 channel */
     private void sendQuery(String sql, byte seq) {
         ByteBuf payload = Unpooled.buffer();
         payload.writeByte(CommandType.COM_QUERY);
         payload.writeBytes(sql.getBytes(StandardCharsets.UTF_8));
-
         ByteBuf packet = wrapPacket(payload, seq);
         channel.writeInbound(packet);
     }
-
     /** 发送 COM_PING 包 */
     private void sendPing(byte seq) {
         ByteBuf payload = Unpooled.buffer(1);
         payload.writeByte(CommandType.COM_PING);
         channel.writeInbound(wrapPacket(payload, seq));
     }
-
     /** 发送 COM_QUIT 包 */
     private void sendQuit(byte seq) {
         ByteBuf payload = Unpooled.buffer(1);
         payload.writeByte(CommandType.COM_QUIT);
         channel.writeInbound(wrapPacket(payload, seq));
     }
-
     /** 包装为完整 MySQL 包 */
     private ByteBuf wrapPacket(ByteBuf payload, byte seq) {
         int len = payload.readableBytes();
@@ -70,7 +64,6 @@ public class CommandHandlerTest {
         payload.release();
         return pkt;
     }
-
     /** 读取 outbound 中的 OK/ERR 包头标识 */
     private int readResponseHeader() {
         ByteBuf raw = channel.readOutbound();
@@ -81,7 +74,6 @@ public class CommandHandlerTest {
         raw.release();
         return header;
     }
-
     /** 读取 outbound 并跳过 n 个包，返回最后一个包的 payload header */
     private int readLastResponseHeader(int skipCount) {
         ByteBuf raw = null;
@@ -99,15 +91,12 @@ public class CommandHandlerTest {
         raw.release();
         return h;
     }
-
     // ==================== 系统变量拦截测试 ====================
-
     @Test
     public void testSelectVersion() {
         // 设置 session
         FrontendSession session = FrontendSession.create(channel, 1, scramble);
         channel.attr(SessionAttribute.SESSION_KEY).set(session);
-
         // 直接测试拦截器
         SystemVariableInterceptor.InterceptResult ir =
                 SystemVariableInterceptor.intercept("SELECT @@version_comment LIMIT 1", null);
@@ -160,18 +149,14 @@ public class CommandHandlerTest {
         assertEquals("mydb", SystemVariableInterceptor.extractUseDatabase("use `mydb`"));
         assertNull(SystemVariableInterceptor.extractUseDatabase("SELECT 1"));
     }
-
     // ==================== 未知系统变量 ====================
-
     @Test
     public void testUnknownSystemVariableNotIntercepted() {
         SystemVariableInterceptor.InterceptResult ir =
                 SystemVariableInterceptor.intercept("SELECT @@nonexistent_var", null);
         assertNull("未知系统变量不应被拦截", ir);
     }
-
     // ==================== 多列系统变量查询 ====================
-
     /**
      * 测试单变量带 @@session. 前缀 —— 应返回单列结果（非多列模式）。
      */
@@ -185,7 +170,6 @@ public class CommandHandlerTest {
         assertEquals("@@autocommit", ir.colName1);
         assertEquals("1", ir.value1);
     }
-
     /**
      * 测试单变量带 @@session. 前缀但未知变量 —— 应不拦截。
      */
@@ -195,7 +179,6 @@ public class CommandHandlerTest {
                 SystemVariableInterceptor.intercept("SELECT @@session.nonexistent_var", null);
         assertNull("未知系统变量不应被拦截", ir);
     }
-
     /**
      * 测试双变量查询。
      */
@@ -209,7 +192,6 @@ public class CommandHandlerTest {
         assertEquals("version", ir.columns.get(0).columnName);
         assertEquals("autocommit", ir.columns.get(1).columnName);
     }
-
     /**
      * 测试完整的多列查询（模拟 MySQL Connector/J 8.0.33 的 SQL）。
      */
@@ -221,7 +203,6 @@ public class CommandHandlerTest {
                 + "@@character_set_connection AS character_set_connection, "
                 + "@@character_set_results AS character_set_results, "
                 + "@@character_set_server AS character_set_server";
-
         SystemVariableInterceptor.InterceptResult ir = SystemVariableInterceptor.intercept(sql, null);
         assertNotNull("应拦截 Connector/J 多变量查询", ir);
         assertTrue("应为多列模式", ir.isMultiColumn());
@@ -231,7 +212,6 @@ public class CommandHandlerTest {
         assertEquals("character_set_client", ir.columns.get(1).columnName);
         assertEquals("utf8mb4", ir.columns.get(1).value);
     }
-
     /**
      * 测试未知系统变量返回空值（多列查询中）。
      */
@@ -246,7 +226,6 @@ public class CommandHandlerTest {
         assertEquals("unknown_var_xyz", ir.columns.get(1).columnName);
         assertEquals("", ir.columns.get(1).value); // 未知变量返回空字符串
     }
-
     /**
      * 测试混合前缀（部分 @@session.，部分 @@）。
      */
@@ -261,7 +240,6 @@ public class CommandHandlerTest {
         assertEquals("version", ir.columns.get(0).columnName);
         assertEquals("autocommit", ir.columns.get(1).columnName);
     }
-
     /**
      * 测试新增的系统变量（auto_increment_increment 等）。
      */
@@ -272,7 +250,6 @@ public class CommandHandlerTest {
                 SystemVariableInterceptor.intercept("SELECT @@auto_increment_increment", null);
         assertNotNull("应拦截 auto_increment_increment", ir1);
         assertEquals("1", ir1.value1);
-
         // 测试多列包含新增变量
         String sql = "SELECT @@auto_increment_increment, @@net_write_timeout, @@time_zone";
         SystemVariableInterceptor.InterceptResult ir2 = SystemVariableInterceptor.intercept(sql, null);
@@ -289,14 +266,11 @@ public class CommandHandlerTest {
         channel.pipeline().addLast(new CommandHandler());
         FrontendSession session = FrontendSession.create(channel, 1, scramble);
         channel.attr(SessionAttribute.SESSION_KEY).set(session);
-
         // 1. 发送不带 NUL 结束符的 COM_INIT_DB payload
         ByteBuf payload = Unpooled.buffer();
         payload.writeByte(CommandType.COM_INIT_DB);
         payload.writeBytes("tpcc".getBytes(StandardCharsets.UTF_8));
-
         channel.writeInbound(wrapPacket(payload, (byte) 0));
-
         // 验证返回 OK 报文 (header = 0x00)
         assertEquals(0x00, readResponseHeader());
         assertEquals("tpcc", session.getDatabase());
@@ -308,7 +282,6 @@ public class CommandHandlerTest {
         channel.pipeline().addLast(new CommandHandler());
         FrontendSession session = FrontendSession.create(channel, 1, scramble);
         channel.attr(SessionAttribute.SESSION_KEY).set(session);
-
         final boolean[] rolledBack = new boolean[1];
         CommandHandler.QueryProcessor mockProcessor = new CommandHandler.QueryProcessor() {
             @Override
@@ -320,36 +293,27 @@ public class CommandHandlerTest {
             }
         };
         CommandHandler.setQueryProcessor(mockProcessor);
-
         // 1. 测试 USE 语句触发回滚
         session.setDatabase("tpcc");
-        java.sql.Connection mockConn = (java.sql.Connection) java.lang.reflect.Proxy.newProxyInstance(
-                java.sql.Connection.class.getClassLoader(),
-                new Class<?>[] {java.sql.Connection.class},
-                (proxy, method, args) -> null);
+        Connection mockConn = (Connection) Proxy.newProxyInstance(
+                Connection.class.getClassLoader(), new Class<?>[] {Connection.class}, (proxy, method, args) -> null);
         channel.attr(SessionAttribute.BACKEND_CONN_KEY).set(mockConn);
         rolledBack[0] = false;
-
         sendQuery("USE tpch", (byte) 0);
         channel.runPendingTasks();
         assertEquals(0x00, readResponseHeader()); // OK response
         assertTrue("Switching via USE statement should trigger rollback", rolledBack[0]);
         assertEquals("tpch", session.getDatabase());
-
         // 2. 测试 COM_INIT_DB 触发回滚
         session.setDatabase("tpcc");
-        java.sql.Connection mockConn2 = (java.sql.Connection) java.lang.reflect.Proxy.newProxyInstance(
-                java.sql.Connection.class.getClassLoader(),
-                new Class<?>[] {java.sql.Connection.class},
-                (proxy, method, args) -> null);
+        Connection mockConn2 = (Connection) Proxy.newProxyInstance(
+                Connection.class.getClassLoader(), new Class<?>[] {Connection.class}, (proxy, method, args) -> null);
         channel.attr(SessionAttribute.BACKEND_CONN_KEY).set(mockConn2);
         rolledBack[0] = false;
-
         ByteBuf payload = Unpooled.buffer();
         payload.writeByte(CommandType.COM_INIT_DB);
         payload.writeBytes("tpch".getBytes(StandardCharsets.UTF_8));
         channel.writeInbound(wrapPacket(payload, (byte) 0));
-
         channel.runPendingTasks();
         assertEquals(0x00, readResponseHeader()); // OK response
         assertTrue("Switching via COM_INIT_DB should trigger rollback", rolledBack[0]);

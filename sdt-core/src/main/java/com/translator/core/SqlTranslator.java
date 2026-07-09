@@ -1,7 +1,14 @@
 package com.translator.core;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.calcite.config.CalciteConnectionConfig;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -10,16 +17,27 @@ import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.sql.SqlDialect;
+import org.apache.calcite.sql.SqlFunction;
+import org.apache.calcite.sql.SqlFunctionCategory;
+import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlOperatorTable;
+import org.apache.calcite.sql.SqlSyntax;
 import org.apache.calcite.sql.fun.SqlLibrary;
 import org.apache.calcite.sql.fun.SqlLibraryOperatorTableFactory;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
+import org.apache.calcite.sql.type.OperandTypes;
+import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
+import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.util.SqlOperatorTables;
+import org.apache.calcite.sql.validate.SqlConformance;
 import org.apache.calcite.sql.validate.SqlConformanceEnum;
+import org.apache.calcite.sql.validate.SqlNameMatcher;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorUtil;
 import org.apache.calcite.tools.Frameworks;
@@ -37,21 +55,17 @@ import com.translator.core.rewrite.SqlRewriteEngine;
  * 核心入口：解析源 SQL → AST 改写 → 生成目标方言 SQL。
  */
 public class SqlTranslator {
-
     private static final Logger log = LoggerFactory.getLogger(SqlTranslator.class);
-
     private final DialectType sourceDialect;
     private final DialectType targetDialect;
     private final SqlDialect targetSqlDialect;
     private final SqlRewriteEngine rewriteEngine;
     private final TranslationConfig config;
     private MetadataProvider metadataProvider;
-
     /** 默认构造器，使用 {@link TranslationConfig#DEFAULT}。 */
     public SqlTranslator(DialectType sourceDialect, DialectType targetDialect) {
         this(sourceDialect, targetDialect, TranslationConfig.DEFAULT);
     }
-
     /**
      * 创建 SQL 翻译器。
      *
@@ -62,7 +76,6 @@ public class SqlTranslator {
     public SqlTranslator(DialectType sourceDialect, DialectType targetDialect, TranslationConfig config) {
         this(sourceDialect, targetDialect, config, null);
     }
-
     /**
      * 创建 SQL 翻译器，并指定元数据提供者。
      *
@@ -94,7 +107,6 @@ public class SqlTranslator {
     public void setMetadataProvider(MetadataProvider metadataProvider) {
         this.metadataProvider = metadataProvider;
     }
-
     /**
      * 翻译 SQL 语句。
      *
@@ -106,17 +118,14 @@ public class SqlTranslator {
         if (sql == null || sql.trim().isEmpty()) {
             return sql;
         }
-
         if (SqlDialectFactory.isSameDialect(sourceDialect, targetDialect)) {
             log.debug("源方言和目标方言相同，无需转换: {}", sql);
             return sql;
         }
-
         long start = System.nanoTime();
         try {
             // 1. 解析 SQL → AST (SqlNode)
             SqlNode parsed = parseSql(sql);
-
             // 如果开启了校验并且提供了元数据提供者，对 SqlNode 进行校验和重写
             SqlNode validated = parsed;
             if (config.isEnableValidation() && metadataProvider != null) {
@@ -131,10 +140,8 @@ public class SqlTranslator {
                     }
                 }
             }
-
             // 2. 改写 AST
             SqlNode rewritten = rewriteEngine.rewrite(validated);
-
             // 3. 使用目标方言生成 SQL（按配置控制关键词大小写）
             String result;
             if (config.getKeywordCase() == TranslationConfig.KeywordCase.LOWER) {
@@ -148,13 +155,10 @@ public class SqlTranslator {
                         .toSqlString(c -> c.withDialect(targetSqlDialect).withQuoteAllIdentifiers(true))
                         .getSql();
             }
-
             long elapsed = (System.nanoTime() - start) / 1_000_000;
             log.debug("SQL 翻译完成 ({}ms): [{}] → [{}]", elapsed, sql, result);
-
             // 消除由于 withQuoteAllIdentifiers(true) 导致的函数名被误加双引号问题（例如把 "SUBSTR"( 还原为 SUBSTR( ）
             result = result.replaceAll("\"([A-Za-z_][A-Za-z0-9_]*)\"\\(", "$1(");
-
             return result;
         } catch (SqlTranslationException e) {
             throw e; // 已知翻译或校验异常，不重复包裹
@@ -164,7 +168,6 @@ public class SqlTranslator {
             throw new SqlTranslationException("SQL 翻译失败: [" + sql + "] " + sourceDialect + " → " + targetDialect, e);
         }
     }
-
     /**
      * 使用 Calcite SqlParser 解析 SQL。
      * 根据源方言做预处理（标识符引用转换），然后解析。
@@ -172,13 +175,11 @@ public class SqlTranslator {
     private SqlNode parseSql(String sql) throws SqlParseException {
         // 预处理：将源方言的特殊标识符引用转换为标准双引号引用
         String normalizedSql = normalizeIdentifierQuoting(sql, sourceDialect, config.getIdentifierCase());
-
         SqlParser.Config config =
                 SqlParser.config().withCaseSensitive(true).withConformance(getConformanceForSource(sourceDialect));
         SqlParser parser = SqlParser.create(normalizedSql, config);
         return parser.parseStmt();
     }
-
     /**
      * 根据源方言类型选择合适的 Calcite SQL conformance 级别。
      * 不同方言使用不同的非标准语法，需要对应的 conformance 才能正确解析。
@@ -197,7 +198,6 @@ public class SqlTranslator {
                 return SqlConformanceEnum.DEFAULT;
         }
     }
-
     /**
      * 预处理 SQL 中的标识符引用和方言特殊语法。
      * - MySQL 反引号 → 双引号
@@ -230,28 +230,24 @@ public class SqlTranslator {
         result = normalizeUnquotedIdentifiers(result, identifierCase);
         return result;
     }
-
     /**
      * 将 SQL Server 的 SELECT TOP n 转换为标准 SQL LIMIT n。
      * LIMIT 必须放在语句末尾（ORDER BY 之后）。
      */
     private static String normalizeSqlServerTop(String sql) {
-        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("(?i)\\bSELECT\\s+(TOP\\s+(\\d+)\\s+)");
-        java.util.regex.Matcher matcher = pattern.matcher(sql);
+        Pattern pattern = Pattern.compile("(?i)\\bSELECT\\s+(TOP\\s+(\\d+)\\s+)");
+        Matcher matcher = pattern.matcher(sql);
         if (!matcher.find()) {
             return sql;
         }
-
         String topClause = matcher.group(1); // e.g. "TOP 10 "
         String topNum = matcher.group(2); // e.g. "10"
-
         // 去掉 "TOP n " 部分
         sql = sql.substring(0, matcher.start(1)) + sql.substring(matcher.end(1));
         // LIMIT n 放在末尾（Calcite parser 会正确处理 ORDER BY + LIMIT 的顺序）
         sql = sql.trim() + " LIMIT " + topNum;
         return sql;
     }
-
     /**
      * 去掉 SQL 中的 -- 行注释。
      * 防止注释内容被后续 normalizeUnquotedIdentifiers 过程错误加引号。
@@ -304,9 +300,8 @@ public class SqlTranslator {
         }
         return sb.toString();
     }
-
     /** SQL 保留关键字集合，用于预处理时跳过不引用。 */
-    private static final java.util.Set<String> SQL_KEYWORDS = new java.util.HashSet<>(java.util.Arrays.asList(
+    private static final Set<String> SQL_KEYWORDS = new HashSet<>(Arrays.asList(
             "SELECT",
             "FROM",
             "WHERE",
@@ -458,7 +453,6 @@ public class SqlTranslator {
             "ROWS",
             "GROUPS",
             "OTHERS"));
-
     /**
      * 将未引用或已引用的标识符按配置处理：补引号 + 大小写转换。
      * <p>
@@ -479,12 +473,11 @@ public class SqlTranslator {
         //    例如 'SAUDI ARABIA'、'F'、'don''t' 等
         List<String> stringLiterals = new ArrayList<>();
         String protectedSql = protectStringLiterals(sql, stringLiterals);
-
         // 2. 匹配 identifier.identifier、identifier.* 或 standalone identifier
         //    负向后瞻排除已引用或数字开头的；负向前瞻排除函数调用（后跟括号）和已引用标识符
-        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+        Pattern pattern = Pattern.compile(
                 "(?<![\\w\"`])([a-zA-Z_][a-zA-Z0-9_]*)" + "(?:\\.(\\*|[a-zA-Z_][a-zA-Z0-9_]*))?" + "(?![\\w\"`(])");
-        java.util.regex.Matcher matcher = pattern.matcher(protectedSql);
+        Matcher matcher = pattern.matcher(protectedSql);
         StringBuilder sb = new StringBuilder(protectedSql.length() + 64);
         int lastEnd = 0;
         while (matcher.find()) {
@@ -504,7 +497,7 @@ public class SqlTranslator {
                 }
             } else {
                 // 独立标识符 — 跳过 SQL 关键字
-                if (SQL_KEYWORDS.contains(part1.toUpperCase(java.util.Locale.ROOT))) {
+                if (SQL_KEYWORDS.contains(part1.toUpperCase(Locale.ROOT))) {
                     sb.append(part1);
                 } else {
                     sb.append('"').append(identifierCase.apply(part1)).append('"');
@@ -513,15 +506,12 @@ public class SqlTranslator {
             lastEnd = matcher.end();
         }
         sb.append(protectedSql.substring(lastEnd));
-
         // 3. 第二遍：修复 DML 语句中紧跟 ( 的表名（如 INSERT INTO test(...)）
         //    这些表名在第一遍被 (?![\\w\"\`(]) 跳过了
         String quoted = quoteDmlTableNames(sb.toString(), identifierCase);
-
         // 4. 还原字符串字面量
         return restoreStringLiterals(quoted, stringLiterals);
     }
-
     /**
      * 提取 SQL 中所有单引号字符串字面量，用不可见占位符替换。
      * 支持 SQL 标准的双单引号转义（'' 表示一个单引号字符）。
@@ -564,7 +554,6 @@ public class SqlTranslator {
         }
         return sb.toString();
     }
-
     /**
      * 将占位符还原为原始字符串字面量。
      */
@@ -595,21 +584,19 @@ public class SqlTranslator {
         }
         return sb.toString();
     }
-
     /**
      * 为 DML 语句中紧跟 ( 的表名加引号（正则第一遍会被函数调用前瞻误排除）。
      * 仅当表名前面是 INTO / FROM / UPDATE / JOIN / TABLE 等 DML 关键字时才处理。
      */
     private static String quoteDmlTableNames(String sql, TranslationConfig.IdentifierCase identifierCase) {
-        java.util.regex.Pattern dmlPattern =
-                java.util.regex.Pattern.compile("(?<![\\w\"`])([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(");
-        java.util.regex.Matcher m = dmlPattern.matcher(sql);
+        Pattern dmlPattern = Pattern.compile("(?<![\\w\"`])([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(");
+        Matcher m = dmlPattern.matcher(sql);
         StringBuilder sb = new StringBuilder(sql.length() + 16);
         int lastEnd = 0;
         while (m.find()) {
             String word = m.group(1);
             // 只处理前面是 DML 关键字的，排除普通函数调用
-            if (!isDmlContextBefore(sql, m.start()) || SQL_KEYWORDS.contains(word.toUpperCase(java.util.Locale.ROOT))) {
+            if (!isDmlContextBefore(sql, m.start()) || SQL_KEYWORDS.contains(word.toUpperCase(Locale.ROOT))) {
                 continue;
             }
             sb.append(sql, lastEnd, m.start());
@@ -620,7 +607,6 @@ public class SqlTranslator {
         sb.append(sql.substring(lastEnd));
         return sb.toString();
     }
-
     /** 检查标识符位置之前是否是 DML 上下文（INTO/FROM/UPDATE/JOIN/TABLE 等） */
     private static boolean isDmlContextBefore(String sql, int pos) {
         // 向前找最近的非空白 token
@@ -634,7 +620,7 @@ public class SqlTranslator {
         while (i >= 0 && Character.isLetterOrDigit(sql.charAt(i))) {
             i--;
         }
-        String token = sql.substring(i + 1, tokenEnd).toUpperCase(java.util.Locale.ROOT);
+        String token = sql.substring(i + 1, tokenEnd).toUpperCase(Locale.ROOT);
         return "INTO".equals(token)
                 || "FROM".equals(token)
                 || "UPDATE".equals(token)
@@ -642,9 +628,7 @@ public class SqlTranslator {
                 || "TABLE".equals(token)
                 || "EXISTS".equals(token);
     }
-
     // --- 便捷静态方法 ---
-
     /**
      * 便捷方法：直接翻译 SQL，使用默认配置。
      *
@@ -658,7 +642,6 @@ public class SqlTranslator {
         DialectType target = DialectType.fromIdentifier(targetDialect);
         return new SqlTranslator(source, target).translate(sql);
     }
-
     /**
      * 便捷方法：直接翻译 SQL，使用默认配置。
      *
@@ -670,7 +653,6 @@ public class SqlTranslator {
     public static String translate(String sql, DialectType sourceDialect, DialectType targetDialect) {
         return new SqlTranslator(sourceDialect, targetDialect).translate(sql);
     }
-
     /**
      * 便捷方法：直接翻译 SQL，使用指定配置。
      *
@@ -692,7 +674,6 @@ public class SqlTranslator {
     public DialectType getTargetDialect() {
         return targetDialect;
     }
-
     /**
      * 校验 SQL AST，并进行隐式列展开、类型推断和自动补全。
      */
@@ -700,83 +681,68 @@ public class SqlTranslator {
         if (metadataProvider == null) {
             return parsed;
         }
-
         try {
             // 1. 类型工厂
             RelDataTypeFactory typeFactory = new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
-
             // 2. 创建元数据 Schema 并添加到 root schema 路径中
             SchemaPlus rootSchema = Frameworks.createRootSchema(true);
             rootSchema.add("PUBLIC", new CalciteMetadataSchema(metadataProvider));
-
             // 3. 构建 CatalogReader，设置默认 Schema 搜索路径为 "PUBLIC"
             CalciteSchema calciteSchema = CalciteSchema.from(rootSchema);
-            java.util.List<String> defaultSchemaPath = java.util.Collections.singletonList("PUBLIC");
+            List<String> defaultSchemaPath = Collections.singletonList("PUBLIC");
             CalciteConnectionConfig connectionConfig = CalciteConnectionConfig.DEFAULT;
             CalciteCatalogReader catalogReader =
                     new CalciteCatalogReader(calciteSchema, defaultSchemaPath, typeFactory, connectionConfig);
-
             // 4. 构建联合算子表（标准 SQL 函数 + 方言专属函数 + 自定义方言函数如 IFNULL）
             SqlOperatorTable stdOpTable = SqlStdOperatorTable.instance();
             SqlOperatorTable libraryOpTable = SqlLibraryOperatorTableFactory.INSTANCE.getOperatorTable(
                     SqlLibrary.MYSQL, SqlLibrary.ORACLE, SqlLibrary.POSTGRESQL);
-
             SqlOperatorTable customOpTable = new SqlOperatorTable() {
-                private final java.util.List<org.apache.calcite.sql.SqlOperator> list = java.util.Arrays.asList(
-                        new org.apache.calcite.sql.SqlFunction(
+                private final List<SqlOperator> list = Arrays.asList(
+                        new SqlFunction(
                                 "IFNULL",
-                                org.apache.calcite.sql.SqlKind.OTHER_FUNCTION,
-                                org.apache.calcite.sql.type.ReturnTypes.ARG0_NULLABLE,
+                                SqlKind.OTHER_FUNCTION,
+                                ReturnTypes.ARG0_NULLABLE,
                                 null,
-                                org.apache.calcite.sql.type.OperandTypes.family(
-                                        org.apache.calcite.sql.type.SqlTypeFamily.ANY,
-                                        org.apache.calcite.sql.type.SqlTypeFamily.ANY),
-                                org.apache.calcite.sql.SqlFunctionCategory.SYSTEM),
-                        new org.apache.calcite.sql.SqlFunction(
+                                OperandTypes.family(SqlTypeFamily.ANY, SqlTypeFamily.ANY),
+                                SqlFunctionCategory.SYSTEM),
+                        new SqlFunction(
                                 "DATE_ADD",
-                                org.apache.calcite.sql.SqlKind.OTHER_FUNCTION,
-                                org.apache.calcite.sql.type.ReturnTypes.ARG0,
+                                SqlKind.OTHER_FUNCTION,
+                                ReturnTypes.ARG0,
                                 null,
-                                org.apache.calcite.sql.type.OperandTypes.family(
-                                        org.apache.calcite.sql.type.SqlTypeFamily.ANY,
-                                        org.apache.calcite.sql.type.SqlTypeFamily.ANY),
-                                org.apache.calcite.sql.SqlFunctionCategory.SYSTEM),
-                        new org.apache.calcite.sql.SqlFunction(
+                                OperandTypes.family(SqlTypeFamily.ANY, SqlTypeFamily.ANY),
+                                SqlFunctionCategory.SYSTEM),
+                        new SqlFunction(
                                 "ADDDATE",
-                                org.apache.calcite.sql.SqlKind.OTHER_FUNCTION,
-                                org.apache.calcite.sql.type.ReturnTypes.ARG0,
+                                SqlKind.OTHER_FUNCTION,
+                                ReturnTypes.ARG0,
                                 null,
-                                org.apache.calcite.sql.type.OperandTypes.family(
-                                        org.apache.calcite.sql.type.SqlTypeFamily.ANY,
-                                        org.apache.calcite.sql.type.SqlTypeFamily.ANY),
-                                org.apache.calcite.sql.SqlFunctionCategory.SYSTEM),
-                        new org.apache.calcite.sql.SqlFunction(
+                                OperandTypes.family(SqlTypeFamily.ANY, SqlTypeFamily.ANY),
+                                SqlFunctionCategory.SYSTEM),
+                        new SqlFunction(
                                 "DATE_SUB",
-                                org.apache.calcite.sql.SqlKind.OTHER_FUNCTION,
-                                org.apache.calcite.sql.type.ReturnTypes.ARG0,
+                                SqlKind.OTHER_FUNCTION,
+                                ReturnTypes.ARG0,
                                 null,
-                                org.apache.calcite.sql.type.OperandTypes.family(
-                                        org.apache.calcite.sql.type.SqlTypeFamily.ANY,
-                                        org.apache.calcite.sql.type.SqlTypeFamily.ANY),
-                                org.apache.calcite.sql.SqlFunctionCategory.SYSTEM),
-                        new org.apache.calcite.sql.SqlFunction(
+                                OperandTypes.family(SqlTypeFamily.ANY, SqlTypeFamily.ANY),
+                                SqlFunctionCategory.SYSTEM),
+                        new SqlFunction(
                                 "SUBDATE",
-                                org.apache.calcite.sql.SqlKind.OTHER_FUNCTION,
-                                org.apache.calcite.sql.type.ReturnTypes.ARG0,
+                                SqlKind.OTHER_FUNCTION,
+                                ReturnTypes.ARG0,
                                 null,
-                                org.apache.calcite.sql.type.OperandTypes.family(
-                                        org.apache.calcite.sql.type.SqlTypeFamily.ANY,
-                                        org.apache.calcite.sql.type.SqlTypeFamily.ANY),
-                                org.apache.calcite.sql.SqlFunctionCategory.SYSTEM));
+                                OperandTypes.family(SqlTypeFamily.ANY, SqlTypeFamily.ANY),
+                                SqlFunctionCategory.SYSTEM));
 
                 @Override
                 public void lookupOperatorOverloads(
-                        org.apache.calcite.sql.SqlIdentifier opName,
-                        org.apache.calcite.sql.SqlFunctionCategory category,
-                        org.apache.calcite.sql.SqlSyntax syntax,
-                        java.util.List<org.apache.calcite.sql.SqlOperator> operatorList,
-                        org.apache.calcite.sql.validate.SqlNameMatcher nameMatcher) {
-                    for (org.apache.calcite.sql.SqlOperator op : list) {
+                        SqlIdentifier opName,
+                        SqlFunctionCategory category,
+                        SqlSyntax syntax,
+                        List<SqlOperator> operatorList,
+                        SqlNameMatcher nameMatcher) {
+                    for (SqlOperator op : list) {
                         if (nameMatcher.matches(op.getName(), opName.getSimple())) {
                             operatorList.add(op);
                         }
@@ -784,26 +750,21 @@ public class SqlTranslator {
                 }
 
                 @Override
-                public java.util.List<org.apache.calcite.sql.SqlOperator> getOperatorList() {
+                public List<SqlOperator> getOperatorList() {
                     return list;
                 }
             };
-
             SqlOperatorTable chainOpTable = SqlOperatorTables.chain(stdOpTable, libraryOpTable, customOpTable);
-
             // 5. 设置符合度 Conformance 级别
-            org.apache.calcite.sql.validate.SqlConformance conformance = getConformanceForSource(sourceDialect);
-
+            SqlConformance conformance = getConformanceForSource(sourceDialect);
             // 6. 创建验证器配置，支持标示符大小写敏感（Calcite 默认与 Conformance 相关，这里支持标识符展开）
             SqlValidator.Config validatorConfig = SqlValidator.Config.DEFAULT
                     .withConformance(conformance)
                     .withIdentifierExpansion(true)
                     .withCallRewrite(true);
-
             // 7. 创建验证器并校验
             SqlValidator validator =
                     SqlValidatorUtil.newValidator(chainOpTable, catalogReader, typeFactory, validatorConfig);
-
             return validator.validate(parsed);
         } catch (Exception e) {
             throw new SqlTranslationException("SQL 校验失败: " + e.getMessage(), e);

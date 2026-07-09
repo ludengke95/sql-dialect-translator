@@ -1,6 +1,7 @@
 package com.translator.jdbc;
 
 import java.sql.*;
+import java.sql.Driver;
 import java.util.Properties;
 
 import org.slf4j.Logger;
@@ -10,18 +11,15 @@ import com.translator.metrics.ConnectionMetrics;
 
 /**
  * 翻译驱动入口类。
- * 实现 java.sql.Driver，包装真实 JDBC 驱动并透明翻译 SQL。
+ * 实现 Driver，包装真实 JDBC 驱动并透明翻译 SQL。
  *
  * JDBC URL 格式：jdbc:translator:<源方言>:<目标方言>://<真实连接地址>
  * 示例：jdbc:translator:mysql:postgresql://localhost:5432/mydb
  */
 public class TranslatorDriver implements Driver {
-
     private static final Logger log = LoggerFactory.getLogger(TranslatorDriver.class);
-
     /** 驱动前缀 */
     public static final String URL_PREFIX = "jdbc:translator:";
-
     /** JDBC 驱动版本 */
     private static final int MAJOR_VERSION = 1;
 
@@ -42,23 +40,16 @@ public class TranslatorDriver implements Driver {
         if (!acceptsURL(url)) {
             return null;
         }
-
         log.info("TranslatorDriver 连接: {}", url);
-
         JdbcUrlInfo urlInfo = JdbcUrlParser.parse(url, info);
-
         // 获取真实驱动并创建连接
         Driver realDriver = DriverManager.getDriver(urlInfo.getRealUrl());
         Connection realConnection = realDriver.connect(urlInfo.getRealUrl(), urlInfo.getRealProperties());
-
         if (realConnection == null) {
             throw new SQLException("无法获取真实数据库连接: " + urlInfo.getRealUrl());
         }
-
         log.info("成功创建翻译连接: {} → {}", urlInfo.getSourceDialect(), urlInfo.getTargetDialect());
-
         ConnectionMetrics.onConnect();
-
         return new TranslatorConnection(
                 realConnection, urlInfo.getSourceDialect(), urlInfo.getTargetDialect(), urlInfo.getTranslationConfig());
     }

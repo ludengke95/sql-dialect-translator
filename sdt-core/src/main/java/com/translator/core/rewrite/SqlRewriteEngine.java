@@ -3,6 +3,7 @@ package com.translator.core.rewrite;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.ServiceLoader;
 
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.util.SqlShuttle;
@@ -12,7 +13,7 @@ import com.translator.core.DialectType;
 /**
  * SQL 改写引擎。
  * <p>
- * 通过 Java SPI ({@link java.util.ServiceLoader}) 自动发现所有
+ * 通过 Java SPI ({@link ServiceLoader}) 自动发现所有
  * {@link SqlRewriteRule} 实现，按 (source, target) 方言对筛选后，
  * 通过 {@link RuleBasedRewriteVisitor} 应用于 AST。
  * </p>
@@ -21,9 +22,7 @@ import com.translator.core.DialectType;
  * </p>
  */
 public class SqlRewriteEngine {
-
     private final List<SqlShuttle> visitors = new ArrayList<>();
-
     /**
      * 创建一个用于 source→target 转换的改写引擎。
      * 通过 SPI 自动加载所有 SqlRewriteRule 实现并按方言筛选。
@@ -42,7 +41,6 @@ public class SqlRewriteEngine {
         }
         // 后续可在此注册更多改写 visitor（标识符、类型转换等）
     }
-
     /**
      * 添加自定义改写 Visitor。
      *
@@ -51,7 +49,6 @@ public class SqlRewriteEngine {
     public void addVisitor(SqlShuttle visitor) {
         visitors.add(visitor);
     }
-
     /**
      * 对 AST 应用所有改写规则。
      *
@@ -65,7 +62,6 @@ public class SqlRewriteEngine {
         }
         return node;
     }
-
     /**
      * 获取注册的改写规则列表（只读）。
      */

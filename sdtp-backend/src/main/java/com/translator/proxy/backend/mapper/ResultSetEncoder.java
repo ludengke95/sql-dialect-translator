@@ -1,5 +1,6 @@
 package com.translator.proxy.backend.mapper;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -8,6 +9,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.translator.metrics.BackendMetrics;
+import com.translator.proxy.core.handler.SessionAttribute;
+import com.translator.proxy.core.session.FrontendSession;
 import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
 import com.translator.proxy.protocol.constant.ServerStatus;
 import com.translator.proxy.protocol.util.BufferUtils;
@@ -30,14 +33,11 @@ import io.netty.channel.ChannelHandlerContext;
  * </ul>
  */
 public final class ResultSetEncoder {
-
     private static final Logger log = LoggerFactory.getLogger(ResultSetEncoder.class);
-
     /** 单次 flush 的最大行数（用于大结果集分批 flush） */
     private static final int FLUSH_BATCH_SIZE = 100;
 
     private ResultSetEncoder() {}
-
     /**
      * 将 ResultSet 流式编码并写入 Netty Channel。
      *
@@ -48,18 +48,14 @@ public final class ResultSetEncoder {
      */
     public static void encodeAndWrite(ChannelHandlerContext ctx, ResultSet rs, SeqGenerator seqGen, String backendName)
             throws SQLException {
-
         ResultSetMetaData meta = rs.getMetaData();
         int columnCount = meta.getColumnCount();
-
         log.info("Encoding ResultSet: {} columns", columnCount);
-
         // 1. Column Count Packet [seq=1]
         ByteBuf colCount = ctx.alloc().buffer(9);
         BufferUtils.writeLengthEncodedInt(colCount, columnCount);
         log.debug("ColumnCount packet: {} bytes (seq={})", colCount.readableBytes(), seqGen.peek());
         ctx.write(new MySQLPacketEncoder.OutgoingPacket(colCount, seqGen.next()));
-
         // 2. Column Definition Packets
         for (int i = 1; i <= columnCount; i++) {
             ByteBuf colDef = buildColumnDef(ctx, meta, i);
@@ -70,12 +66,10 @@ public final class ResultSetEncoder {
                     seqGen.peek());
             ctx.write(new MySQLPacketEncoder.OutgoingPacket(colDef, seqGen.next()));
         }
-
         // 3. EOF after columns
         ByteBuf eof1 = buildEof(ctx);
         log.debug("EOF(after columns): {} bytes (seq={})", eof1.readableBytes(), seqGen.peek());
         ctx.write(new MySQLPacketEncoder.OutgoingPacket(eof1, seqGen.next()));
-
         // 4. Row Packets
         int rowCount = 0;
         while (rs.next()) {
@@ -89,21 +83,16 @@ public final class ResultSetEncoder {
                 ctx.flush();
             }
         }
-
         log.info("Encoded {} rows", rowCount);
-
         if (backendName != null) {
             BackendMetrics.observeResultRows(backendName, rowCount);
         }
-
         // 5. Final EOF
         ByteBuf eof2 = buildEof(ctx);
         log.debug("EOF(after rows): {} bytes (seq={})", eof2.readableBytes(), seqGen.peek());
         ctx.write(new MySQLPacketEncoder.OutgoingPacket(eof2, seqGen.next()));
-
         ctx.flush();
     }
-
     /**
      * 将 ResultSet 流式编码并写入 Netty Channel（便捷方法，不带指标打点）。
      */
@@ -111,7 +100,6 @@ public final class ResultSetEncoder {
             throws SQLException {
         encodeAndWrite(ctx, rs, seqGen, null);
     }
-
     /**
      * 发送空结果集（只有 Column Count = 0 + OK）。
      */
@@ -124,25 +112,20 @@ public final class ResultSetEncoder {
         ok.writeShortLE(0); // warnings
         ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(ok, (byte) 1));
     }
-
     // ==================== Column Definition Builder ====================
-
     private static ByteBuf buildColumnDef(ChannelHandlerContext ctx, ResultSetMetaData meta, int colIndex)
             throws SQLException {
         ByteBuf buf = ctx.alloc().buffer(128);
-
         String schema = meta.getSchemaName(colIndex);
         String table = meta.getTableName(colIndex);
         String name = meta.getColumnLabel(colIndex); // 用 label（别名优先）
         String orgName = meta.getColumnName(colIndex);
-
         int jdbcType = meta.getColumnType(colIndex);
         int mysqlType = TypeMapper.jdbcToMysql(jdbcType);
         int colLen = meta.getColumnDisplaySize(colIndex);
         if (colLen <= 0) colLen = TypeMapper.defaultColumnLength(jdbcType);
         int charset = TypeMapper.isBinary(jdbcType) ? TypeMapper.CHARSET_BINARY : TypeMapper.CHARSET_UTF8MB4;
         int decimals = meta.getScale(colIndex);
-
         // catalog
         BufferUtils.writeLengthEncodedString(buf, "def");
         // schema
@@ -169,29 +152,23 @@ public final class ResultSetEncoder {
         buf.writeByte(decimals);
         // filler
         buf.writeZero(2);
-
         return buf;
     }
-
     // ==================== Text Row Builder ====================
-
     private static ByteBuf buildTextRow(
             ChannelHandlerContext ctx, ResultSet rs, int columnCount, ResultSetMetaData meta) throws SQLException {
         ByteBuf buf = ctx.alloc().buffer(256);
-
         for (int i = 1; i <= columnCount; i++) {
             String value = rs.getString(i);
             boolean wasNull = rs.wasNull();
-
             if (wasNull || value == null) {
                 buf.writeByte(0xFB); // NULL marker
             } else {
-                byte[] bytes = value.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
                 BufferUtils.writeLengthEncodedInt(buf, bytes.length);
                 buf.writeBytes(bytes);
             }
         }
-
         return buf;
     }
 
@@ -204,9 +181,8 @@ public final class ResultSetEncoder {
     }
 
     private static int getStatusFlags(ChannelHandlerContext ctx) {
-        com.translator.proxy.core.session.FrontendSession session = ctx.channel()
-                .attr(com.translator.proxy.core.handler.SessionAttribute.SESSION_KEY)
-                .get();
+        FrontendSession session =
+                ctx.channel().attr(SessionAttribute.SESSION_KEY).get();
         int flags = ServerStatus.SERVER_STATUS_AUTOCOMMIT;
         if (session != null) {
             flags = 0;
@@ -219,9 +195,7 @@ public final class ResultSetEncoder {
         }
         return flags;
     }
-
     // ==================== Sequence ID Generator ====================
-
     /**
      * Sequence ID 生成器（线程安全，从 1 开始每次递增）。
      */
@@ -235,7 +209,6 @@ public final class ResultSetEncoder {
         public byte next() {
             return (byte) ((seq++) & 0xFF);
         }
-
         /** 查看下一个 seq 值（不递增），用于调试日志 */
         public byte peek() {
             return (byte) (seq & 0xFF);

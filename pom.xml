@@ -140,14 +140,14 @@
                 <version>2.43.0</version>
                 <configuration>
                     <java>
-                        <!-- <googleJavaFormat>
+                        <googleJavaFormat>
                             <version>1.17.0</version>
                             <style>GOOGLE</style>
                             <reflowLongStrings>true</reflowLongStrings>
-                        </googleJavaFormat> -->
-                        <palantirJavaFormat>
+                        </googleJavaFormat>
+                        <!-- <palantirJavaFormat>
                             <version>2.39.0</version>
-                        </palantirJavaFormat>
+                        </palantirJavaFormat> -->
                         <!-- 移除未使用的import -->
                         <removeUnusedImports></removeUnusedImports>
                         <!-- import排序：逗号分隔分组，连续两个逗号表示插入空行 -->

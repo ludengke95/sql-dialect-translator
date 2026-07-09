@@ -53,13 +53,14 @@ public class JavaJdbcTest {
         // MySQL 5.7 JDBC 默认使用 mysql_native_password 认证插件
         String jdbcUrl = "jdbc:mysql://"
                 + "127.0.0.1" + ":" + 3306
-                + "/tes"
+                + "/tpch"
                 + "?defaultAuthenticationPlugin=mysql_native_password";
 
         Connection conn57 = DriverManager.getConnection(jdbcUrl, "root", "123");
         Statement stmt57 = conn57.createStatement();
 
-        ResultSet rs = stmt57.executeQuery("SELECT 1");
+        ResultSet rs = stmt57.executeQuery(
+                "WITH revenue AS (    SELECT        l_suppkey AS supplier_no,        SUM(l_extendedprice * (1 - l_discount)) AS total_revenue    FROM        lineitem    WHERE        l_shipdate >= '1996-01-01'        AND l_shipdate < DATE_ADD('1996-01-01', INTERVAL 3 MONTH)    GROUP BY        l_suppkey) SELECT    s_suppkey,    s_name,    s_address,    s_phone,    total_revenue FROM    supplier,    revenue WHERE    s_suppkey = supplier_no    AND total_revenue = (SELECT MAX(total_revenue) FROM revenue)ORDER BY s_suppkey;");
         if (rs.next()) {
             System.out.println("MySQL 5.7 JDBC test: " + rs.getInt(1));
         }

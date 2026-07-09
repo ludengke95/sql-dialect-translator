@@ -3,14 +3,14 @@ package com.translator.core;
 import org.junit.Assert;
 import org.junit.Test;
 
+import com.translator.core.config.TranslationConfig;
+
 /**
  * SqlTranslator 核心翻译引擎测试（Phase 1-3 全面覆盖）。
  * 测试 PostgreSQL ↔ MySQL ↔ Oracle ↔ SQL Server 之间的 SQL 方言转换。
  */
 public class SqlTranslatorTest {
-
     // ==================== 基础 SELECT 转换 ====================
-
     @Test
     public void testSimpleSelect() {
         String sql = "SELECT id, name FROM users";
@@ -36,9 +36,7 @@ public class SqlTranslatorTest {
         Assert.assertTrue(result.toUpperCase().contains("INNER JOIN"));
         Assert.assertTrue(result.toUpperCase().contains("ON"));
     }
-
     // ==================== IFNULL → COALESCE ====================
-
     @Test
     public void testIfnullToCoalesce() {
         String mysqlSql = "SELECT IFNULL(name, 'unknown') FROM users";
@@ -53,18 +51,14 @@ public class SqlTranslatorTest {
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
         Assert.assertTrue("应包含 COALESCE: " + pgResult, pgResult.toUpperCase().contains("COALESCE"));
     }
-
     // ==================== NVL → COALESCE ====================
-
     @Test
     public void testNvlToCoalesce() {
         String oracleSql = "SELECT NVL(name, 'unknown') FROM users";
         String pgResult = SqlTranslator.translate(oracleSql, DialectType.ORACLE, DialectType.POSTGRESQL);
         Assert.assertTrue("应包含 COALESCE: " + pgResult, pgResult.toUpperCase().contains("COALESCE"));
     }
-
     // ==================== ISNULL → COALESCE (SQL Server) ====================
-
     @Test
     public void testIsnullToCoalesce() {
         String sqlServerSql = "SELECT ISNULL(name, 'unknown') FROM users";
@@ -72,9 +66,7 @@ public class SqlTranslatorTest {
         Assert.assertTrue("应包含 COALESCE: " + pgResult, pgResult.toUpperCase().contains("COALESCE"));
         Assert.assertFalse("不应包含 ISNULL: " + pgResult, pgResult.toUpperCase().contains("ISNULL"));
     }
-
     // ==================== DECODE → CASE WHEN ====================
-
     @Test
     public void testDecodeToCaseWhen() {
         String oracleSql = "SELECT DECODE(status, 1, 'Active', 2, 'Inactive', 'Unknown') FROM orders";
@@ -107,9 +99,7 @@ public class SqlTranslatorTest {
         Assert.assertTrue("应包含 CASE: " + pgResult, upper.contains("CASE"));
         Assert.assertTrue("应包含 WHEN: " + pgResult, upper.contains("WHEN"));
     }
-
     // ==================== NOW / GETDATE / SYSDATE → CURRENT_TIMESTAMP ====================
-
     @Test
     public void testNowToCurrentTimestamp() {
         String mysqlSql = "SELECT NOW() FROM dual";
@@ -135,9 +125,7 @@ public class SqlTranslatorTest {
         Assert.assertTrue(
                 "应包含 CURRENT_TIMESTAMP: " + pgResult, pgResult.toUpperCase().contains("CURRENT_TIMESTAMP"));
     }
-
     // ==================== 同方言直接返回 ====================
-
     @Test
     public void testSameDialectNoChange() {
         String[] dialects = {"mysql", "postgresql", "oracle", "sqlserver"};
@@ -147,9 +135,7 @@ public class SqlTranslatorTest {
             Assert.assertEquals("同方言 " + d + " 不应转换", sql, result);
         }
     }
-
     // ==================== 分页语法 ====================
-
     @Test
     public void testLimitOffset() {
         String pgSql = "SELECT id, name FROM users ORDER BY id LIMIT 10 OFFSET 5";
@@ -168,9 +154,7 @@ public class SqlTranslatorTest {
                 mysqlResult.toUpperCase().contains("LIMIT")
                         || mysqlResult.toUpperCase().contains("FETCH"));
     }
-
     // ==================== SQL Server TOP ====================
-
     @Test
     public void testSqlServerTop() {
         String sqlServerSql = "SELECT TOP 10 id, name FROM users";
@@ -193,9 +177,7 @@ public class SqlTranslatorTest {
                         || pgResult.toUpperCase().contains("LIMIT"));
         Assert.assertTrue("应包含 ORDER BY: " + pgResult, pgResult.toUpperCase().contains("ORDER BY"));
     }
-
     // ==================== 标识符引用 ====================
-
     @Test
     public void testIdentifierQuotingMySqlToPg() {
         String mysqlSql = "SELECT `id`, `name` FROM `users`";
@@ -212,9 +194,7 @@ public class SqlTranslatorTest {
         Assert.assertFalse("不应包含方括号: " + pgResult, pgResult.contains("["));
         Assert.assertFalse("不应包含方括号: " + pgResult, pgResult.contains("]"));
     }
-
     // ==================== 未引用标识符大小写保留（新增修复） ====================
-
     @Test
     public void testUnquotedAliasCasePreservedMySqlToPg() {
         // 核心场景：未引用的 a.task_code 不应被转成 "A"."TASK_CODE"
@@ -289,7 +269,7 @@ public class SqlTranslatorTest {
                 "应包含 CURRENT_TIMESTAMP: " + pgResult, pgResult.toUpperCase().contains("CURRENT_TIMESTAMP"));
     }
 
-    @Test(expected = com.translator.core.SqlTranslationException.class)
+    @Test(expected = SqlTranslationException.class)
     public void testConformanceMismatchThrows() {
         // 验证：如果 conformance 不匹配语法，会抛出异常
         // 这里用 PostgreSQL 方言解析 MySQL 的 LIMIT start, count，默认 conformance 不支持
@@ -297,9 +277,7 @@ public class SqlTranslatorTest {
         String mysqlSql = "SELECT 1 LIMIT 0, 10";
         SqlTranslator.translate(mysqlSql, DialectType.POSTGRESQL, DialectType.MYSQL);
     }
-
     // ==================== DML 翻译 ====================
-
     @Test
     public void testInsert() {
         String pgSql = "INSERT INTO users (id, name, age) VALUES (1, 'Alice', 30)";
@@ -336,9 +314,7 @@ public class SqlTranslatorTest {
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
         Assert.assertTrue("不应包含 NOW: " + pgResult, pgResult.toUpperCase().contains("CURRENT_TIMESTAMP"));
     }
-
     // ==================== 跨方言函数组合 ====================
-
     @Test
     public void testCombinedFunctions() {
         String mysqlSql = "SELECT IFNULL(a, 0), NOW(), CONCAT(x, y) FROM t";
@@ -366,9 +342,7 @@ public class SqlTranslatorTest {
         Assert.assertTrue("应包含 COALESCE: " + pgResult, upper.contains("COALESCE"));
         Assert.assertTrue("应包含 CURRENT_TIMESTAMP: " + pgResult, upper.contains("CURRENT_TIMESTAMP"));
     }
-
     // ==================== 空/边界输入 ====================
-
     @Test
     public void testNullSql() {
         Assert.assertNull(SqlTranslator.translate((String) null, DialectType.MYSQL, DialectType.POSTGRESQL));
@@ -378,9 +352,7 @@ public class SqlTranslatorTest {
     public void testEmptySql() {
         Assert.assertEquals("", SqlTranslator.translate("", DialectType.MYSQL, DialectType.POSTGRESQL));
     }
-
     // ==================== 非法参数 ====================
-
     @Test(expected = IllegalArgumentException.class)
     public void testInvalidSourceDialect() {
         SqlTranslator.translate("SELECT 1", "invalid", "mysql");
@@ -390,9 +362,7 @@ public class SqlTranslatorTest {
     public void testInvalidTargetDialect() {
         SqlTranslator.translate("SELECT 1", "mysql", "invalid");
     }
-
     // ==================== ORacle ↔ MySQL 互转 ====================
-
     @Test
     public void testOracleFunctionsToMysql() {
         String oracleSql = "SELECT NVL(name, 'N/A'), SYSDATE() FROM dual";
@@ -410,9 +380,7 @@ public class SqlTranslatorTest {
         Assert.assertTrue("应包含 COALESCE: " + oracleResult, upper.contains("COALESCE"));
         Assert.assertTrue("应包含 CURRENT_TIMESTAMP: " + oracleResult, upper.contains("CURRENT_TIMESTAMP"));
     }
-
     // ==================== 独立标识符大小写 + 配置测试 ====================
-
     @Test
     public void testStandaloneColumnLowerCaseDefault() {
         // 默认配置(identifierCase=LOWER)：独立列名应转为小写引用
@@ -428,8 +396,7 @@ public class SqlTranslatorTest {
     @Test
     public void testStandaloneColumnUpperCase() {
         // 配置 identifierCase=UPPER：列名应转为大写引用
-        com.translator.core.config.TranslationConfig config = new com.translator.core.config.TranslationConfig()
-                .withIdentifierCase(com.translator.core.config.TranslationConfig.IdentifierCase.UPPER);
+        TranslationConfig config = new TranslationConfig().withIdentifierCase(TranslationConfig.IdentifierCase.UPPER);
         String mysqlSql = "SELECT category FROM `integrated_data_resource` WHERE category != ''";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL, config);
         Assert.assertTrue("category 应大写引用: " + pgResult, pgResult.contains("\"CATEGORY\""));
@@ -438,8 +405,8 @@ public class SqlTranslatorTest {
     @Test
     public void testStandaloneColumnUnchanged() {
         // 配置 identifierCase=UNCHANGED：列名保持原始大小写（小写 → 小写）
-        com.translator.core.config.TranslationConfig config = new com.translator.core.config.TranslationConfig()
-                .withIdentifierCase(com.translator.core.config.TranslationConfig.IdentifierCase.UNCHANGED);
+        TranslationConfig config =
+                new TranslationConfig().withIdentifierCase(TranslationConfig.IdentifierCase.UNCHANGED);
         String mysqlSql = "SELECT category FROM `integrated_data_resource`";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL, config);
         Assert.assertTrue("category 应保留原始大小写: " + pgResult, pgResult.contains("\"category\""));
@@ -448,8 +415,7 @@ public class SqlTranslatorTest {
     @Test
     public void testKeywordCaseLowerCase() {
         // 配置 keywordCase=LOWER：关键词应小写输出
-        com.translator.core.config.TranslationConfig config = new com.translator.core.config.TranslationConfig()
-                .withKeywordCase(com.translator.core.config.TranslationConfig.KeywordCase.LOWER);
+        TranslationConfig config = new TranslationConfig().withKeywordCase(TranslationConfig.KeywordCase.LOWER);
         String mysqlSql = "SELECT 1";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL, config);
         // 关键词 SELECT 应小写
@@ -459,8 +425,7 @@ public class SqlTranslatorTest {
     @Test
     public void testKeywordCaseUpperCase() {
         // 配置 keywordCase=UPPER：关键词应大写输出（默认行为）
-        com.translator.core.config.TranslationConfig config = new com.translator.core.config.TranslationConfig()
-                .withKeywordCase(com.translator.core.config.TranslationConfig.KeywordCase.UPPER);
+        TranslationConfig config = new TranslationConfig().withKeywordCase(TranslationConfig.KeywordCase.UPPER);
         String mysqlSql = "SELECT 1";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL, config);
         Assert.assertTrue("SELECT 应大写: " + pgResult, pgResult.startsWith("SELECT"));
@@ -469,8 +434,7 @@ public class SqlTranslatorTest {
     @Test
     public void testIdentifierCaseInAliasColumn() {
         // alias.column 模式也应受 identifierCase 影响
-        com.translator.core.config.TranslationConfig config = new com.translator.core.config.TranslationConfig()
-                .withIdentifierCase(com.translator.core.config.TranslationConfig.IdentifierCase.UPPER);
+        TranslationConfig config = new TranslationConfig().withIdentifierCase(TranslationConfig.IdentifierCase.UPPER);
         String mysqlSql = "SELECT a.name FROM `users` a";
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL, config);
         // a.name → "A"."NAME"（大写）
@@ -495,9 +459,7 @@ public class SqlTranslatorTest {
         // alias.column 应被引用且小写
         Assert.assertTrue("a.task_code 应小写引用: " + pgResult, pgResult.contains("\"a\".\"task_code\""));
     }
-
     // ==================== TPC-H Q21 翻译诊断 ====================
-
     @Test
     public void testTpcHQ21Translation() {
         // TPC-H Q21: 未能及时供应的供应商
@@ -526,15 +488,12 @@ public class SqlTranslatorTest {
                 + "GROUP BY s_name\n"
                 + "ORDER BY numwait DESC, s_name\n"
                 + "LIMIT 100";
-
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
-
         System.out.println("===== TPC-H Q21 翻译诊断 =====");
         System.out.println("MySQL原文:\n" + mysqlSql);
         System.out.println();
         System.out.println("PostgreSQL翻译结果:\n" + pgResult);
         System.out.println("===== 诊断结束 =====");
-
         // 基础断言：翻译后仍是有效 SQL 结构
         String upper = pgResult.toUpperCase();
         Assert.assertTrue("应包含 SELECT: " + pgResult, upper.contains("SELECT"));
@@ -544,28 +503,22 @@ public class SqlTranslatorTest {
         Assert.assertTrue(
                 "应包含 FETCH NEXT 或 LIMIT: " + pgResult, upper.contains("LIMIT") || upper.contains("FETCH NEXT"));
         Assert.assertTrue("应包含 EXISTS: " + pgResult, upper.contains("EXISTS"));
-
         // 字符串字面量应正确保留（不被加引号破坏）
         Assert.assertTrue("'F' 应保留: " + pgResult, pgResult.contains("'F'"));
         Assert.assertTrue("SAUDI ARABIA 应保留: " + pgResult, pgResult.contains("SAUDI ARABIA"));
-
         // 关键检查：o_orderkey 应被正确限定
         // 如果 Calcite 正确添加了 orders 前缀，结果中应出现 orders.o_orderkey 或 "orders"."o_orderkey"
         // 如果只出现裸的 o_orderkey / "o_orderkey"，说明缺少表名限定
         boolean hasOrdersPrefix = pgResult.contains("orders.o_orderkey")
                 || pgResult.contains("orders.\"o_orderkey\"")
                 || pgResult.contains("\"orders\".\"o_orderkey\"");
-
         System.out.println("是否有 orders 前缀: " + hasOrdersPrefix);
-
         // 这个断言当前预期失败——我们把它打印出来诊断而不阻塞其他测试
         if (!hasOrdersPrefix) {
             System.err.println("WARNING: o_orderkey 缺少 orders 表名前缀! 这会引发 PostgreSQL 'column does not exist' 错误");
         }
     }
-
     // ==================== SUBSTR/SUBSTRING 第一个参数 → PG CAST AS VARCHAR ====================
-
     @Test
     public void testSubstrNumericLiteralCast() {
         // 核心场景：SUBSTR(数字字面量, 1, 3) → SUBSTR(CAST(数字字面量 AS VARCHAR), 1, 3)
