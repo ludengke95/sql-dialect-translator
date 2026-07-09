@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y git ant wget postgresql-client && rm -r
 WORKDIR /opt
 
 # 克隆并编译 BenchmarkSQL 5.0
-RUN git clone --depth 1 https://github.com/lucas-campbell/BenchmarkSQL.git benchmarksql && \
+RUN git clone --depth 1 https://github.com/petergeoghegan/BenchmarkSQL.git benchmarksql && \
     cd benchmarksql && \
     ant
 
