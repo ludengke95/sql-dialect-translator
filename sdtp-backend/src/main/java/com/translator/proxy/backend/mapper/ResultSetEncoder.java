@@ -120,7 +120,7 @@ public final class ResultSetEncoder {
         ok.writeByte(0x00); // OK header (not 0xFE which is EOF)
         BufferUtils.writeLengthEncodedInt(ok, affectedRows);
         BufferUtils.writeLengthEncodedInt(ok, lastInsertId);
-        ok.writeShortLE(ServerStatus.SERVER_STATUS_AUTOCOMMIT);
+        ok.writeShortLE(getStatusFlags(ctx));
         ok.writeShortLE(0); // warnings
         ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(ok, (byte) 1));
     }
@@ -199,8 +199,25 @@ public final class ResultSetEncoder {
         ByteBuf buf = ctx.alloc().buffer(5);
         buf.writeByte(0xFE); // EOF header
         buf.writeShortLE(0); // warnings
-        buf.writeShortLE(ServerStatus.SERVER_STATUS_AUTOCOMMIT); // status_flags
+        buf.writeShortLE(getStatusFlags(ctx)); // status_flags
         return buf;
+    }
+
+    private static int getStatusFlags(ChannelHandlerContext ctx) {
+        com.translator.proxy.core.session.FrontendSession session = ctx.channel()
+                .attr(com.translator.proxy.core.handler.SessionAttribute.SESSION_KEY)
+                .get();
+        int flags = ServerStatus.SERVER_STATUS_AUTOCOMMIT;
+        if (session != null) {
+            flags = 0;
+            if (session.isAutoCommit()) {
+                flags |= ServerStatus.SERVER_STATUS_AUTOCOMMIT;
+            }
+            if (session.isInTransaction() || !session.isAutoCommit()) {
+                flags |= ServerStatus.SERVER_STATUS_IN_TRANS;
+            }
+        }
+        return flags;
     }
 
     // ==================== Sequence ID Generator ====================

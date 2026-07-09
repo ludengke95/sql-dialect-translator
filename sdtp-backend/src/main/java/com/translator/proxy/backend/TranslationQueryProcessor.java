@@ -199,6 +199,21 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
     }
 
     @Override
+    public void commit(ChannelHandlerContext ctx, FrontendSession session) throws Exception {
+        delegate.commit(ctx, session);
+    }
+
+    @Override
+    public void rollback(ChannelHandlerContext ctx, FrontendSession session) throws Exception {
+        delegate.rollback(ctx, session);
+    }
+
+    @Override
+    public void closeSessionConnection(ChannelHandlerContext ctx, FrontendSession session) {
+        delegate.closeSessionConnection(ctx, session);
+    }
+
+    @Override
     public void close() {
         delegate.close();
     }

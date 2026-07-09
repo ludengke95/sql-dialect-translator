@@ -13,4 +13,7 @@ public final class SessionAttribute {
 
     /** FrontendSession 在 Channel 上的 AttributeKey */
     public static final AttributeKey<FrontendSession> SESSION_KEY = AttributeKey.valueOf("frontendSession");
+
+    /** 绑定在 Channel 上的物理 JDBC 连接对象 */
+    public static final AttributeKey<java.sql.Connection> BACKEND_CONN_KEY = AttributeKey.valueOf("backendConnection");
 }

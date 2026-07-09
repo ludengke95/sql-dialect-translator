@@ -52,6 +52,17 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
     private static final Pattern SHOW_DATABASES = Pattern.compile(
             "^\\s*SHOW\\s+(DATABASES|SCHEMAS)(?:\\s+LIKE\\s+'([^']*)')?\\s*$", Pattern.CASE_INSENSITIVE);
 
+    /** 事务控制语句匹配 */
+    private static final Pattern SET_AUTOCOMMIT_PATTERN = Pattern.compile(
+            "^\\s*SET\\s+(?:@@(?:session\\.)?)?autocommit\\s*=\\s*(\\d)\\s*$", Pattern.CASE_INSENSITIVE);
+
+    private static final Pattern BEGIN_PATTERN =
+            Pattern.compile("^\\s*(?:BEGIN|START\\s+TRANSACTION)\\s*$", Pattern.CASE_INSENSITIVE);
+
+    private static final Pattern COMMIT_PATTERN = Pattern.compile("^\\s*COMMIT\\s*$", Pattern.CASE_INSENSITIVE);
+
+    private static final Pattern ROLLBACK_PATTERN = Pattern.compile("^\\s*ROLLBACK\\s*$", Pattern.CASE_INSENSITIVE);
+
     /** 后端路由器（多后端模式下按数据库名路由） */
     private static volatile BackendRouter backendRouter = null;
 
@@ -143,6 +154,60 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
             return;
         }
 
+        // 1.8 拦截事务控制相关语句
+        String trimmedSql = sql.trim();
+        Matcher autocommitMatcher = SET_AUTOCOMMIT_PATTERN.matcher(trimmedSql);
+        if (autocommitMatcher.matches()) {
+            int val = Integer.parseInt(autocommitMatcher.group(1));
+            boolean targetAutoCommit = (val == 1);
+            try {
+                if (session.isAutoCommit() != targetAutoCommit) {
+                    if (!session.isAutoCommit() && targetAutoCommit) {
+                        QueryProcessor processor = resolveProcessor(session);
+                        processor.commit(ctx, session);
+                    }
+                    session.setAutoCommit(targetAutoCommit);
+                }
+                writeOk(ctx, 0, 0, "");
+            } catch (Exception e) {
+                log.error("Failed to set autocommit", e);
+                writeErr(ctx, 1105, "HY000", "Failed to set autocommit: " + e.getMessage());
+            }
+            return;
+        }
+
+        if (BEGIN_PATTERN.matcher(trimmedSql).matches()) {
+            session.setInTransaction(true);
+            writeOk(ctx, 0, 0, "");
+            return;
+        }
+
+        if (COMMIT_PATTERN.matcher(trimmedSql).matches()) {
+            try {
+                session.setInTransaction(false);
+                QueryProcessor processor = resolveProcessor(session);
+                processor.commit(ctx, session);
+                writeOk(ctx, 0, 0, "");
+            } catch (Exception e) {
+                log.error("Commit failed", e);
+                writeErr(ctx, 1105, "HY000", "Commit failed: " + e.getMessage());
+            }
+            return;
+        }
+
+        if (ROLLBACK_PATTERN.matcher(trimmedSql).matches()) {
+            try {
+                session.setInTransaction(false);
+                QueryProcessor processor = resolveProcessor(session);
+                processor.rollback(ctx, session);
+                writeOk(ctx, 0, 0, "");
+            } catch (Exception e) {
+                log.error("Rollback failed", e);
+                writeErr(ctx, 1105, "HY000", "Rollback failed: " + e.getMessage());
+            }
+            return;
+        }
+
         // 2. 检查是否 SET 语句（Proxy 内部处理）
         if (SystemVariableInterceptor.isSetStatement(sql)) {
             log.debug("Handling SET statement locally: {}", sql);
@@ -223,7 +288,7 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
                 buildColumnDef(ctx.alloc(), "def", "", "Database", "Database", 255, 0xFD, 33), seq++));
 
         // EOF after columns
-        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx.alloc()), seq++));
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx), seq++));
 
         // Rows
         for (String name : sorted) {
@@ -232,7 +297,7 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
         }
 
         // Final EOF
-        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx.alloc()), seq));
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx), seq));
         ctx.flush();
     }
 
@@ -329,7 +394,7 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
         }
 
         // EOF (after columns)
-        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx.alloc()), seq++));
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx), seq++));
 
         // Row (skip if empty)
         if (!isEmpty) {
@@ -343,7 +408,7 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
         }
 
         // Final EOF
-        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx.alloc()), seq));
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx), seq));
 
         ctx.flush();
     }
@@ -373,7 +438,7 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
         }
 
         // EOF (after columns)
-        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx.alloc()), seq++));
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx), seq++));
 
         // 构造一行数据（包含所有列值）
         String[] values = new String[colCount];
@@ -384,7 +449,7 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
         ctx.write(new MySQLPacketEncoder.OutgoingPacket(row, seq++));
 
         // Final EOF
-        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx.alloc()), seq));
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx), seq));
 
         ctx.flush();
     }
@@ -435,17 +500,40 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
         return buf;
     }
 
-    static ByteBuf buildEof(ByteBufAllocator alloc) {
-        ByteBuf buf = alloc.buffer(5);
+    static ByteBuf buildEof(ChannelHandlerContext ctx) {
+        ByteBuf buf = ctx.alloc().buffer(5);
         buf.writeByte(0xFE); // EOF header
         buf.writeShortLE(0); // warnings
-        buf.writeShortLE(ServerStatus.SERVER_STATUS_AUTOCOMMIT); // status_flags
+        FrontendSession session =
+                ctx.channel().attr(SessionAttribute.SESSION_KEY).get();
+        int statusFlags = ServerStatus.SERVER_STATUS_AUTOCOMMIT;
+        if (session != null) {
+            statusFlags = 0;
+            if (session.isAutoCommit()) {
+                statusFlags |= ServerStatus.SERVER_STATUS_AUTOCOMMIT;
+            }
+            if (session.isInTransaction() || !session.isAutoCommit()) {
+                statusFlags |= ServerStatus.SERVER_STATUS_IN_TRANS;
+            }
+        }
+        buf.writeShortLE(statusFlags); // status_flags
         return buf;
     }
 
     void writeOk(ChannelHandlerContext ctx, long affectedRows, long lastInsertId, String info) {
-        ByteBuf ok = AuthHandler.buildOkPacket(
-                ctx.alloc(), affectedRows, lastInsertId, ServerStatus.SERVER_STATUS_AUTOCOMMIT, 0, info);
+        FrontendSession session =
+                ctx.channel().attr(SessionAttribute.SESSION_KEY).get();
+        int statusFlags = ServerStatus.SERVER_STATUS_AUTOCOMMIT;
+        if (session != null) {
+            statusFlags = 0;
+            if (session.isAutoCommit()) {
+                statusFlags |= ServerStatus.SERVER_STATUS_AUTOCOMMIT;
+            }
+            if (session.isInTransaction() || !session.isAutoCommit()) {
+                statusFlags |= ServerStatus.SERVER_STATUS_IN_TRANS;
+            }
+        }
+        ByteBuf ok = AuthHandler.buildOkPacket(ctx.alloc(), affectedRows, lastInsertId, statusFlags, 0, info);
         ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(ok, (byte) 1));
     }
 
@@ -470,6 +558,16 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) {
+        FrontendSession session =
+                ctx.channel().attr(SessionAttribute.SESSION_KEY).get();
+        if (session != null) {
+            try {
+                QueryProcessor processor = resolveProcessor(session);
+                processor.closeSessionConnection(ctx, session);
+            } catch (Exception e) {
+                log.error("Error closing session bound connection in channelInactive", e);
+            }
+        }
         ConnectionMetrics.onDisconnect();
         NettyMetrics.onChannelInactive();
         ctx.fireChannelInactive();
@@ -509,6 +607,21 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
          * @param session 当前会话
          */
         void process(ChannelHandlerContext ctx, String sql, FrontendSession session);
+
+        /**
+         * 提交当前会话绑定的事务。
+         */
+        default void commit(ChannelHandlerContext ctx, FrontendSession session) throws Exception {}
+
+        /**
+         * 回滚当前会话绑定的事务。
+         */
+        default void rollback(ChannelHandlerContext ctx, FrontendSession session) throws Exception {}
+
+        /**
+         * 强制关闭并清理当前绑定的连接（异常断连时调用）。
+         */
+        default void closeSessionConnection(ChannelHandlerContext ctx, FrontendSession session) {}
 
         /**
          * 关闭后端连接池（默认空实现，实现类按需重写）。

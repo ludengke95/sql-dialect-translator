@@ -121,6 +121,30 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
     }
 
     @Override
+    public void commit(ChannelHandlerContext ctx, FrontendSession session) throws Exception {
+        CommandHandler.QueryProcessor d = delegate;
+        if (d != null) {
+            d.commit(ctx, session);
+        }
+    }
+
+    @Override
+    public void rollback(ChannelHandlerContext ctx, FrontendSession session) throws Exception {
+        CommandHandler.QueryProcessor d = delegate;
+        if (d != null) {
+            d.rollback(ctx, session);
+        }
+    }
+
+    @Override
+    public void closeSessionConnection(ChannelHandlerContext ctx, FrontendSession session) {
+        CommandHandler.QueryProcessor d = delegate;
+        if (d != null) {
+            d.closeSessionConnection(ctx, session);
+        }
+    }
+
+    @Override
     public void close() {
         CommandHandler.QueryProcessor d = delegate;
         if (d != null) {

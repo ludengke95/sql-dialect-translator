@@ -61,8 +61,8 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
         hikariConfig.setIdleTimeout(600000); // 10min
         hikariConfig.setMaxLifetime(1800000); // 30min
 
-        // 关键：设置事务为只读 + 自动提交（配合流式读取）
-        hikariConfig.setReadOnly(true);
+        // 关键：为了支持事务写操作，默认为非只读
+        hikariConfig.setReadOnly(false);
         hikariConfig.setAutoCommit(true);
 
         // 设置连接池名称（用于 HikariMetricsTracker 的 pool_name label）
@@ -90,24 +90,55 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
 
         long startNanos = System.nanoTime();
 
-        // JDBC 操作在 CommandHandler 所在的业务线程执行
-        // （CommandHandler 已通过 DefaultEventExecutorGroup 与 IO 线程解耦）
-        try (Connection conn = dataSource.getConnection();
-                Statement stmt = createStatement(conn)) {
+        // 1. 判断是否处于事务上下文中
+        boolean isTx = !session.isAutoCommit() || session.isInTransaction();
+        Connection conn = null;
+        boolean isNewConnection = false;
 
-            log.debug("Executing SQL: {}", sql);
+        try {
+            if (isTx) {
+                // 事务检查：防止跨物理库或跨连接池事务操作
+                String activeBackend = session.getActiveTxBackend();
+                if (activeBackend != null && !activeBackend.equals(backendName)) {
+                    throw new SQLException(
+                            "Cross-database/pool transaction is not allowed. Current active transaction backend: "
+                                    + activeBackend,
+                            "25000",
+                            1290);
+                }
 
-            boolean isResultSet = stmt.execute(sql);
-
-            if (isResultSet) {
-                try (ResultSet rs = stmt.getResultSet()) {
-                    ResultSetEncoder.encodeAndWrite(ctx, rs, new ResultSetEncoder.SeqGenerator(), backendName);
+                conn = ctx.channel()
+                        .attr(com.translator.proxy.core.handler.SessionAttribute.BACKEND_CONN_KEY)
+                        .get();
+                if (conn == null) {
+                    conn = dataSource.getConnection();
+                    conn.setAutoCommit(false);
+                    ctx.channel()
+                            .attr(com.translator.proxy.core.handler.SessionAttribute.BACKEND_CONN_KEY)
+                            .set(conn);
+                    session.setActiveTxBackend(backendName); // 锁定当前活跃后端
+                    isNewConnection = true;
                 }
             } else {
-                // UPDATE/INSERT/DELETE 等
-                int updateCount = stmt.getUpdateCount();
-                ResultSetEncoder.encodeEmpty(ctx, Math.max(updateCount, 0), 0);
-                BackendMetrics.observeAffectedRows(backendName, Math.max(updateCount, 0));
+                conn = dataSource.getConnection();
+                isNewConnection = true;
+            }
+
+            log.debug("Executing SQL [isTx={}, isNew={}]: {}", isTx, isNewConnection, sql);
+
+            try (Statement stmt = createStatement(conn)) {
+                boolean isResultSet = stmt.execute(sql);
+
+                if (isResultSet) {
+                    try (ResultSet rs = stmt.getResultSet()) {
+                        ResultSetEncoder.encodeAndWrite(ctx, rs, new ResultSetEncoder.SeqGenerator(), backendName);
+                    }
+                } else {
+                    // UPDATE/INSERT/DELETE 等
+                    int updateCount = stmt.getUpdateCount();
+                    ResultSetEncoder.encodeEmpty(ctx, Math.max(updateCount, 0), 0);
+                    BackendMetrics.observeAffectedRows(backendName, Math.max(updateCount, 0));
+                }
             }
 
             double elapsed = (System.nanoTime() - startNanos) / 1_000_000_000.0;
@@ -126,6 +157,15 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
             double elapsed = (System.nanoTime() - startNanos) / 1_000_000_000.0;
             BackendMetrics.recordQueryDuration(backendName, elapsed);
             writeError(ctx, 1105, "HY000", e.getMessage());
+        } finally {
+            // 2. 关键：非事务连接即用即走，执行完必须立刻关闭释放；事务连接不在此处关闭，保留在 Channel 属性中
+            if (!isTx && conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException e) {
+                    log.error("Failed to close non-tx connection", e);
+                }
+            }
         }
     }
 
@@ -164,6 +204,74 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
     private void writeError(ChannelHandlerContext ctx, int errorCode, String sqlState, String message) {
         ByteBuf err = AuthHandler.buildErrPacket(ctx.alloc(), errorCode, sqlState, message);
         ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(err, (byte) 1));
+    }
+
+    @Override
+    public void commit(ChannelHandlerContext ctx, FrontendSession session) throws SQLException {
+        Connection conn = ctx.channel()
+                .attr(com.translator.proxy.core.handler.SessionAttribute.BACKEND_CONN_KEY)
+                .get();
+        if (conn != null) {
+            try {
+                log.debug("Committing physical connection: {}", conn);
+                conn.commit();
+            } finally {
+                cleanupConnection(ctx, conn);
+            }
+        }
+    }
+
+    @Override
+    public void rollback(ChannelHandlerContext ctx, FrontendSession session) throws SQLException {
+        Connection conn = ctx.channel()
+                .attr(com.translator.proxy.core.handler.SessionAttribute.BACKEND_CONN_KEY)
+                .get();
+        if (conn != null) {
+            try {
+                log.debug("Rolling back physical connection: {}", conn);
+                conn.rollback();
+            } finally {
+                cleanupConnection(ctx, conn);
+            }
+        }
+    }
+
+    @Override
+    public void closeSessionConnection(ChannelHandlerContext ctx, FrontendSession session) {
+        Connection conn = ctx.channel()
+                .attr(com.translator.proxy.core.handler.SessionAttribute.BACKEND_CONN_KEY)
+                .get();
+        if (conn != null) {
+            try {
+                log.warn("Force closing session bound connection due to inactive/exception");
+                conn.rollback();
+            } catch (SQLException e) {
+                log.error("Failed to rollback during force close", e);
+            } finally {
+                cleanupConnection(ctx, conn);
+            }
+        }
+    }
+
+    private void cleanupConnection(ChannelHandlerContext ctx, Connection conn) {
+        try {
+            if (!conn.isClosed()) {
+                conn.setAutoCommit(true); // 还原为自动提交，以归还连接池
+                conn.close(); // 归还连接池
+            }
+        } catch (SQLException e) {
+            log.error("Error cleaning up session connection", e);
+        } finally {
+            ctx.channel()
+                    .attr(com.translator.proxy.core.handler.SessionAttribute.BACKEND_CONN_KEY)
+                    .set(null);
+            FrontendSession session = ctx.channel()
+                    .attr(com.translator.proxy.core.handler.SessionAttribute.SESSION_KEY)
+                    .get();
+            if (session != null) {
+                session.setActiveTxBackend(null);
+            }
+        }
     }
 
     /**
