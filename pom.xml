@@ -18,6 +18,7 @@
         <module>sdtp-metrics</module>
         <module>demo/sdt-spring-boot-jdbc-demo</module>
         <module>demo/sdtp-spring-boot-demo</module>
+        <module>demo/sdtp-business-simulator</module>
     </modules>
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>

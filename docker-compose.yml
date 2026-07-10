@@ -38,7 +38,7 @@ services:
 
   # ==================== Prometheus 指标抓取 ====================
   prometheus:
-    image: prom/prometheus:v2.45.0
+    image: prom/prometheus:v2.45.6
     container_name: proxy-monitor-prometheus
     ports:
       - "9090:9090"

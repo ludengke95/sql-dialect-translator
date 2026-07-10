@@ -14,6 +14,7 @@
     <modules>
         <module>sdt-spring-boot-jdbc-demo</module>
         <module>sdtp-spring-boot-demo</module>
+        <module>sdtp-business-simulator</module>
     </modules>
 
 </project>
