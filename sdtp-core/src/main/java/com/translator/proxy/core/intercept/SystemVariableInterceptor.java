@@ -80,6 +80,8 @@ public final class SystemVariableInterceptor {
         SYSTEM_VARIABLES.put("system_time_zone", "UTC");
         SYSTEM_VARIABLES.put("time_zone", "SYSTEM");
         SYSTEM_VARIABLES.put("init_connect", "");
+        SYSTEM_VARIABLES.put("transaction_read_only", "0");
+        SYSTEM_VARIABLES.put("tx_read_only", "0");
     }
 
     /**

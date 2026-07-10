@@ -171,6 +171,26 @@ public class CommandHandlerTest {
         assertEquals("@@autocommit", ir.colName1);
         assertEquals("1", ir.value1);
     }
+
+    @Test
+    public void testSelectSessionTransactionReadOnly() {
+        SystemVariableInterceptor.InterceptResult ir =
+                SystemVariableInterceptor.intercept("SELECT @@session.transaction_read_only", null);
+        assertNotNull("应拦截 @@session.transaction_read_only", ir);
+        assertFalse("应为单列结果", ir.isMultiColumn());
+        assertEquals("@@transaction_read_only", ir.colName1);
+        assertEquals("0", ir.value1);
+    }
+
+    @Test
+    public void testSelectSessionTxReadOnly() {
+        SystemVariableInterceptor.InterceptResult ir =
+                SystemVariableInterceptor.intercept("SELECT @@session.tx_read_only", null);
+        assertNotNull("应拦截 @@session.tx_read_only", ir);
+        assertFalse("应为单列结果", ir.isMultiColumn());
+        assertEquals("@@tx_read_only", ir.colName1);
+        assertEquals("0", ir.value1);
+    }
     /**
      * 测试单变量带 @@session. 前缀但未知变量 —— 应不拦截。
      */

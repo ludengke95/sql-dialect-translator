@@ -4,11 +4,13 @@ import java.sql.*;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 /**
  *
  */
+@Ignore("Requires local MySQL instance running on port 3306")
 public class JavaJdbcTest {
 
     private Connection connection;

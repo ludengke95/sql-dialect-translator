@@ -369,4 +369,12 @@ public class TranslatorConnection implements Connection, AutoCloseable {
     public boolean isWrapperFor(Class<?> iface) throws SQLException {
         return iface.isAssignableFrom(getClass()) || realConnection.isWrapperFor(iface);
     }
+
+    public DialectType getSourceDialect() {
+        return sourceDialect;
+    }
+
+    public DialectType getTargetDialect() {
+        return targetDialect;
+    }
 }

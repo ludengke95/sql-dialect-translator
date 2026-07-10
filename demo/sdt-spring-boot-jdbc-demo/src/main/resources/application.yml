@@ -1,0 +1,14 @@
+server:
+  port: 8081
+
+spring:
+  datasource:
+    driver-class-name: com.translator.jdbc.TranslatorDriver
+    url: jdbc:translator:mysql:postgresql://localhost:5432/mydb
+    username: sdtpu
+    password: pg_password
+    type: com.zaxxer.hikari.HikariDataSource
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000

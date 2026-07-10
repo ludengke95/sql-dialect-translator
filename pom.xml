@@ -11,12 +11,13 @@
         <module>sdt-metrics</module>
         <module>sdt-core</module>
         <module>sdt-jdbc</module>
-        <module>sdt-test</module>
         <module>sdtp-protocol</module>
         <module>sdtp-core</module>
         <module>sdtp-backend</module>
         <module>sdtp-server</module>
         <module>sdtp-metrics</module>
+        <module>demo/sdt-spring-boot-jdbc-demo</module>
+        <module>demo/sdtp-spring-boot-demo</module>
     </modules>
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
@@ -84,13 +85,11 @@
                 <groupId>mysql</groupId>
                 <artifactId>mysql-connector-java</artifactId>
                 <version>${mysql.driver.version}</version>
-                <scope>test</scope>
             </dependency>
             <dependency>
                 <groupId>org.postgresql</groupId>
                 <artifactId>postgresql</artifactId>
                 <version>${postgresql.driver.version}</version>
-                <scope>test</scope>
             </dependency>
             <!-- Netty -->
             <dependency>
