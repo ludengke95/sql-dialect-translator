@@ -10,6 +10,7 @@ import com.translator.proxy.backend.mapper.ResultSetEncoder;
 import com.translator.proxy.core.handler.AuthHandler;
 import com.translator.proxy.core.handler.CommandHandler;
 import com.translator.proxy.core.handler.SessionAttribute;
+import com.translator.proxy.core.handler.SqlTranslationContext;
 import com.translator.proxy.core.session.FrontendSession;
 import com.translator.proxy.metrics.HikariMetricsTrackerFactory;
 import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
@@ -84,6 +85,10 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
         boolean isTx = !session.isAutoCommit() || session.isInTransaction();
         Connection conn = null;
         boolean isNewConnection = false;
+
+        // 获取并清除 SQL 翻译审计上下文
+        SqlTranslationContext transCtx = ctx.channel().attr(SessionAttribute.SQL_CONTEXT_KEY).getAndSet(null);
+
         try {
             if (isTx) {
                 conn = ctx.channel().attr(SessionAttribute.BACKEND_CONN_KEY).get();
@@ -97,7 +102,7 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
                 conn = dataSource.getConnection();
                 isNewConnection = true;
             }
-            log.debug("Executing SQL [isTx={}, isNew={}]: {}", isTx, isNewConnection, sql);
+            log.debug("Executing SQL [isTx={}, isNew={}]: {}", isTx, isNewConnection, formatSqlForLog(sql));
             try (Statement stmt = createStatement(conn)) {
                 boolean isResultSet = stmt.execute(sql);
                 if (isResultSet) {
@@ -113,19 +118,28 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
             }
             double elapsed = (System.nanoTime() - startNanos) / 1_000_000_000.0;
             BackendMetrics.recordQueryDuration(backendName, elapsed);
+
+            // 记录成功执行审计日志
+            logSqlTranslationRecord(ctx, transCtx, true, null);
         } catch (SQLException e) {
-            log.error("SQL execution failed: {}", sql, e);
+            log.error("SQL execution failed: {}", formatSqlForLog(sql), e);
             String sqlState = e.getSQLState() != null ? e.getSQLState() : "HY000";
             BackendMetrics.recordError(backendName, sqlState);
             double elapsed = (System.nanoTime() - startNanos) / 1_000_000_000.0;
             BackendMetrics.recordQueryDuration(backendName, elapsed);
             writeError(ctx, e);
+
+            // 记录执行错误审计日志
+            logSqlTranslationRecord(ctx, transCtx, false, e.getMessage());
         } catch (Exception e) {
-            log.error("Unexpected error executing SQL: {}", sql, e);
+            log.error("Unexpected error executing SQL: {}", formatSqlForLog(sql), e);
             BackendMetrics.recordError(backendName, "HY000");
             double elapsed = (System.nanoTime() - startNanos) / 1_000_000_000.0;
             BackendMetrics.recordQueryDuration(backendName, elapsed);
             writeError(ctx, 1105, "HY000", e.getMessage());
+
+            // 记录其它异常审计日志
+            logSqlTranslationRecord(ctx, transCtx, false, e.getMessage());
         } finally {
             // 2. 关键：非事务连接即用即走，执行完必须立刻关闭释放；事务连接不在此处关闭，保留在 Channel 属性中
             if (!isTx && conn != null) {
@@ -233,5 +247,42 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
             dataSource.close();
             log.info("HikariCP pool closed.");
         }
+    }
+
+    private void logSqlTranslationRecord(
+            ChannelHandlerContext ctx, SqlTranslationContext transCtx, boolean success, String errorMsg) {
+        if (transCtx == null) {
+            return;
+        }
+
+        String ip = getClientIp(ctx);
+        String db = this.backendName;
+        String successStr = String.valueOf(success);
+
+        // 格式化 SQL：去除换行符与连续空白，以便单行日志正则解析
+        String srcSql = formatSqlForLog(transCtx.getOriginalSql());
+        String destSql = formatSqlForLog(transCtx.getTranslatedSql());
+        String err = errorMsg != null ? formatSqlForLog(errorMsg) : "none";
+
+        log.info("[SQL_TRANS_RECORD] ip={} | db={} | success={} | src_sql={} | dest_sql={} | error={}",
+                ip, db, successStr, srcSql, destSql, err);
+    }
+
+    private String formatSqlForLog(String sql) {
+        if (sql == null) {
+            return "";
+        }
+        return sql.replaceAll("[\\r\\n\\s]+", " ").trim();
+    }
+
+    private String getClientIp(ChannelHandlerContext ctx) {
+        if (ctx != null && ctx.channel() != null && ctx.channel().remoteAddress() != null) {
+            java.net.SocketAddress addr = ctx.channel().remoteAddress();
+            if (addr instanceof java.net.InetSocketAddress) {
+                return ((java.net.InetSocketAddress) addr).getAddress().getHostAddress();
+            }
+            return addr.toString();
+        }
+        return "unknown";
     }
 }

@@ -12,6 +12,8 @@ import com.translator.core.SqlTranslator;
 import com.translator.core.config.TranslationConfig;
 import com.translator.metrics.TranslationMetrics;
 import com.translator.proxy.core.handler.CommandHandler;
+import com.translator.proxy.core.handler.SessionAttribute;
+import com.translator.proxy.core.handler.SqlTranslationContext;
 import com.translator.proxy.core.session.FrontendSession;
 
 import io.netty.channel.ChannelHandlerContext;
@@ -124,10 +126,12 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
 
     @Override
     public void process(ChannelHandlerContext ctx, String sql, FrontendSession session) {
-        log.info("SQL: {}", sql);
+        log.info("SQL: {}", formatSqlForLog(sql));
 
         if (!enabled) {
             TranslationMetrics.recordDisabled();
+            SqlTranslationContext sqlCtx = new SqlTranslationContext(sql, sql);
+            ctx.channel().attr(SessionAttribute.SQL_CONTEXT_KEY).set(sqlCtx);
             delegate.process(ctx, sql, session);
             return;
         }
@@ -138,8 +142,10 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
         String stripped = stripDirectHint(sql);
         if (stripped != null) {
             // 去掉标记注释后的 SQL 直通执行（不翻译）
-            log.debug("Direct pass-through: {}", stripped);
+            log.debug("Direct pass-through: {}", formatSqlForLog(stripped));
             TranslationMetrics.recordDirect();
+            SqlTranslationContext sqlCtx = new SqlTranslationContext(sql, stripped);
+            ctx.channel().attr(SessionAttribute.SQL_CONTEXT_KEY).set(sqlCtx);
             delegate.process(ctx, stripped, session);
             return;
         }
@@ -151,13 +157,15 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
             double seconds = (System.nanoTime() - startNanos) / 1_000_000_000.0;
             TranslationMetrics.recordSuccess();
             TranslationMetrics.recordDuration(targetDialect.getIdentifier(), backendName, seconds);
-            log.info("Translated: {} → {}", sql, translatedSql);
+            log.info("Translated: {} → {}", formatSqlForLog(sql), formatSqlForLog(translatedSql));
         } catch (Exception e) {
-            log.warn("Translation failed for SQL: {}. Falling back to original. Error: {}", sql, e.getMessage());
+            log.warn("Translation failed for SQL: {}. Falling back to original. Error: {}", formatSqlForLog(sql), e.getMessage());
             TranslationMetrics.recordFallback();
             translatedSql = sql;
         }
 
+        SqlTranslationContext sqlCtx = new SqlTranslationContext(sql, translatedSql);
+        ctx.channel().attr(SessionAttribute.SQL_CONTEXT_KEY).set(sqlCtx);
         delegate.process(ctx, translatedSql, session);
     }
 
@@ -234,5 +242,12 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
             // 翻译失败，记录日志并降级
             throw e;
         }
+    }
+
+    private String formatSqlForLog(String sql) {
+        if (sql == null) {
+            return "";
+        }
+        return sql.replaceAll("[\\r\\n\\s]+", " ").trim();
     }
 }
