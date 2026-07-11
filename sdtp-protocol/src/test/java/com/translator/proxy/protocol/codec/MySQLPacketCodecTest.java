@@ -202,7 +202,6 @@ public class MySQLPacketCodecTest {
         assertEquals(0, encoded.readByte()); // seq = 0
         assertEquals(0, encoded.readableBytes()); // 没有多余数据
 
-        empty.release();
         encoded.release();
         channel.finish();
     }

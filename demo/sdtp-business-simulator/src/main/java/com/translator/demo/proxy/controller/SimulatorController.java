@@ -8,7 +8,6 @@ import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -45,7 +44,7 @@ public class SimulatorController {
 
     // 内存中的审计队列
     private static final Queue<SqlAudit> auditQueue = new ConcurrentLinkedQueue<>();
-    
+
     // 简单的全局统计变量，用原子锁
     private static final AtomicLong totalOrders = new AtomicLong(0);
     private static final AtomicLong totalRevenueCent = new AtomicLong(0); // 存分，避免浮点数精度
@@ -62,7 +61,14 @@ public class SimulatorController {
         private String errorMessage;
         private int rowsAffected;
 
-        public SqlAudit(String timestamp, String originalSql, String translatedSql, long durationMs, boolean success, String errorMessage, int rowsAffected) {
+        public SqlAudit(
+                String timestamp,
+                String originalSql,
+                String translatedSql,
+                long durationMs,
+                boolean success,
+                String errorMessage,
+                int rowsAffected) {
             this.timestamp = timestamp;
             this.originalSql = originalSql;
             this.translatedSql = translatedSql;
@@ -72,13 +78,33 @@ public class SimulatorController {
             this.rowsAffected = rowsAffected;
         }
 
-        public String getTimestamp() { return timestamp; }
-        public String getOriginalSql() { return originalSql; }
-        public String getTranslatedSql() { return translatedSql; }
-        public long getDurationMs() { return durationMs; }
-        public boolean isSuccess() { return success; }
-        public String getErrorMessage() { return errorMessage; }
-        public int getRowsAffected() { return rowsAffected; }
+        public String getTimestamp() {
+            return timestamp;
+        }
+
+        public String getOriginalSql() {
+            return originalSql;
+        }
+
+        public String getTranslatedSql() {
+            return translatedSql;
+        }
+
+        public long getDurationMs() {
+            return durationMs;
+        }
+
+        public boolean isSuccess() {
+            return success;
+        }
+
+        public String getErrorMessage() {
+            return errorMessage;
+        }
+
+        public int getRowsAffected() {
+            return rowsAffected;
+        }
     }
 
     // 辅助方法：将参数填充进 SQL 中，以便展示完整的 MySQL SQL
@@ -103,8 +129,14 @@ public class SimulatorController {
     private void recordAudit(String mysqlSql, long durationMs, boolean success, String errorMsg, int rowsAffected) {
         String pgSql;
         String trimmed = mysqlSql.trim();
-        if (trimmed.startsWith("/* sdtp:direct */") || trimmed.startsWith("-- direct") || trimmed.startsWith("/* sdt:direct */")) {
-            pgSql = mysqlSql.replace("/* sdtp:direct */", "").replace("-- direct", "").replace("/* sdt:direct */", "").trim() + " (SQL Bypass直通模式)";
+        if (trimmed.startsWith("/* sdtp:direct */")
+                || trimmed.startsWith("-- direct")
+                || trimmed.startsWith("/* sdt:direct */")) {
+            pgSql = mysqlSql.replace("/* sdtp:direct */", "")
+                            .replace("-- direct", "")
+                            .replace("/* sdt:direct */", "")
+                            .trim()
+                    + " (SQL Bypass直通模式)";
         } else {
             try {
                 pgSql = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
@@ -114,14 +146,13 @@ public class SimulatorController {
         }
 
         SqlAudit audit = new SqlAudit(
-            LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss.SSS")),
-            mysqlSql,
-            pgSql,
-            durationMs,
-            success,
-            errorMsg,
-            rowsAffected
-        );
+                LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss.SSS")),
+                mysqlSql,
+                pgSql,
+                durationMs,
+                success,
+                errorMsg,
+                rowsAffected);
         auditQueue.offer(audit);
         while (auditQueue.size() > 100) {
             auditQueue.poll();
@@ -132,10 +163,10 @@ public class SimulatorController {
     public ResponseEntity<?> initDatabase() {
         log.info("Starting database initialization...");
         long totalStart = System.currentTimeMillis();
-        
+
         try (Connection conn = dataSource.getConnection();
-             Statement stmt = conn.createStatement()) {
-            
+                Statement stmt = conn.createStatement()) {
+
             // 1. DROP 表 (Postgres DDL 加上直通前缀)
             String dropOrders = "/* sdtp:direct */ DROP TABLE IF EXISTS orders";
             long start = System.currentTimeMillis();
@@ -148,37 +179,36 @@ public class SimulatorController {
             recordAudit(dropProducts, System.currentTimeMillis() - start, true, null, 0);
 
             // 2. CREATE TABLE products (Postgres DDL SERIAL 自增, 加上直通前缀)
-            String createProducts = "/* sdtp:direct */ CREATE TABLE products (\n" +
-                    "  id SERIAL PRIMARY KEY,\n" +
-                    "  name VARCHAR(100) NOT NULL,\n" +
-                    "  price DECIMAL(10,2) NOT NULL,\n" +
-                    "  stock INT NOT NULL,\n" +
-                    "  version INT DEFAULT 0,\n" +
-                    "  description TEXT,\n" +
-                    "  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n" +
-                    ")";
+            String createProducts = "/* sdtp:direct */ CREATE TABLE products (\n" + "  id SERIAL PRIMARY KEY,\n"
+                    + "  name VARCHAR(100) NOT NULL,\n"
+                    + "  price DECIMAL(10,2) NOT NULL,\n"
+                    + "  stock INT NOT NULL,\n"
+                    + "  version INT DEFAULT 0,\n"
+                    + "  description TEXT,\n"
+                    + "  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n"
+                    + ")";
             start = System.currentTimeMillis();
             stmt.executeUpdate(createProducts);
             recordAudit(createProducts, System.currentTimeMillis() - start, true, null, 0);
 
             // 3. CREATE TABLE orders (Postgres DDL, 加上直通前缀)
-            String createOrders = "/* sdtp:direct */ CREATE TABLE orders (\n" +
-                    "  order_id VARCHAR(50) PRIMARY KEY,\n" +
-                    "  product_id INT NOT NULL,\n" +
-                    "  quantity INT NOT NULL,\n" +
-                    "  total_amount DECIMAL(10,2) NOT NULL,\n" +
-                    "  buyer_name VARCHAR(100) NOT NULL,\n" +
-                    "  status VARCHAR(20) DEFAULT 'PENDING',\n" +
-                    "  pay_time TIMESTAMP NULL DEFAULT NULL,\n" +
-                    "  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n" +
-                    ")";
+            String createOrders = "/* sdtp:direct */ CREATE TABLE orders (\n" + "  order_id VARCHAR(50) PRIMARY KEY,\n"
+                    + "  product_id INT NOT NULL,\n"
+                    + "  quantity INT NOT NULL,\n"
+                    + "  total_amount DECIMAL(10,2) NOT NULL,\n"
+                    + "  buyer_name VARCHAR(100) NOT NULL,\n"
+                    + "  status VARCHAR(20) DEFAULT 'PENDING',\n"
+                    + "  pay_time TIMESTAMP NULL DEFAULT NULL,\n"
+                    + "  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n"
+                    + ")";
             start = System.currentTimeMillis();
             stmt.executeUpdate(createOrders);
             recordAudit(createOrders, System.currentTimeMillis() - start, true, null, 0);
 
             // 4. INSERT 初始商品数据 (MySQL 语法)
-            String insertTpl = "INSERT INTO `products` (`id`, `name`, `price`, `stock`, `version`, `description`) VALUES (?, ?, ?, ?, 0, ?)";
-            
+            String insertTpl =
+                    "INSERT INTO `products` (`id`, `name`, `price`, `stock`, `version`, `description`) VALUES (?, ?, ?, ?, 0, ?)";
+
             Object[][] products = {
                 {1, "iPhone 15 Pro", 7999.00, 100, "钛金属设计，A17 Pro 芯片"},
                 {2, "MacBook Air M3", 8999.00, 50, "超轻薄设计，强劲 M3 芯片"},
@@ -225,7 +255,7 @@ public class SimulatorController {
     @PostMapping("/order")
     public ResponseEntity<?> placeOrder(@RequestParam(defaultValue = "pessimistic") String lockMode) {
         long totalStart = System.currentTimeMillis();
-        
+
         // 随机选择商品(1~4)，买家，购买数量(1~3)
         int productId = (int) (Math.random() * 4) + 1;
         String buyer = BUYERS[(int) (Math.random() * BUYERS.length)];
@@ -245,7 +275,7 @@ public class SimulatorController {
                     int stock = 0;
                     int version = 0;
                     String selectSql;
-                    
+
                     if ("pessimistic".equalsIgnoreCase(lockMode)) {
                         // 悲观行锁 (MySQL FOR UPDATE 语法)
                         selectSql = "SELECT id, name, price, stock, version FROM products WHERE id = ? FOR UPDATE";
@@ -253,7 +283,7 @@ public class SimulatorController {
                         // 乐观锁，先查询不加锁
                         selectSql = "SELECT id, name, price, stock, version FROM products WHERE id = ?";
                     }
-                    
+
                     String selectFilled = fillParams(selectSql, productId);
                     long start = System.currentTimeMillis();
                     try (PreparedStatement pstmt = conn.prepareStatement(selectSql)) {
@@ -275,14 +305,15 @@ public class SimulatorController {
 
                     // 2. 校验库存
                     if (stock < quantity) {
-                        throw new RuntimeException("库存不足 (Stock Out)! 商品ID: " + productId + ", 剩余库存: " + stock + ", 订购数量: " + quantity);
+                        throw new RuntimeException(
+                                "库存不足 (Stock Out)! 商品ID: " + productId + ", 剩余库存: " + stock + ", 订购数量: " + quantity);
                     }
 
                     // 3. 扣减库存
                     String updateSql;
                     String updateFilled;
                     int rowsUpdated = 0;
-                    
+
                     if ("pessimistic".equalsIgnoreCase(lockMode)) {
                         updateSql = "UPDATE products SET stock = stock - ? WHERE id = ?";
                         updateFilled = fillParams(updateSql, quantity, productId);
@@ -298,7 +329,8 @@ public class SimulatorController {
                         }
                     } else {
                         // 乐观锁带版本号更新 (MySQL version 校验)
-                        updateSql = "UPDATE products SET stock = stock - ?, version = version + 1 WHERE id = ? AND version = ? AND stock >= ?";
+                        updateSql =
+                                "UPDATE products SET stock = stock - ?, version = version + 1 WHERE id = ? AND version = ? AND stock >= ?";
                         updateFilled = fillParams(updateSql, quantity, productId, version, quantity);
                         start = System.currentTimeMillis();
                         try (PreparedStatement pstmt = conn.prepareStatement(updateSql)) {
@@ -321,8 +353,9 @@ public class SimulatorController {
 
                     // 4. 创建订单 (MySQL NOW() 函数，反引号已剥离)
                     double totalAmount = price * quantity;
-                    String insertSql = "INSERT INTO orders (order_id, product_id, quantity, total_amount, buyer_name, status, pay_time, created_at)\n" +
-                            "VALUES (?, ?, ?, ?, ?, 'PAID', NOW(), NOW())";
+                    String insertSql =
+                            "INSERT INTO orders (order_id, product_id, quantity, total_amount, buyer_name, status, pay_time, created_at)\n"
+                                    + "VALUES (?, ?, ?, ?, ?, 'PAID', NOW(), NOW())";
                     String insertFilled = fillParams(insertSql, orderId, productId, quantity, totalAmount, buyer);
                     start = System.currentTimeMillis();
                     try (PreparedStatement pstmt = conn.prepareStatement(insertSql)) {
@@ -386,19 +419,19 @@ public class SimulatorController {
     public ResponseEntity<?> getDashboardData() {
         try {
             Map<String, Object> result = new LinkedHashMap<>();
-            
+
             // 查出商品的销量、库存等
             List<Map<String, Object>> productsList = new ArrayList<>();
             // 使用 MySQL 方言中的 IFNULL, LEFT JOIN 和 GROUP BY / Subquery
-            String queryProducts = "SELECT p.`id`, p.`name`, p.`price`, p.`stock`, p.`version`, p.`description`,\n" +
-                    "       (SELECT IFNULL(SUM(o.`quantity`), 0) FROM `orders` o WHERE o.`product_id` = p.`id`) as `sold_count`\n" +
-                    "FROM `products` p ORDER BY p.`id` ASC";
-            
+            String queryProducts = "SELECT p.`id`, p.`name`, p.`price`, p.`stock`, p.`version`, p.`description`,\n"
+                    + "       (SELECT IFNULL(SUM(o.`quantity`), 0) FROM `orders` o WHERE o.`product_id` = p.`id`) as `sold_count`\n"
+                    + "FROM `products` p ORDER BY p.`id` ASC";
+
             long start = System.currentTimeMillis();
             try (Connection conn = dataSource.getConnection();
-                 PreparedStatement pstmt = conn.prepareStatement(queryProducts);
-                 ResultSet rs = pstmt.executeQuery()) {
-                
+                    PreparedStatement pstmt = conn.prepareStatement(queryProducts);
+                    ResultSet rs = pstmt.executeQuery()) {
+
                 while (rs.next()) {
                     Map<String, Object> row = new LinkedHashMap<>();
                     row.put("id", rs.getInt("id"));
@@ -418,16 +451,16 @@ public class SimulatorController {
 
             // 查出最近 10 条订单流水 (MySQL 方言，包含 IFNULL, JOIN, ORDER BY 和 LIMIT)
             List<Map<String, Object>> ordersList = new ArrayList<>();
-            String queryOrders = "SELECT o.`order_id`, o.`product_id`, p.`name` as `product_name`, o.`quantity`,\n" +
-                    "       o.`total_amount`, o.`buyer_name`, o.`status`, IFNULL(o.`pay_time`, '1970-01-01 00:00:00') as `pay_time`, o.`created_at`\n" +
-                    "FROM `orders` o JOIN `products` p ON o.`product_id` = p.`id` \n" +
-                    "ORDER BY o.`created_at` DESC LIMIT 10";
-            
+            String queryOrders = "SELECT o.`order_id`, o.`product_id`, p.`name` as `product_name`, o.`quantity`,\n"
+                    + "       o.`total_amount`, o.`buyer_name`, o.`status`, IFNULL(o.`pay_time`, '1970-01-01 00:00:00') as `pay_time`, o.`created_at`\n"
+                    + "FROM `orders` o JOIN `products` p ON o.`product_id` = p.`id` \n"
+                    + "ORDER BY o.`created_at` DESC LIMIT 10";
+
             start = System.currentTimeMillis();
             try (Connection conn = dataSource.getConnection();
-                 PreparedStatement pstmt = conn.prepareStatement(queryOrders);
-                 ResultSet rs = pstmt.executeQuery()) {
-                
+                    PreparedStatement pstmt = conn.prepareStatement(queryOrders);
+                    ResultSet rs = pstmt.executeQuery()) {
+
                 while (rs.next()) {
                     Map<String, Object> row = new LinkedHashMap<>();
                     row.put("order_id", rs.getString("order_id"));
@@ -458,7 +491,7 @@ public class SimulatorController {
             result.put("totalStock", totalStock);
             result.put("totalOrders", totalOrders.get());
             result.put("totalRevenue", totalRevenueCent.get() / 100.0);
-            
+
             // 计算平均 SQL 翻译耗时 (从 auditQueue 里获取)
             double avgDuration = 0;
             int count = 0;
@@ -492,8 +525,8 @@ public class SimulatorController {
 
         long start = System.currentTimeMillis();
         try (Connection conn = dataSource.getConnection();
-             Statement stmt = conn.createStatement()) {
-            
+                Statement stmt = conn.createStatement()) {
+
             boolean hasResultSet = stmt.execute(sql);
             long duration = System.currentTimeMillis() - start;
 
@@ -516,7 +549,7 @@ public class SimulatorController {
             } else {
                 int updateCount = stmt.getUpdateCount();
                 recordAudit(sql, duration, true, null, updateCount);
-                
+
                 Map<String, Object> result = new LinkedHashMap<>();
                 result.put("updateCount", updateCount);
                 result.put("durationMs", duration);
@@ -525,7 +558,7 @@ public class SimulatorController {
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - start;
             recordAudit(sql, duration, false, e.getMessage(), 0);
-            
+
             Map<String, Object> error = new LinkedHashMap<>();
             error.put("error", e.getMessage());
             error.put("durationMs", duration);

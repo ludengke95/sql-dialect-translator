@@ -159,7 +159,10 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
             TranslationMetrics.recordDuration(targetDialect.getIdentifier(), backendName, seconds);
             log.info("Translated: {} → {}", formatSqlForLog(sql), formatSqlForLog(translatedSql));
         } catch (Exception e) {
-            log.warn("Translation failed for SQL: {}. Falling back to original. Error: {}", formatSqlForLog(sql), e.getMessage());
+            log.warn(
+                    "Translation failed for SQL: {}. Falling back to original. Error: {}",
+                    formatSqlForLog(sql),
+                    e.getMessage());
             TranslationMetrics.recordFallback();
             translatedSql = sql;
         }

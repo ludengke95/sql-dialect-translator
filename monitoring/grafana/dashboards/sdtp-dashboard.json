@@ -213,7 +213,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(sdt_translation_success_total) / (sum(sdt_translation_success_total) + sum(sdt_translation_failures_total)) * 100",
+          "expr": "((sum(sdt_translation_success_total) or on() vector(0)) / ((sum(sdt_translation_success_total) or on() vector(0)) + (sum(sdt_translation_failures_total) or on() vector(0))) * 100) or on() vector(100)",
           "legendFormat": "翻译成功率",
           "range": true,
           "refId": "A"
@@ -265,7 +265,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(sdt_translation_direct_total) / (sum(sdt_translation_direct_total) + sum(sdt_translation_requests_total)) * 100",
+          "expr": "((sum(sdt_translation_direct_total) or on() vector(0)) / ((sum(sdt_translation_direct_total) or on() vector(0)) + (sum(sdt_translation_requests_total) or on() vector(0))) * 100) or on() vector(0)",
           "legendFormat": "直通占比",
           "range": true,
           "refId": "A"
@@ -309,6 +309,12 @@
         "y": 6
       },
       "id": 7,
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
       "title": "命令请求吞吐 (QPS)",
       "type": "timeseries",
       "targets": [
@@ -330,7 +336,8 @@
             "drawStyle": "line",
             "lineInterpolation": "smooth",
             "lineWidth": 2,
-            "fillOpacity": 10
+            "fillOpacity": 10,
+            "spanNulls": true
           },
           "unit": "s"
         }
@@ -342,16 +349,22 @@
         "y": 6
       },
       "id": 8,
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
       "title": "SQL 翻译与后端执行时延 (P99)",
       "type": "timeseries",
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, sum(rate(sdt_translation_duration_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(sdt_translation_duration_seconds_bucket[$__rate_interval])) by (le))",
           "legendFormat": "翻译耗时 P99",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(sdt_backend_queries_duration_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(sdt_backend_queries_duration_seconds_bucket[$__rate_interval])) by (le))",
           "legendFormat": "后端执行耗时 P99",
           "refId": "B"
         }
@@ -391,6 +404,12 @@
         "y": 15
       },
       "id": 10,
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
       "title": "Hikari 连接池活跃/空闲连接",
       "type": "timeseries",
       "targets": [
@@ -432,6 +451,12 @@
         "y": 15
       },
       "id": 11,
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
       "title": "Netty 网络 I/O 吞吐",
       "type": "timeseries",
       "targets": [
@@ -480,16 +505,22 @@
         "y": 24
       },
       "id": 13,
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
       "title": "JVM 内存堆使用",
       "type": "timeseries",
       "targets": [
         {
-          "expr": "jvm_memory_used_bytes{area=\"heap\"}",
+          "expr": "jvm_memory_bytes_used{area=\"heap\"}",
           "legendFormat": "已用堆内存",
           "refId": "A"
         },
         {
-          "expr": "jvm_memory_max_bytes{area=\"heap\"}",
+          "expr": "jvm_memory_bytes_max{area=\"heap\"}",
           "legendFormat": "最大堆内存",
           "refId": "B"
         }
@@ -514,6 +545,12 @@
         "y": 24
       },
       "id": 14,
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
       "title": "JVM 活动线程数",
       "type": "timeseries",
       "targets": [
@@ -546,223 +583,11 @@
         "type": "loki",
         "uid": "Loki"
       },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "displayMode": "auto"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Time"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 160
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "exec_success"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 90
-              },
-              {
-                "id": "custom.displayMode",
-                "value": "color-background-solid"
-              },
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "options": {
-                      "false": {
-                        "color": "red",
-                        "index": 1,
-                        "text": "失败"
-                      },
-                      "true": {
-                        "color": "green",
-                        "index": 0,
-                        "text": "成功"
-                      }
-                    },
-                    "type": "value"
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "target_db"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 100
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "client_ip"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 120
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "original_sql"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 450
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "translated_sql"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 450
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "err_msg"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 350
-              },
-              {
-                "id": "custom.displayMode",
-                "value": "color-text"
-              },
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "red",
-                      "value": null
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-        ]
-      },
       "gridPos": {
         "h": 10,
         "w": 24,
         "x": 0,
         "y": 33
-      },
-      "id": 17,
-      "options": {
-        "footer": {
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
-        },
-        "showHeader": true
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "Loki"
-          },
-          "editorMode": "code",
-          "expr": "{job=\"sdtp\"} |= \"[SQL_TRANS_RECORD]\" | regexp \"\\\\[SQL_TRANS_RECORD\\\\] ip=(?P<client_ip>[^|]+?)\\\\s*\\\\|\\\\s*db=(?P<target_db>[^|]+?)\\\\s*\\\\|\\\\s*success=(?P<exec_success>[^|]+?)\\\\s*\\\\|\\\\s*src_sql=(?P<original_sql>[^|]+?)\\\\s*\\\\|\\\\s*dest_sql=(?P<translated_sql>[^|]+?)\\\\s*\\\\|\\\\s*error=(?P<err_msg>.*)\"",
-          "queryType": "range",
-          "refId": "A"
-        }
-      ],
-      "title": "SQL 实时翻译与执行审计记录 (Table)",
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Line": true,
-              "TS": true,
-              "host": true,
-              "job": true
-            },
-            "indexByName": {
-              "Time": 0,
-              "exec_success": 1,
-              "target_db": 2,
-              "client_ip": 3,
-              "original_sql": 4,
-              "translated_sql": 5,
-              "err_msg": 6
-            },
-            "renameByName": {
-              "Time": "时间",
-              "client_ip": "来源客户端 IP",
-              "err_msg": "执行异常信息",
-              "exec_success": "是否成功",
-              "original_sql": "原始 SQL (MySQL)",
-              "target_db": "目标数据库",
-              "translated_sql": "执行 SQL (目标方言)"
-            }
-          }
-        }
-      ],
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "Loki"
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 43
       },
       "id": 16,
       "options": {

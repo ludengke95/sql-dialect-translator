@@ -94,23 +94,25 @@ public final class TranslationMetrics {
     }
 
     /** 创建翻译耗时计时器 */
-    public static Timer startTimer(String targetDialect) {
-        return new Timer(targetDialect);
+    public static Timer startTimer(String targetDialect, String backendName) {
+        return new Timer(targetDialect, backendName);
     }
 
     public static class Timer implements AutoCloseable {
         private final String targetDialect;
+        private final String backendName;
         private final long startNanos;
 
-        Timer(String targetDialect) {
+        Timer(String targetDialect, String backendName) {
             this.targetDialect = targetDialect;
+            this.backendName = backendName;
             this.startNanos = System.nanoTime();
         }
 
         @Override
         public void close() {
             double seconds = (System.nanoTime() - startNanos) / 1_000_000_000.0;
-            DURATION.labels(targetDialect).observe(seconds);
+            DURATION.labels(targetDialect, backendName).observe(seconds);
         }
     }
 }

@@ -87,7 +87,8 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
         boolean isNewConnection = false;
 
         // 获取并清除 SQL 翻译审计上下文
-        SqlTranslationContext transCtx = ctx.channel().attr(SessionAttribute.SQL_CONTEXT_KEY).getAndSet(null);
+        SqlTranslationContext transCtx =
+                ctx.channel().attr(SessionAttribute.SQL_CONTEXT_KEY).getAndSet(null);
 
         try {
             if (isTx) {
@@ -264,8 +265,14 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
         String destSql = formatSqlForLog(transCtx.getTranslatedSql());
         String err = errorMsg != null ? formatSqlForLog(errorMsg) : "none";
 
-        log.info("[SQL_TRANS_RECORD] ip={} | db={} | success={} | src_sql={} | dest_sql={} | error={}",
-                ip, db, successStr, srcSql, destSql, err);
+        log.info(
+                "[SQL_TRANS_RECORD] ip={} | db={} | success={} | src_sql={} | dest_sql={} | error={}",
+                ip,
+                db,
+                successStr,
+                srcSql,
+                destSql,
+                err);
     }
 
     private String formatSqlForLog(String sql) {

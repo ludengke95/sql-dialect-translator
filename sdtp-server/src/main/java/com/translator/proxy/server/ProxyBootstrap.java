@@ -113,6 +113,8 @@ public class ProxyBootstrap {
                         protected void initChannel(SocketChannel ch) {
                             ChannelPipeline pipeline = ch.pipeline();
 
+                            pipeline.addLast(
+                                    "nettyMetrics", new com.translator.proxy.core.handler.NettyMetricsHandler());
                             pipeline.addLast("decoder", new MySQLPacketDecoder());
                             pipeline.addLast("encoder", new MySQLPacketEncoder());
 
