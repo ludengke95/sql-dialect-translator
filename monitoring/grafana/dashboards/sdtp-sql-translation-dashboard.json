@@ -17,7 +17,6 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": null,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -44,6 +43,8 @@
             "mode": "thresholds"
           },
           "mappings": [],
+          "max": 100,
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -86,6 +87,7 @@
         },
         "textMode": "valueAndName"
       },
+      "pluginVersion": "10.2.0",
       "targets": [
         {
           "datasource": {
@@ -113,6 +115,21 @@
             "mode": "palette-classic"
           },
           "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
           "unit": "percent"
         },
         "overrides": []
@@ -138,6 +155,7 @@
         },
         "textMode": "valueAndName"
       },
+      "pluginVersion": "10.2.0",
       "targets": [
         {
           "datasource": {
@@ -164,7 +182,20 @@
           "color": {
             "mode": "palette-classic"
           },
-          "mappings": []
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
         },
         "overrides": []
       },
@@ -189,6 +220,7 @@
         },
         "textMode": "valueAndName"
       },
+      "pluginVersion": "10.2.0",
       "targets": [
         {
           "datasource": {
@@ -224,15 +256,58 @@
       },
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
             "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
             "lineInterpolation": "smooth",
             "lineWidth": 2,
-            "fillOpacity": 10,
-            "spanNulls": true
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
           },
           "unit": "reqps"
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 8,
@@ -242,6 +317,12 @@
       },
       "id": 6,
       "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
         "tooltip": {
           "mode": "multi",
           "sort": "none"
@@ -292,15 +373,58 @@
       },
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
             "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
             "lineInterpolation": "smooth",
             "lineWidth": 2,
-            "fillOpacity": 10,
-            "spanNulls": true
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
           },
           "unit": "s"
-        }
+        },
+        "overrides": []
       },
       "gridPos": {
         "h": 8,
@@ -310,6 +434,12 @@
       },
       "id": 7,
       "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
         "tooltip": {
           "mode": "multi",
           "sort": "none"
@@ -370,89 +500,13 @@
         "type": "loki",
         "uid": "Loki"
       },
-      "gridPos": {
-        "h": 12,
-        "w": 24,
-        "x": 0,
-        "y": 15
-      },
-      "id": 9,
-      "options": {
-        "dedupStrategy": "none",
-        "enableLogDetails": true,
-        "prettifyLogMessage": false,
-        "showCommonLabels": false,
-        "showLabels": false,
-        "showTime": true,
-        "sortOrder": "Descending",
-        "wrapLogMessage": true
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "Loki"
-          },
-          "editorMode": "code",
-          "expr": "{job=\"sdtp\", filename=~\".*sql_trans.log\"}",
-          "queryType": "range",
-          "refId": "A"
-        }
-      ],
-      "title": "SQL 翻译实时审计日志流",
-      "type": "logs"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "Loki"
-      },
-      "transformations": [
-        {
-          "id": "extractFields",
-          "options": {
-            "source": "labels",
-            "replace": false
-          }
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Line": true,
-              "filename": true,
-              "host": true,
-              "job": true,
-              "tsNs": true,
-              "id": true,
-              "labels": true
-            },
-            "indexByName": {
-              "Time": 0,
-              "ip": 1,
-              "db": 2,
-              "success": 3,
-              "src_sql": 4,
-              "dest_sql": 5,
-              "error": 6
-            },
-            "renameByName": {
-              "Time": "审计时间",
-              "ip": "客户端 IP",
-              "db": "目标数据库",
-              "success": "翻译状态",
-              "src_sql": "原始 SQL",
-              "dest_sql": "翻译后 SQL",
-              "error": "错误信息"
-            }
-          }
-        }
-      ],
       "fieldConfig": {
         "defaults": {
           "custom": {
             "align": "auto",
-            "displayMode": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
             "inspect": false
           },
           "mappings": [],
@@ -472,11 +526,13 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 27
+        "y": 15
       },
       "id": 10,
       "options": {
+        "cellHeight": "sm",
         "footer": {
+          "countRows": false,
           "fields": "",
           "reducer": [
             "sum"
@@ -486,6 +542,7 @@
         "showHeader": true,
         "sortBy": []
       },
+      "pluginVersion": "10.2.0",
       "targets": [
         {
           "datasource": {
@@ -499,12 +556,52 @@
         }
       ],
       "title": "SQL 翻译审计日志表 (表格视图)",
+      "transformations": [
+        {
+          "id": "extractFields",
+          "options": {
+            "replace": false,
+            "source": "labels"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Line": true,
+              "filename": true,
+              "host": true,
+              "id": true,
+              "job": true,
+              "labels": true,
+              "tsNs": true
+            },
+            "indexByName": {
+              "Time": 0,
+              "db": 2,
+              "dest_sql": 5,
+              "error": 6,
+              "ip": 1,
+              "src_sql": 4,
+              "success": 3
+            },
+            "renameByName": {
+              "Time": "审计时间",
+              "db": "目标数据库",
+              "dest_sql": "翻译后 SQL",
+              "error": "错误信息",
+              "ip": "客户端 IP",
+              "src_sql": "原始 SQL",
+              "success": "翻译状态"
+            }
+          }
+        }
+      ],
       "type": "table"
     }
   ],
   "refresh": "5s",
   "schemaVersion": 38,
-  "style": "dark",
   "tags": [
     "sdt",
     "proxy",
@@ -533,5 +630,7 @@
   },
   "timezone": "",
   "title": "SDT Proxy SQL 翻译审计大盘",
-  "uid": "sdtp-sql-translation"
+  "uid": "sdtp-sql-translation",
+  "version": 7,
+  "weekStart": ""
 }
