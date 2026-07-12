@@ -359,12 +359,12 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, sum(rate(sdt_translation_duration_seconds_bucket[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(sdt_translation_duration_seconds_bucket{backend_name=~\"^$backend$\"}[$__rate_interval])) by (le))",
           "legendFormat": "翻译耗时 P99",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(sdt_backend_queries_duration_seconds_bucket[$__rate_interval])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(sdt_backend_queries_duration_seconds_bucket{backend_name=~\"^$backend$\"}[$__rate_interval])) by (le))",
           "legendFormat": "后端执行耗时 P99",
           "refId": "B"
         }
@@ -414,17 +414,17 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sdt_pool_active_connections",
+          "expr": "sdt_pool_active_connections{pool_name=~\"^$backend$\"}",
           "legendFormat": "活跃连接数 ({{pool_name}})",
           "refId": "A"
         },
         {
-          "expr": "sdt_pool_idle_connections",
+          "expr": "sdt_pool_idle_connections{pool_name=~\"^$backend$\"}",
           "legendFormat": "空闲连接数 ({{pool_name}})",
           "refId": "B"
         },
         {
-          "expr": "sdt_pool_total_connections",
+          "expr": "sdt_pool_total_connections{pool_name=~\"^$backend$\"}",
           "legendFormat": "总连接数 ({{pool_name}})",
           "refId": "C"
         }
@@ -723,7 +723,36 @@
     "logs"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "current": {
+          "selected": true,
+          "value": ".*"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "Prometheus"
+        },
+        "definition": "label_values(sdt_backend_queries_total, backend_name)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "后端数据库名称",
+        "multi": false,
+        "name": "backend",
+        "options": [],
+        "query": {
+          "query": "label_values(sdt_backend_queries_total, backend_name)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query",
+        "useAllValue": true,
+        "allValue": ".*"
+      }
+    ]
   },
   "time": {
     "from": "now-15m",
