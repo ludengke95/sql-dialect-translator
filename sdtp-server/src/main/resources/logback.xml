@@ -33,6 +33,25 @@
     <logger name="com.translator.proxy" level="DEBUG" />
     <logger name="com.translator.core" level="INFO" />
 
+    <!-- ==================== SQL 翻译隔离日志输出 ==================== -->
+    <appender name="SQL_TRANS" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/sql_trans/sql_trans.log</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/sql_trans/sql_trans.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+    </appender>
+
+    <!-- SQL 翻译审计日志隔离配置 -->
+    <logger name="sql-translate-record" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="SQL_TRANS" />
+    </logger>
+
     <!-- 根日志 -->
     <root level="INFO">
         <appender-ref ref="CONSOLE" />

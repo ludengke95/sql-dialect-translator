@@ -566,6 +566,108 @@ public class SimulatorController {
         }
     }
 
+    @PostMapping("/large-packet")
+    public ResponseEntity<?> testLargePacket(@RequestParam(defaultValue = "17") int sizeMb) {
+        long totalStart = System.currentTimeMillis();
+
+        if (sizeMb <= 0 || sizeMb > 64) {
+            Map<String, Object> err = new LinkedHashMap<>();
+            err.put("success", false);
+            err.put("error", "Size must be between 1 and 64 MB");
+            return ResponseEntity.badRequest().body(err);
+        }
+
+        String tableName = "large_packet_test_" + System.currentTimeMillis();
+        long generateTimeMs = 0;
+        long writeTimeMs = 0;
+        long readTimeMs = 0;
+        long cleanTimeMs = 0;
+        boolean dataMatched = false;
+        int readLen = -1;
+
+        try (Connection conn = dataSource.getConnection();
+                Statement stmt = conn.createStatement()) {
+
+            // 1. 创建大包临时表 (直通建表以免 Calcite DDL 异常)
+            String createTableSql =
+                    "/* sdtp:direct */ CREATE TABLE " + tableName + " (id INT PRIMARY KEY, content TEXT)";
+            stmt.execute(createTableSql);
+            recordAudit(createTableSql, 0, true, null, 0);
+
+            // 2. 内存生成测试字符大文本
+            long start = System.currentTimeMillis();
+            int totalBytes = sizeMb * 1024 * 1024;
+            char[] chars = new char[totalBytes];
+            java.util.Arrays.fill(chars, 'X');
+            String testContent = new String(chars);
+            generateTimeMs = System.currentTimeMillis() - start;
+
+            // 3. 写入测试 (Client -> Proxy -> PGDB)
+            String insertSql = "/* sdtp:direct */ INSERT INTO " + tableName + " (id, content) VALUES (?, ?)";
+            start = System.currentTimeMillis();
+            try (PreparedStatement pstmt = conn.prepareStatement(insertSql)) {
+                pstmt.setInt(1, 1);
+                pstmt.setString(2, testContent);
+                pstmt.executeUpdate();
+            }
+            writeTimeMs = System.currentTimeMillis() - start;
+            recordAudit(
+                    "INSERT INTO " + tableName + " (id, content) VALUES (1, [Large Text: " + sizeMb + "MB])",
+                    writeTimeMs,
+                    true,
+                    null,
+                    1);
+
+            // 4. 读取与一致性校验 (PGDB -> Proxy -> Client)
+            String selectSql = "/* sdtp:direct */ SELECT content FROM " + tableName + " WHERE id = 1";
+            start = System.currentTimeMillis();
+            try (PreparedStatement pstmt = conn.prepareStatement(selectSql);
+                    ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    String fetchedContent = rs.getString("content");
+                    readLen = fetchedContent.length();
+                    dataMatched = testContent.equals(fetchedContent);
+                }
+            }
+            readTimeMs = System.currentTimeMillis() - start;
+            recordAudit("SELECT content FROM " + tableName + " WHERE id = 1", readTimeMs, true, null, 1);
+
+            // 5. 清理临时表
+            start = System.currentTimeMillis();
+            String dropTableSql = "/* sdtp:direct */ DROP TABLE " + tableName;
+            stmt.execute(dropTableSql);
+            cleanTimeMs = System.currentTimeMillis() - start;
+            recordAudit(dropTableSql, cleanTimeMs, true, null, 0);
+
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("success", true);
+            response.put("packetSizeMb", sizeMb);
+            response.put("generateTimeMs", generateTimeMs);
+            response.put("writeTimeMs", writeTimeMs);
+            response.put("readTimeMs", readTimeMs);
+            response.put("cleanTimeMs", cleanTimeMs);
+            response.put("totalTimeMs", System.currentTimeMillis() - totalStart);
+            response.put("dataMatched", dataMatched);
+            response.put("readLength", readLen);
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            log.error("Large packet E2E test failed", e);
+            // 兜底清理
+            try (Connection conn = dataSource.getConnection();
+                    Statement stmt = conn.createStatement()) {
+                stmt.execute("/* sdtp:direct */ DROP TABLE IF EXISTS " + tableName);
+            } catch (Exception ignored) {
+            }
+
+            Map<String, Object> error = new LinkedHashMap<>();
+            error.put("success", false);
+            error.put("error", e.getMessage());
+            error.put("durationMs", System.currentTimeMillis() - totalStart);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
+
     // 自定义并发更新冲突异常
     public static class ConcurrentModificationException extends RuntimeException {
         public ConcurrentModificationException(String message) {

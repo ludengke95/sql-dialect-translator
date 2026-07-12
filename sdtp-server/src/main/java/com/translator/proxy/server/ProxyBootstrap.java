@@ -66,6 +66,10 @@ public class ProxyBootstrap {
     }
 
     public void start() throws InterruptedException {
+        // 同步系统变量中的 max_allowed_packet，使客户端驱动在连接建立时能获取到正确的限制
+        com.translator.proxy.core.intercept.SystemVariableInterceptor.setSystemVariable(
+                "max_allowed_packet", String.valueOf(config.getMaxAllowedPacket()));
+
         bossGroup = new NioEventLoopGroup(1);
         workerGroup = new NioEventLoopGroup();
 

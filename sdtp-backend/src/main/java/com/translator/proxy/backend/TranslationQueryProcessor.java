@@ -128,6 +128,16 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
     public void process(ChannelHandlerContext ctx, String sql, FrontendSession session) {
         log.info("SQL: {}", formatSqlForLog(sql));
 
+        // 安全保护：如果 SQL 大于 1MB，自动作为直通模式处理，免于送进 Calcite 翻译引擎导致 OOM
+        if (sql != null && sql.length() > 1024 * 1024) {
+            log.info("SQL length ({}) exceeds 1MB. Auto pass-through without Calcite translation.", sql.length());
+            TranslationMetrics.recordDirect();
+            SqlTranslationContext sqlCtx = new SqlTranslationContext(sql, sql);
+            ctx.channel().attr(SessionAttribute.SQL_CONTEXT_KEY).set(sqlCtx);
+            delegate.process(ctx, sql, session);
+            return;
+        }
+
         if (!enabled) {
             TranslationMetrics.recordDisabled();
             SqlTranslationContext sqlCtx = new SqlTranslationContext(sql, sql);

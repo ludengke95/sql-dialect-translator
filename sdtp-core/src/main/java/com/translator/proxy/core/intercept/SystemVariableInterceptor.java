@@ -85,6 +85,18 @@ public final class SystemVariableInterceptor {
     }
 
     /**
+     * 更新系统变量的值。
+     *
+     * @param varName 变量名称
+     * @param value   变量值
+     */
+    public static void setSystemVariable(String varName, String value) {
+        if (varName != null) {
+            SYSTEM_VARIABLES.put(varName.toLowerCase(), value);
+        }
+    }
+
+    /**
      * 尝试拦截系统变量查询。
      *
      * @param sql     原始 SQL

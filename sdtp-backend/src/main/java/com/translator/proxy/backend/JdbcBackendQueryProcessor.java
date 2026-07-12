@@ -30,6 +30,9 @@ import io.netty.channel.ChannelHandlerContext;
  */
 public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor {
     private static final Logger log = LoggerFactory.getLogger(JdbcBackendQueryProcessor.class);
+    /** 专属的 SQL 翻译审计日志 Logger */
+    private static final Logger transRecordLog = LoggerFactory.getLogger("sql-translate-record");
+
     private final HikariDataSource dataSource;
     /** 后端名称（用于指标打点） */
     private volatile String backendName = "unknown";
@@ -265,7 +268,7 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
         String destSql = formatSqlForLog(transCtx.getTranslatedSql());
         String err = errorMsg != null ? formatSqlForLog(errorMsg) : "none";
 
-        log.info(
+        transRecordLog.info(
                 "[SQL_TRANS_RECORD] ip={} | db={} | success={} | src_sql={} | dest_sql={} | error={}",
                 ip,
                 db,

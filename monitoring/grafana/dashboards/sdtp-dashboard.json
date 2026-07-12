@@ -647,7 +647,7 @@
           "sort": "none"
         }
       },
-      "title": "JVM 垃圾回收 (GC) 暂停耗时率",
+      "title": "JVM 垃圾回收 (GC) 耗时率",
       "type": "timeseries",
       "targets": [
         {
@@ -656,8 +656,8 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (action) (rate(jvm_gc_pause_seconds_sum[1m]))",
-          "legendFormat": "GC 暂停率 ({{action}})",
+          "expr": "sum by (gc) (rate(jvm_gc_collection_seconds_sum[1m]))",
+          "legendFormat": "GC 耗时率 ({{gc}})",
           "range": true,
           "refId": "A"
         }

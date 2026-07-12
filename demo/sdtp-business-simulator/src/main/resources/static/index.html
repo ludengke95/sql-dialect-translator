@@ -861,6 +861,7 @@
         <div class="tabs">
             <button class="tab-btn active" onclick="switchTab('simulator')">📊 业务模拟控制台</button>
             <button class="tab-btn" onclick="switchTab('playground')">💻 自定义 SQL 终端</button>
+            <button class="tab-btn" onclick="switchTab('large-packet')">📦 大包性能测试</button>
         </div>
 
         <div class="status-indicator">
@@ -982,6 +983,32 @@
                         <div style="color: var(--text-muted); font-size: 0.8rem; padding: 1.5rem; text-align: center;">
                             尚未执行任何查询。在左侧输入 SQL 并点击“执行 SQL”查看结果。
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 3: Large Packet Test -->
+        <div id="tab-large-packet" class="tab-content">
+            <div class="playground-container" style="display: flex; flex-direction: column; gap: 1.5rem;">
+                <div class="editor-panel" style="width: 100%;">
+                    <div class="section-title">📦 MySQL 16MB+ 大包双向传输性能测试</div>
+                    <p style="color: var(--text-muted); font-size: 0.85rem; line-height: 1.5; margin-bottom: 1rem;">
+                        本模块专门用于测试 SDT Proxy 的超大包分包接收（Decoder 重组）与分片写出（Encoder 切分）性能。
+                        测试过程中，我们将生成指定大小的超长字符串，执行 <code>INSERT</code> 写入大包表，随后执行 <code>SELECT</code> 查询读回全部大包内容，并在前端对比数据完整性。
+                    </p>
+                    
+                    <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+                        <label for="packet-size" style="font-weight: 600; font-size: 0.9rem;">测试数据包大小 (MB):</label>
+                        <input type="number" id="packet-size" value="17" min="1" max="64" class="form-input" style="width: 100px; padding: 0.35rem 0.5rem; background: var(--card-bg); border: 1px solid var(--border); color: var(--text); border-radius: 4px; font-weight: bold; text-align: center;" />
+                        <button class="btn btn-primary" onclick="runLargePacketTest()" id="run-packet-btn">
+                            🚀 启动大包双向传输测试
+                        </button>
+                    </div>
+
+                    <!-- 运行状态与结果卡片 -->
+                    <div id="packet-test-result" style="display: none; padding: 1.5rem; border-radius: 6px; border: 1px solid var(--border); background: rgba(255,255,255,0.02);">
+                        <!-- 动态载入指标 -->
                     </div>
                 </div>
             </div>
@@ -1330,6 +1357,87 @@
             })
             .catch(err => {
                 resultsContainer.innerHTML = `<div class="error-message-box">❌ SQL Execution Failed:<br>${err.message}</div>`;
+            });
+        }
+
+        function runLargePacketTest() {
+            const size = parseInt(document.getElementById('packet-size').value);
+            if (isNaN(size) || size <= 0 || size > 64) {
+                alert('请输入 1 至 64 之间的整数作为包体大小（MB）');
+                return;
+            }
+
+            const btn = document.getElementById('run-packet-btn');
+            const resultBox = document.getElementById('packet-test-result');
+            
+            btn.disabled = true;
+            btn.innerText = '⌛ 正在执行大包双向传输测试中 (请耐心等待)...';
+            resultBox.style.display = 'block';
+            resultBox.innerHTML = `
+                <div style="text-align: center; color: var(--primary-color); font-size: 0.9rem; padding: 1rem;">
+                    <div style="margin-bottom: 0.5rem; font-weight: bold;">🚀 传输测试进行中...</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.6; text-align: left; max-width: 400px; margin: 0 auto;">
+                        • 阶段一: 正在内存中生成 ${size}MB 文本字符串...<br>
+                        • 阶段二: 发送 INSERT 请求 (Client -> Proxy -> PGDB，校验 Decoder 重组逻辑)...<br>
+                        • 阶段三: 发送 SELECT 请求 (PGDB -> Proxy -> Client，校验 Encoder 分片逻辑)...<br>
+                        • 阶段四: 前端数据一致性比对与耗时统计...
+                    </div>
+                </div>
+            `;
+
+            fetch(`/api/simulate/large-packet?sizeMb=${size}`, {
+                method: 'POST'
+            })
+            .then(res => {
+                if (!res.ok) {
+                    return res.json().then(errData => { throw new Error(errData.error || "大包传输测试异常"); });
+                }
+                return res.json();
+            })
+            .then(data => {
+                btn.disabled = false;
+                btn.innerText = '🚀 启动大包双向传输测试';
+                refreshData(); // 刷新大盘审计日志
+
+                if (data.success && data.dataMatched) {
+                    resultBox.innerHTML = `
+                        <div style="border-left: 4px solid var(--success-color); padding-left: 1rem;">
+                            <h4 style="color: var(--success-color); margin-bottom: 0.5rem;">🎉 大数据包双向传输测试成功！</h4>
+                            <p style="font-size: 0.85rem; line-height: 1.6; margin: 0; color: var(--text);">
+                                • 测试包体大小: <strong>${data.packetSizeMb} MB</strong> (共计 ${data.readLength.toLocaleString()} 字符)<br>
+                                • 内存字符生成耗时: <strong>${data.generateTimeMs} ms</strong><br>
+                                • 写入大包耗时 (Client -> Proxy -> DB): <strong>${data.writeTimeMs} ms</strong><br>
+                                • 读取大包耗时 (DB -> Proxy -> Client): <strong>${data.readTimeMs} ms</strong><br>
+                                • 数据库清理耗时: <strong>${data.cleanTimeMs} ms</strong><br>
+                                • 链路往返总耗时: <strong>${data.totalTimeMs} ms</strong><br>
+                                • 传输一致性验证: <span style="color:var(--success-color); font-weight:bold;">PASS (100% 字节吻合)</span>
+                            </p>
+                        </div>
+                    `;
+                } else {
+                    resultBox.innerHTML = `
+                        <div style="border-left: 4px solid var(--error-color); padding-left: 1rem;">
+                            <h4 style="color: var(--error-color); margin-bottom: 0.5rem;">❌ 传输数据校验不一致！</h4>
+                            <p style="font-size: 0.85rem; line-height: 1.6; margin: 0; color: var(--text);">
+                                • 测试包体大小: <strong>${data.packetSizeMb} MB</strong><br>
+                                • 写入大包耗时: <strong>${data.writeTimeMs} ms</strong><br>
+                                • 读取大包耗时: <strong>${data.readTimeMs} ms</strong><br>
+                                • 读回字符数: <strong>${data.readLength}</strong><br>
+                                • 传输一致性验证: <span style="color:var(--error-color); font-weight:bold;">FAILED (数据损坏或丢失)</span>
+                            </p>
+                        </div>
+                    `;
+                }
+            })
+            .catch(err => {
+                btn.disabled = false;
+                btn.innerText = '🚀 启动大包双向传输测试';
+                resultBox.innerHTML = `
+                    <div class="error-message-box" style="border-left: 4px solid var(--error-color); padding-left: 1rem; background: rgba(239, 68, 68, 0.05); padding: 1rem;">
+                        <h4 style="margin: 0 0 0.5rem 0; color: var(--error-color);">❌ 大数据包双向传输测试失败 (报错):</h4>
+                        <div style="font-family: monospace; font-size: 0.8rem; white-space: pre-wrap; line-height: 1.4; color: var(--text);">${err.message}</div>
+                    </div>
+                `;
             });
         }
     </script>

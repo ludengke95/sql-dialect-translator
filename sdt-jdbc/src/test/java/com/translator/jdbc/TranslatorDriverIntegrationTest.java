@@ -176,4 +176,41 @@ public class TranslatorDriverIntegrationTest {
         Assert.assertEquals("Bob", rs.getString("name"));
         rs.close();
     }
+
+    @Test
+    public void testLargePacketTransmission() throws Exception {
+        // 创建大包数据临时测试表
+        statement.execute("DROP TABLE IF EXISTS large_data");
+        statement.execute("CREATE TABLE large_data (id INT PRIMARY KEY, content TEXT)");
+
+        // 1. 在内存中生成 17MB 的字符串
+        int size = 17 * 1024 * 1024; // 17MB
+        char[] chars = new char[size];
+        java.util.Arrays.fill(chars, 'A');
+        String originalContent = new String(chars);
+
+        // 2. 使用 PreparedStatement 写入大包数据 (Client -> Proxy -> PG)
+        String insertSql = "INSERT INTO large_data (id, content) VALUES (?, ?)";
+        try (PreparedStatement pstmt = translatorConnection.prepareStatement(insertSql)) {
+            pstmt.setInt(1, 1);
+            pstmt.setString(2, originalContent);
+            long start = System.currentTimeMillis();
+            pstmt.executeUpdate();
+            System.out.println("Write 17MB large packet took " + (System.currentTimeMillis() - start) + " ms");
+        }
+
+        // 3. 查询并接收大包数据 (PG -> Proxy -> Client)
+        String selectSql = "SELECT content FROM large_data WHERE id = 1";
+        long start = System.currentTimeMillis();
+        try (ResultSet rs = statement.executeQuery(selectSql)) {
+            Assert.assertTrue(rs.next());
+            String readContent = rs.getString("content");
+            System.out.println("Read 17MB large packet took " + (System.currentTimeMillis() - start) + " ms");
+            Assert.assertEquals(originalContent.length(), readContent.length());
+            Assert.assertEquals(originalContent, readContent);
+        }
+
+        // 4. 清理表
+        statement.execute("DROP TABLE large_data");
+    }
 }

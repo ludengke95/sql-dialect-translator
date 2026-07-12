@@ -17,3 +17,9 @@ scrape_configs:
           job: sdtp
           host: sdtp-proxy
           __path__: /var/log/sdtp/*.log
+      - targets:
+          - localhost
+        labels:
+          job: sdtp
+          host: sdtp-proxy
+          __path__: /var/log/sdtp/sql_trans/*.log
