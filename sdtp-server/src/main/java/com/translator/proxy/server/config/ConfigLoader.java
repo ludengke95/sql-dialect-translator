@@ -123,6 +123,9 @@ public final class ConfigLoader {
             if (proxy.get("port") != null) {
                 config.setPort(((Number) proxy.get("port")).intValue());
             }
+            if (proxy.get("max-allowed-packet") != null) {
+                config.setMaxAllowedPacket(((Number) proxy.get("max-allowed-packet")).intValue());
+            }
             Map<String, Object> authMap = (Map<String, Object>) proxy.get("auth");
             if (authMap != null) {
                 ProxyConfig.AuthConfig auth = config.getAuth();

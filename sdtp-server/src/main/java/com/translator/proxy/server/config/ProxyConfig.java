@@ -14,6 +14,9 @@ public class ProxyConfig {
 
     private int port = 3306;
 
+    /** MySQL 协议单包最大限制，默认 64MB */
+    private int maxAllowedPacket = 67108864;
+
     /** 热 reload 请求队列容量 */
     private int reloadQueueCapacity = 1000;
 
@@ -34,6 +37,14 @@ public class ProxyConfig {
 
     public void setPort(int port) {
         this.port = port;
+    }
+
+    public int getMaxAllowedPacket() {
+        return maxAllowedPacket;
+    }
+
+    public void setMaxAllowedPacket(int maxAllowedPacket) {
+        this.maxAllowedPacket = maxAllowedPacket;
     }
 
     public int getReloadQueueCapacity() {

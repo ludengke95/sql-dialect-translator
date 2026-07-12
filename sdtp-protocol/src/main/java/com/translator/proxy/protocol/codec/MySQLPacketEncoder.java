@@ -19,24 +19,50 @@ public class MySQLPacketEncoder extends MessageToByteEncoder<MySQLPacketEncoder.
 
     private static final Logger log = LoggerFactory.getLogger(MySQLPacketEncoder.class);
 
+    private static final int MAX_PAYLOAD_LENGTH = 0x00FFFFFF;
+
     @Override
     protected void encode(ChannelHandlerContext ctx, OutgoingPacket packet, ByteBuf out) {
         ByteBuf payload = packet.payload;
         byte sequenceId = packet.sequenceId;
-        int payloadLen = payload.readableBytes();
+        int totalLen = payload.readableBytes();
 
-        // 写入 3 字节小端序 payload 长度
-        out.writeMediumLE(payloadLen);
-        // 写入 1 字节 sequence ID
-        out.writeByte(sequenceId);
-        // 写入 payload
-        out.writeBytes(payload);
+        try {
+            if (totalLen < MAX_PAYLOAD_LENGTH) {
+                // 普通小包，直接写入
+                out.writeMediumLE(totalLen);
+                out.writeByte(sequenceId);
+                out.writeBytes(payload);
+            } else {
+                // 超大包分片写出
+                int remaining = totalLen;
+                byte seq = sequenceId;
 
-        // 释放 payload（MessageToByteEncoder 只释放 OutgoingPacket 对象本身，不释放其持有的 ByteBuf）
-        payload.release();
+                while (remaining >= MAX_PAYLOAD_LENGTH) {
+                    out.writeMediumLE(MAX_PAYLOAD_LENGTH);
+                    out.writeByte(seq++);
+                    out.writeBytes(payload, MAX_PAYLOAD_LENGTH); // 写入一部分并推进 readerIndex
+                    remaining -= MAX_PAYLOAD_LENGTH;
+                }
+
+                // 写入最后一个包（即使 remaining 为 0 也必须写入，作为大包的终止符）
+                out.writeMediumLE(remaining);
+                out.writeByte(seq);
+                if (remaining > 0) {
+                    out.writeBytes(payload, remaining);
+                }
+
+                if (log.isDebugEnabled()) {
+                    log.debug("Large packet split finished. Sent {} fragments", (seq - sequenceId + 1));
+                }
+            }
+        } finally {
+            // 释放 payload（MessageToByteEncoder 只释放 OutgoingPacket 结构，我们需要释放它持有的 ByteBuf）
+            payload.release();
+        }
 
         if (log.isTraceEnabled()) {
-            log.trace("Encoded packet: seq={}, payloadLen={}", sequenceId, payloadLen);
+            log.trace("Encoded packet: seq={}, payloadLen={}", sequenceId, totalLen);
         }
     }
 

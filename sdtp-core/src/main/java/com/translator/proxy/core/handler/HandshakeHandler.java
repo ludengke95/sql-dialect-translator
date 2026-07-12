@@ -17,6 +17,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.util.concurrent.EventExecutorGroup;
 
 /**
  * 握手处理器 —— MySQL 连接建立后的第一个 Handler。
@@ -43,20 +44,29 @@ public class HandshakeHandler extends ChannelInboundHandlerAdapter {
 
     private final String authUser;
     private final String authPassword;
+    private final EventExecutorGroup bizExecutorGroup;
 
     /**
      * 使用默认账密。
      */
     public HandshakeHandler() {
-        this("root", "proxy_password");
+        this("root", "proxy_password", null);
     }
 
     /**
      * 使用自定义账密。
      */
     public HandshakeHandler(String authUser, String authPassword) {
+        this(authUser, authPassword, null);
+    }
+
+    /**
+     * 使用自定义账密和业务线程池。
+     */
+    public HandshakeHandler(String authUser, String authPassword, EventExecutorGroup bizExecutorGroup) {
         this.authUser = authUser;
         this.authPassword = authPassword;
+        this.bizExecutorGroup = bizExecutorGroup;
     }
 
     @Override
@@ -88,8 +98,8 @@ public class HandshakeHandler extends ChannelInboundHandlerAdapter {
         // 但 Encoder 不负责管理 sequenceId，由调用者传入。这里固定 seq=0
         ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(handshake, (byte) 0));
 
-        // Pipeline 切换：移除自身，加入 AuthHandler（传入配置的账密）
-        ctx.pipeline().replace(this, "authHandler", new AuthHandler(authUser, authPassword));
+        // Pipeline 切换：移除自身，加入 AuthHandler（传入配置的账密与业务线程池）
+        ctx.pipeline().replace(this, "authHandler", new AuthHandler(authUser, authPassword, bizExecutorGroup));
     }
 
     /**

@@ -9,6 +9,7 @@ import org.junit.Test;
 import com.translator.proxy.protocol.util.BufferUtils;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.embedded.EmbeddedChannel;
 
@@ -204,6 +205,217 @@ public class MySQLPacketCodecTest {
 
         encoded.release();
         channel.finish();
+    }
+
+    // ==================== 大包切片与重组测试 ====================
+
+    @Test
+    public void testDecodeLargePacketReassembly() {
+        EmbeddedChannel channel = new EmbeddedChannel(new MySQLPacketDecoder());
+
+        // 逻辑包大小设计：总计约 17MB 的包，第一部分 16MB-1，第二部分 1MB
+        int firstLen = 16777215; // MAX_PAYLOAD_LENGTH
+        int secondLen = 1024 * 1024; // 1MB
+
+        // 使用 64KB 数组作为共享切片源，防止内存溢出 (OOM)
+        int chunkSize = 65536;
+        ByteBuf sliceA = Unpooled.directBuffer(chunkSize);
+        for (int i = 0; i < chunkSize; i++) {
+            sliceA.writeByte('A');
+        }
+        ByteBuf sliceB = Unpooled.directBuffer(chunkSize);
+        for (int i = 0; i < chunkSize; i++) {
+            sliceB.writeByte('B');
+        }
+
+        try {
+            // 组装第一物理包的 4 字节头部 [Len=16MB-1, Seq=0]
+            ByteBuf header1 = Unpooled.buffer(4);
+            header1.writeMediumLE(firstLen);
+            header1.writeByte(0); // seq=0
+
+            // 使用 CompositeByteBuf 组合 payload，避免分配 16MB 连续内存
+            CompositeByteBuf payload1 = channel.alloc().compositeBuffer();
+            int remaining = firstLen;
+            while (remaining > 0) {
+                int toAdd = Math.min(remaining, chunkSize);
+                payload1.addComponent(true, sliceA.retainedSlice(0, toAdd));
+                remaining -= toAdd;
+            }
+
+            CompositeByteBuf in1 = channel.alloc().compositeBuffer();
+            in1.addComponent(true, header1);
+            in1.addComponent(true, payload1);
+
+            channel.writeInbound(in1);
+
+            // 此时应该还不能解码出完整逻辑包
+            assertNull("在第一个分包收到后，不应该分发完整包", channel.readInbound());
+
+            // 组装第二物理包的 4 字节头部 [Len=1MB, Seq=1]
+            ByteBuf header2 = Unpooled.buffer(4);
+            header2.writeMediumLE(secondLen);
+            header2.writeByte(1); // seq=1
+
+            // 同样用 CompositeByteBuf 组合第二包的 payload
+            CompositeByteBuf payload2 = channel.alloc().compositeBuffer();
+            remaining = secondLen;
+            while (remaining > 0) {
+                int toAdd = Math.min(remaining, chunkSize);
+                payload2.addComponent(true, sliceB.retainedSlice(0, toAdd));
+                remaining -= toAdd;
+            }
+
+            CompositeByteBuf in2 = channel.alloc().compositeBuffer();
+            in2.addComponent(true, header2);
+            in2.addComponent(true, payload2);
+
+            channel.writeInbound(in2);
+
+            // 此时大包重组完成，应该能解码出来
+            MySQLPacketDecoder.RawMySQLPacket packet = channel.readInbound();
+            assertNotNull("大包拼装完成后，应该成功解码", packet);
+            assertEquals("大包最后的 sequenceId 应为 1", (byte) 1, packet.getSequenceId());
+            assertEquals(
+                    "组装后的 payload 长度应为 17MB",
+                    firstLen + secondLen,
+                    packet.getPayload().readableBytes());
+
+            // 验证前半部分和后半部分数据是否完好
+            byte[] verifyFirst = new byte[100];
+            packet.getPayload().readBytes(verifyFirst);
+            for (byte b : verifyFirst) {
+                assertEquals('A', b);
+            }
+
+            packet.getPayload().readerIndex(firstLen);
+            byte[] verifySecond = new byte[100];
+            packet.getPayload().readBytes(verifySecond);
+            for (byte b : verifySecond) {
+                assertEquals('B', b);
+            }
+
+            packet.release();
+        } finally {
+            // 确保测试结束彻底释放共享切片
+            sliceA.release();
+            sliceB.release();
+            channel.finish();
+        }
+    }
+
+    @Test
+    public void testDecodeLargePacketOOMProtection() {
+        EmbeddedChannel channel = new EmbeddedChannel(new MySQLPacketDecoder());
+
+        int firstLen = 16777215; // 16MB - 1
+        int chunkSize = 65536;
+        ByteBuf sliceA = Unpooled.directBuffer(chunkSize);
+        for (int i = 0; i < chunkSize; i++) {
+            sliceA.writeByte('A');
+        }
+
+        try {
+            // 连续发送 5 个 16MB 的满包，总大小将达到 80MB，超出 64MB 的上限
+            for (int i = 0; i < 5; i++) {
+                ByteBuf header = Unpooled.buffer(4);
+                header.writeMediumLE(firstLen);
+                header.writeByte(i); // seq 连续递增
+
+                CompositeByteBuf payload = channel.alloc().compositeBuffer();
+                int remaining = firstLen;
+                while (remaining > 0) {
+                    int toAdd = Math.min(remaining, chunkSize);
+                    payload.addComponent(true, sliceA.retainedSlice(0, toAdd));
+                    remaining -= toAdd;
+                }
+
+                CompositeByteBuf in = channel.alloc().compositeBuffer();
+                in.addComponent(true, header);
+                in.addComponent(true, payload);
+
+                channel.writeInbound(in);
+            }
+            fail("当累计大小超过 64MB 限制时，应该抛出 DecoderException 异常");
+        } catch (io.netty.handler.codec.DecoderException e) {
+            assertTrue("异常消息中应说明超限原因", e.getMessage().contains("exceeds maxAllowedPacketSize limit"));
+        } finally {
+            sliceA.release();
+            channel.finish();
+        }
+    }
+
+    @Test
+    public void testEncodeLargePacketSplitting() {
+        EmbeddedChannel channel = new EmbeddedChannel(new MySQLPacketEncoder());
+
+        int firstLen = 16777215; // MAX_PAYLOAD_LENGTH
+        int secondLen = 1024 * 1024; // 1MB
+        int totalLen = firstLen + secondLen;
+
+        int chunkSize = 65536;
+        ByteBuf sliceA = Unpooled.directBuffer(chunkSize);
+        for (int i = 0; i < chunkSize; i++) {
+            sliceA.writeByte('A');
+        }
+        ByteBuf sliceB = Unpooled.directBuffer(chunkSize);
+        for (int i = 0; i < chunkSize; i++) {
+            sliceB.writeByte('B');
+        }
+
+        try {
+            // 用 CompositeByteBuf 组合出 17MB 的大 payload 传给 OutgoingPacket
+            CompositeByteBuf bigPayload = channel.alloc().compositeBuffer();
+            int remaining = firstLen;
+            while (remaining > 0) {
+                int toAdd = Math.min(remaining, chunkSize);
+                bigPayload.addComponent(true, sliceA.retainedSlice(0, toAdd));
+                remaining -= toAdd;
+            }
+            remaining = secondLen;
+            while (remaining > 0) {
+                int toAdd = Math.min(remaining, chunkSize);
+                bigPayload.addComponent(true, sliceB.retainedSlice(0, toAdd));
+                remaining -= toAdd;
+            }
+
+            channel.writeOutbound(new MySQLPacketEncoder.OutgoingPacket(bigPayload, (byte) 5));
+
+            // 从 channel 获取合并后的输出 ByteBuf
+            ByteBuf out = channel.readOutbound();
+            assertNotNull(out);
+
+            // 1. 验证第一物理包头
+            assertEquals("第一包的包长应为 16MB - 1", firstLen, out.readUnsignedMediumLE());
+            assertEquals("第一包的 seq 应为 5", (byte) 5, out.readByte());
+            // 验证第一物理包 payload
+            byte[] firstVerify = new byte[100];
+            out.readBytes(firstVerify);
+            for (byte b : firstVerify) {
+                assertEquals('A', b);
+            }
+            // 跳过第一包剩余部分
+            out.skipBytes(firstLen - 100);
+
+            // 2. 验证第二物理包头
+            assertEquals("第二包的包长应为 1MB", secondLen, out.readUnsignedMediumLE());
+            assertEquals("第二包的 seq 应为 6", (byte) 6, out.readByte());
+            // 验证第二物理包 payload
+            byte[] secondVerify = new byte[100];
+            out.readBytes(secondVerify);
+            for (byte b : secondVerify) {
+                assertEquals('B', b);
+            }
+            // 跳过第二包剩余部分并验证已读完
+            out.skipBytes(secondLen - 100);
+            assertEquals("整个大包的所有字节应恰好被校验读完", 0, out.readableBytes());
+
+            out.release();
+        } finally {
+            sliceA.release();
+            sliceB.release();
+            channel.finish();
+        }
     }
 
     // ==================== BufferUtils 测试 ====================

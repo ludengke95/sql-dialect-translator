@@ -13,6 +13,7 @@ import com.translator.proxy.backend.BackendPoolManager;
 import com.translator.proxy.core.handler.BackendRouter;
 import com.translator.proxy.core.handler.CommandHandler;
 import com.translator.proxy.core.handler.HandshakeHandler;
+import com.translator.proxy.core.handler.NettyMetricsHandler;
 import com.translator.proxy.metrics.MetricsModule;
 import com.translator.proxy.protocol.codec.MySQLPacketDecoder;
 import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
@@ -45,11 +46,19 @@ public class ProxyBootstrap {
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
     private DefaultEventExecutorGroup bizExecutorGroup;
-    /** 多后端管理器 */
+    /**
+     * 多后端管理器
+     */
     private BackendPoolManager backendPoolManager;
-    /** 配置文件监听器 */
-    private MetricsModule metricsModule;
 
+    /**
+     * 指标模块
+     * 用于收集和暴露 Proxy 运行时指标，如连接数、查询量等。
+     */
+    private MetricsModule metricsModule;
+    /**
+     * 配置文件监听器
+     */
     private ConfigWatcher configWatcher;
 
     public ProxyBootstrap(ProxyConfig config) {
@@ -82,12 +91,11 @@ public class ProxyBootstrap {
         }
 
         // 初始化多后端连接池管理器（传入 reload 参数）
-        BackendPoolManager bpm = new BackendPoolManager(
+        backendPoolManager = new BackendPoolManager(
                 backends, defaultTranslationConfig, config.getReloadQueueCapacity(), config.getReloadDrainTimeoutMs());
-        backendPoolManager = bpm;
 
         // 将路由器注入 CommandHandler
-        CommandHandler.setBackendRouter(bpm);
+        CommandHandler.setBackendRouter(backendPoolManager);
         // 初始化指标模块
         ProxyConfig.MetricsConf mc = config.getMetrics();
         if (mc.isEnabled()) {
@@ -113,15 +121,15 @@ public class ProxyBootstrap {
                         protected void initChannel(SocketChannel ch) {
                             ChannelPipeline pipeline = ch.pipeline();
 
-                            pipeline.addLast(
-                                    "nettyMetrics", new com.translator.proxy.core.handler.NettyMetricsHandler());
-                            pipeline.addLast("decoder", new MySQLPacketDecoder());
+                            pipeline.addLast("nettyMetrics", new NettyMetricsHandler());
+                            pipeline.addLast("decoder", new MySQLPacketDecoder(config.getMaxAllowedPacket()));
                             pipeline.addLast("encoder", new MySQLPacketEncoder());
 
                             pipeline.addLast("idleHandler", new IdleStateHandler(28800, 28800, 0));
 
                             pipeline.addLast(
-                                    "handshakeHandler", new HandshakeHandler(cachedAuthUser, cachedAuthPassword));
+                                    "handshakeHandler",
+                                    new HandshakeHandler(cachedAuthUser, cachedAuthPassword, bizExecutorGroup));
                         }
                     });
 

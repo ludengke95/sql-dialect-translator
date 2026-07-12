@@ -17,6 +17,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.util.concurrent.EventExecutorGroup;
 
 /**
  * 认证处理器 —— 处理客户端发来的 HandshakeResponse41 和 AuthSwitchResponse。
@@ -34,6 +35,7 @@ public class AuthHandler extends ChannelInboundHandlerAdapter {
 
     private final String expectedUser;
     private final String expectedPassword;
+    private final EventExecutorGroup bizExecutorGroup;
 
     /** 是否在等待 AuthSwitchResponse（caching_sha2_password 第二步） */
     private boolean expectingAuthSwitchResponse;
@@ -45,12 +47,17 @@ public class AuthHandler extends ChannelInboundHandlerAdapter {
     private String pendingDatabase;
 
     public AuthHandler() {
-        this("root", "proxy_password");
+        this("root", "proxy_password", null);
     }
 
     public AuthHandler(String expectedUser, String expectedPassword) {
+        this(expectedUser, expectedPassword, null);
+    }
+
+    public AuthHandler(String expectedUser, String expectedPassword, EventExecutorGroup bizExecutorGroup) {
         this.expectedUser = expectedUser;
         this.expectedPassword = expectedPassword;
+        this.bizExecutorGroup = bizExecutorGroup;
     }
 
     @Override
@@ -220,7 +227,12 @@ public class AuthHandler extends ChannelInboundHandlerAdapter {
     }
 
     private void switchToCommandHandler(ChannelHandlerContext ctx) {
-        ctx.pipeline().replace(this, "commandHandler", new CommandHandler());
+        if (bizExecutorGroup != null) {
+            ctx.pipeline().addAfter(bizExecutorGroup, "authHandler", "commandHandler", new CommandHandler());
+            ctx.pipeline().remove(this);
+        } else {
+            ctx.pipeline().replace(this, "commandHandler", new CommandHandler());
+        }
     }
 
     // ==================== Packet Writers ====================

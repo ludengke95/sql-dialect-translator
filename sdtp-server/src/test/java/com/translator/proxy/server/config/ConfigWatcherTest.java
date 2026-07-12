@@ -212,4 +212,23 @@ public class ConfigWatcherTest {
         }
         return false;
     }
+
+    @Test
+    public void testConfigLoaderMaxAllowedPacket() throws Exception {
+        String yaml = "proxy:\n" + "  port: 3306\n"
+                + "  max-allowed-packet: 123456\n"
+                + "  auth:\n"
+                + "    user: root\n"
+                + "    password: proxy_password\n";
+        java.io.File tempFile = java.io.File.createTempFile("proxy-config-test", ".yml");
+        tempFile.deleteOnExit();
+        try (java.io.FileWriter writer = new java.io.FileWriter(tempFile)) {
+            writer.write(yaml);
+        }
+
+        ProxyConfig config = ConfigLoader.loadFromFileOrNull(tempFile.getAbsolutePath());
+        assertNotNull(config);
+        assertEquals(3306, config.getPort());
+        assertEquals(123456, config.getMaxAllowedPacket());
+    }
 }
