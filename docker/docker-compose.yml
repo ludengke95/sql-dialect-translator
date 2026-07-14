@@ -40,6 +40,13 @@ services:
         echo 'SQL Server JDBC Driver already exists.';
       fi;
 
+      if [ ! -f /drivers/DmJdbcDriver18-8.1.1.49.jar ]; then
+        echo 'Downloading Dameng JDBC Driver...';
+        wget -q -O /drivers/DmJdbcDriver18-8.1.1.49.jar https://maven.aliyun.com/repository/public/com/dameng/DmJdbcDriver18/8.1.1.49/DmJdbcDriver18-8.1.1.49.jar;
+      else
+        echo 'Dameng JDBC Driver already exists.';
+      fi;
+
       echo 'All JDBC drivers are ready:';
       ls -lh /drivers;
       "
@@ -116,6 +123,56 @@ services:
       timeout: 5s
       retries: 5
 
+  # ==================== IvorySQL 目标库 ====================
+  ivorysql:
+    image: ivorysql/ivorysql:3.1
+    container_name: proxy-target-ivorysql
+    environment:
+      POSTGRES_USER: sdtpu
+      POSTGRES_PASSWORD: pg_password
+      POSTGRES_DB: mydb
+    ports:
+      - "5435:5432"
+    volumes:
+      - ivorysql_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sdtpu -d mydb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ==================== Oracle/达梦 目标库 ====================
+  dm8:
+    image: xuxuclassmate/dameng-dm8:latest
+    container_name: proxy-target-dm8
+    environment:
+      PAGE_SIZE: 16
+      CASE_SENSITIVE: 0
+    ports:
+      - "5236:5236"
+    volumes:
+      - dm8_data:/opt/dmdbms/data
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/5236'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ==================== Apache Doris 目标库 ====================
+  doris:
+    image: selectdb/doris-all-in-one:2.0.0
+    container_name: proxy-target-doris
+    ports:
+      - "9030:9030"
+      - "8030:8030"
+    volumes:
+      - doris_data:/opt/apache-doris/fe/doris-meta
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/9030'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   # ==================== SDT Proxy 实例 ====================
   sdtp:
     build:
@@ -142,6 +199,12 @@ services:
       oracle:
         condition: service_healthy
       sqlserver:
+        condition: service_healthy
+      ivorysql:
+        condition: service_healthy
+      dm8:
+        condition: service_healthy
+      doris:
         condition: service_healthy
 
   # ==================== Prometheus 指标抓取 ====================
@@ -200,6 +263,9 @@ volumes:
   mysql_data:
   oracle_data:
   sqlserver_data:
+  ivorysql_data:
+  dm8_data:
+  doris_data:
   sdtp_logs:
   sdtp_jdbc:
   prometheus_data:

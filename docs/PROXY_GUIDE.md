@@ -502,8 +502,11 @@ mysql -h 127.0.0.1 -P 3306 -u root -pproxy_password
 - **MySQL 8.0** 目标库（端口 33066）
 - **Oracle 23c Free** 目标库（端口 1521）
 - **SQL Server 2022** 目标库（端口 1433）
+- **IvorySQL 3.1** 目标库（端口 5435，兼容 Oracle 协议的 PostgreSQL 分支）
+- **达梦数据库 (dm8)** 目标库（端口 5236，Oracle 方言组国产数据库）
+- **Apache Doris 2.0.0** 目标库（端口 9030，MySQL 协议分析型数据库）
 - **SDT Proxy**（端口 3306）
-- **init-drivers**（动态自动下载上述所有的数据库 JDBC 驱动包并挂载给 Proxy 代理）
+- **init-drivers**（动态自动从阿里云镜像源下载上述所有的数据库 JDBC 驱动包并挂载给 Proxy 代理）
 
 Docker 专用配置：`sdtp-server/src/main/resources/proxy-config-docker.yml`
 

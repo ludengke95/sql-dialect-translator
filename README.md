@@ -73,7 +73,7 @@ mysql -h 127.0.0.1 -P 3306 -u root -pproxy_password mydb
 
 | 方言组 | 数据库 |
 |--------|--------|
-| PostgreSQL | PostgreSQL、HighGo、KingbaseES、PolarDB PG、Greenplum、TimescaleDB、PostGIS、IvorySQL、QuestDB、KaiwuDB |
+| PostgreSQL | PostgreSQL、HighGo、KingbaseES、PolarDB PG、Greenplum、IvorySQL、KaiwuDB |
 | MySQL | MySQL、Doris、PolarDB MySQL |
 | Oracle | Oracle、Oracle RAC、Oracle Spatial、DM（达梦） |
 | SQL Server | SQL Server |
