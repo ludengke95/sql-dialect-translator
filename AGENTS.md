@@ -8,7 +8,7 @@
 - **入口点**：
   - JDBC 驱动：`com.translator.jdbc.TranslatorDriver` — SPI 注册的 `java.sql.Driver`（`sdt-jdbc` 模块）
   - SDT Proxy：`com.translator.proxy.server.ProxyBootstrap` — Netty `main()`（`sdtp-server` 模块）
-- **Docker**：根目录 `Dockerfile`，`docker-compose.yml` 用于本地启动 Proxy + Postgres。
+- **Docker**：`docker` 目录 `Dockerfile`，`docker-compose.yml` 用于本地启动 Proxy + 数据库。
 
 ## 命令
 
@@ -18,8 +18,8 @@
 | 运行所有测试 | `mvn test` |
 | 运行单个测试类 | `mvn test -Dtest=SqlTranslatorTest` |
 | 运行单个模块 | `mvn test -pl sdtp-backend -am` |
-| Docker 构建 | `docker compose build` |
-| Docker 启动 | `docker compose up` |
+| Docker 构建 | `docker compose -f docker/docker-compose.yml build` |
+| Docker 启动 | `docker compose -f docker/docker-compose.yml up` |
 
 ## 架构
 

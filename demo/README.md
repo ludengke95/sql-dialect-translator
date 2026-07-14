@@ -16,10 +16,10 @@
 
 ### 1. 启动底层数据库与 Proxy 代理
 本示例依赖一个 PostgreSQL 实例作为目标存储数据库。Proxy 模式下还需要运行 Netty 代理服务端。
-我们在项目根目录提供了 `docker-compose.yml`，可以通过以下命令快速一键拉起所需环境（请确保 Docker 服务已启动）：
+我们在项目 `docker` 目录提供了 `docker-compose.yml`，可以通过以下命令快速一键拉起所需环境（请确保 Docker 服务已启动）：
 ```bash
 # 在项目根目录下执行
-docker compose up -d
+docker compose -f docker/docker-compose.yml up -d
 ```
 这会拉起：
 - **PostgreSQL**：监听本地 `5432` 端口，数据库名为 `mydb`，用户名 `sdtpu`，密码 `pg_password`。

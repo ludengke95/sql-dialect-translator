@@ -40,7 +40,6 @@
             <artifactId>slf4j-simple</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- JDBC 驱动（显式覆盖父POM的test scope，确保 maven-dependency-plugin 复制到 target/lib/） -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
@@ -115,7 +114,7 @@
                         <configuration>
                             <outputDirectory>${project.build.directory}/jdbc</outputDirectory>
                             <includeScope>runtime</includeScope>
-                            <includeGroupIds>org.postgresql,com.mysql</includeGroupIds>
+                            <includeGroupIds>org.postgresql</includeGroupIds>
                         </configuration>
                     </execution>
                 </executions>

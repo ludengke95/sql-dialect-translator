@@ -6,12 +6,36 @@ proxy:
     password: proxy_password
 
 backends:
-  - name: mydb
+  - name: pg_db
     dialect: POSTGRESQL
     jdbc-url: jdbc:postgresql://postgres:5432/mydb
     username: sdtpu
     password: pg_password
-    max-pool-size: 20
+    max-pool-size: 10
+    min-idle: 2
+
+  - name: mysql_db
+    dialect: MYSQL
+    jdbc-url: jdbc:mysql://mysql:3306/mydb?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true
+    username: sdtpu
+    password: mysql_password
+    max-pool-size: 10
+    min-idle: 2
+
+  - name: oracle_db
+    dialect: ORACLE
+    jdbc-url: jdbc:oracle:thin:@oracle:1521/FREE
+    username: sdtpu
+    password: oracle_password
+    max-pool-size: 10
+    min-idle: 2
+
+  - name: sqlserver_db
+    dialect: SQLSERVER
+    jdbc-url: jdbc:sqlserver://sqlserver:1433;databaseName=master;encrypt=false
+    username: sa
+    password: Sqlserver_password123
+    max-pool-size: 10
     min-idle: 2
 
 # SQL 翻译配置
