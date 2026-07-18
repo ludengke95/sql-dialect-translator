@@ -191,15 +191,18 @@ jobs:
 
       # ====================================================================
       # 7. 在 MySQL 后端创建表结构并加载数据
+      #    说明：用 pymysql（step 6 已安装）执行 schema，避免依赖 runner 上未预装的 mysql CLI
       # ====================================================================
       - name: Create TPC-H / TPC-C tables on MySQL backend
         run: |
-          mysql -h 127.0.0.1 -P ${{ inputs.mysql_port }} -u root -p${{ inputs.mysql_password }} \
-            -e "CREATE DATABASE IF NOT EXISTS tpch; CREATE DATABASE IF NOT EXISTS tpcc;"
-          mysql -h 127.0.0.1 -P ${{ inputs.mysql_port }} -u root -p${{ inputs.mysql_password }} tpch \
-            < benchmark/tpch/schema_mysql.sql
-          mysql -h 127.0.0.1 -P ${{ inputs.mysql_port }} -u root -p${{ inputs.mysql_password }} tpcc \
-            < benchmark/tpcc/schema_mysql.sql
+          python benchmark/mysql_schema.py \
+            --mysql-host 127.0.0.1 --mysql-port ${{ inputs.mysql_port }} \
+            --mysql-user root --mysql-password ${{ inputs.mysql_password }} \
+            --mysql-db tpch --schema-file benchmark/tpch/schema_mysql.sql
+          python benchmark/mysql_schema.py \
+            --mysql-host 127.0.0.1 --mysql-port ${{ inputs.mysql_port }} \
+            --mysql-user root --mysql-password ${{ inputs.mysql_password }} \
+            --mysql-db tpcc --schema-file benchmark/tpcc/schema_mysql.sql
 
       - name: Load TPC-H / TPC-C data into MySQL backend
         run: |
