@@ -1,0 +1,120 @@
+# =============================================================================
+# SDTP 集成测试（PG 前端 / MySQL 后端）
+#
+# 与 sdtp-integration-test.yml 互为反向：
+#   sdtp-integration-test.yml   : 前端=MySQL, 后端=PostgreSQL
+#   sdtp-pg-integration-test.yml: 前端=PostgreSQL, 后端=MySQL   <-- 本文件
+#
+# 验证 SDTP 伪装为 PostgreSQL 服务端（前端=PG），将 SQL 翻译转发到 MySQL
+# 后端（backend=MySQL）能够跑通。公共逻辑见 integration-test-pg-job.yml。
+#
+# 测试 job:
+#   1. build       — Maven 构建 + SDTP / python-pg Docker 镜像
+#   2. pg-client    — 原生 postgres 镜像的 psql 客户端
+#   3. python-pg    — psycopg2 容器化客户端
+# =============================================================================
+
+name: SDTP PG Integration Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# ============================================================================
+# Job 1: 统一构建 — Maven + SDTP 镜像 + python-pg 镜像
+# ============================================================================
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build SDTP with Maven
+        run: mvn clean package -DskipTests -B
+
+      - name: Build SDTP Docker image
+        run: docker build -t sdtp:latest .
+
+      - name: Save SDTP Docker image
+        run: docker save sdtp:latest | gzip > /tmp/sdtp-image.tar.gz
+
+      - name: Upload SDTP Docker image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdtp-docker-image
+          path: /tmp/sdtp-image.tar.gz
+          retention-days: 1
+
+      # --- python-pg (psycopg2) 客户端镜像 ---
+      - name: Build python-pg Docker image
+        run: |
+          docker build -t python-pg:latest \
+            -f benchmark/python-pg/Dockerfile.python-pg \
+            benchmark/python-pg/
+
+      - name: Save python-pg Docker image
+        run: docker save python-pg:latest | gzip > /tmp/python-pg.tar.gz
+
+      - name: Upload python-pg Docker image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-pg-docker-image
+          path: /tmp/python-pg.tar.gz
+          retention-days: 1
+
+  # ==========================================================================
+  # Job 2: psql 原生客户端（postgres 镜像自带 psql）
+  # ==========================================================================
+  pg-client:
+    needs: [build]
+    uses: ./.github/workflows/integration-test-pg-job.yml
+    with:
+      test_mode: pg-client
+      sdtp_user: sdtpu
+      sdtp_password: pg_password
+      sdtp_db: tpch
+      sdtp_port: '5432'
+      mysql_user: root
+      mysql_password: proxy_password
+      mysql_db: tpch
+      mysql_port: '3306'
+      report_name: pg-client-reports
+      summary_title: PG Client (psql) 测试结果
+
+  # ==========================================================================
+  # Job 3: Python psycopg2 客户端（容器化）
+  # ==========================================================================
+  python-pg:
+    needs: [build]
+    uses: ./.github/workflows/integration-test-pg-job.yml
+    with:
+      test_mode: python-pg
+      sdtp_user: sdtpu
+      sdtp_password: pg_password
+      sdtp_db: tpch
+      sdtp_port: '5432'
+      mysql_user: root
+      mysql_password: proxy_password
+      mysql_db: tpch
+      mysql_port: '3306'
+      extra_docker_image_artifact: python-pg-docker-image
+      extra_docker_image_file: python-pg.tar.gz
+      report_name: python-pg-reports
+      summary_title: Python psycopg2 测试结果

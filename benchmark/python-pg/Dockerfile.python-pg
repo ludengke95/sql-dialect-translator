@@ -1,0 +1,14 @@
+# Python 3.10 + psycopg2 集成测试镜像
+# 用于通过 Docker 容器以 PostgreSQL 客户端协议对 SDTP（前端=PG）执行集成测试
+FROM python:3.10-slim
+
+LABEL description="Python PostgreSQL (psycopg2) 集成测试镜像"
+
+RUN pip install --no-cache-dir psycopg2-binary
+
+# 多语句 SQL 执行器脚本（输出 JSON 结果，与 mysql 版本兼容）
+COPY run_sql.py /app/run_sql.py
+
+WORKDIR /app
+
+ENTRYPOINT ["python", "/app/run_sql.py"]

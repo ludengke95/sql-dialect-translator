@@ -1,0 +1,266 @@
+# =============================================================================
+# SDTP 集成测试（PG 前端 / MySQL 后端）— 可复用工作流
+#
+# 与 integration-test-job.yml 互为反向：
+#   integration-test-job.yml : 前端=MySQL, 后端=PostgreSQL
+#   integration-test-pg-job.yml: 前端=PostgreSQL, 后端=MySQL   <-- 本文件
+#
+# SDTP 伪装为 PostgreSQL 服务端（监听 5432），将 PG 线协议 / 系统目录 /
+# 认证与后端 MySQL 方言执行解耦；测试客户端以 PostgreSQL 客户端（psql /
+# psycopg2）连接 SDTP，SDTP 将 SQL 翻译为 MySQL 转发到后端。
+#
+# 被 sdtp-pg-integration-test.yml 调用，通过 inputs 参数化客户端模式。
+# =============================================================================
+
+name: SDTP PG Integration Test Job
+
+on:
+  workflow_call:
+    inputs:
+      test_mode:
+        description: '测试模式 (pg-client, python-pg)'
+        type: string
+        required: true
+      sdtp_user:
+        description: 'SDTP PG 前端用户名'
+        type: string
+        required: true
+      sdtp_password:
+        description: 'SDTP PG 前端密码'
+        type: string
+        required: true
+      sdtp_db:
+        description: 'SDTP PG 前端默认数据库名'
+        type: string
+        required: true
+      sdtp_port:
+        description: 'SDTP PG 前端监听端口'
+        type: string
+        required: true
+        default: '5432'
+      mysql_user:
+        description: 'MySQL 后端用户'
+        type: string
+        required: true
+      mysql_password:
+        description: 'MySQL 后端密码'
+        type: string
+        required: true
+      mysql_db:
+        description: 'MySQL 后端数据库名'
+        type: string
+        required: true
+      mysql_port:
+        description: 'MySQL 后端端口'
+        type: string
+        required: true
+        default: '3306'
+      extra_docker_image_artifact:
+        description: '额外 Docker 镜像 artifact 名称（python-pg 模式需要）'
+        type: string
+        required: false
+        default: ''
+      extra_docker_image_file:
+        description: '额外 Docker 镜像 tar.gz 文件名'
+        type: string
+        required: false
+        default: ''
+      report_name:
+        description: '测试报告 artifact 名称'
+        type: string
+        required: true
+      summary_title:
+        description: 'Step Summary 标题'
+        type: string
+        required: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # MySQL 作为后端（反向于 integration-test-job.yml 的 postgres 后端）
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ${{ inputs.mysql_password }}
+          MYSQL_DATABASE: ${{ inputs.mysql_db }}
+        ports:
+          - '${{ inputs.mysql_port }}:3306'
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -u root -p${{ inputs.mysql_password }}"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      # ====================================================================
+      # 1. 检出代码
+      # ====================================================================
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ====================================================================
+      # 2. 下载 SDTP Docker 镜像
+      # ====================================================================
+      - name: Download SDTP Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: sdtp-docker-image
+          path: /tmp/
+
+      # ====================================================================
+      # 3. 下载额外 Docker 镜像（python-pg 模式）
+      # ====================================================================
+      - name: Download extra Docker image
+        if: inputs.extra_docker_image_artifact != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.extra_docker_image_artifact }}
+          path: /tmp/
+
+      # ====================================================================
+      # 4. 加载 Docker 镜像
+      # ====================================================================
+      - name: Load Docker images
+        run: |
+          gunzip -c /tmp/sdtp-image.tar.gz | docker load
+          if [[ -n "${{ inputs.extra_docker_image_file }}" ]]; then
+            gunzip -c "/tmp/${{ inputs.extra_docker_image_file }}" | docker load
+          fi
+
+      # ====================================================================
+      # 5. 创建 SDTP 配置并启动（前端=PG / 后端=MySQL）
+      # ====================================================================
+      - name: Create SDTP config and start
+        run: |
+          cat > /tmp/sdtp-config.yml << 'YAML'
+          proxy:
+            port: ${{ inputs.sdtp_port }}
+            frontend: POSTGRESQL
+            auth:
+              user: ${{ inputs.sdtp_user }}
+              password: ${{ inputs.sdtp_password }}
+          backends:
+            - name: tpch
+              dialect: MYSQL
+              jdbc-url: jdbc:mysql://host.docker.internal:${{ inputs.mysql_port }}/tpch?useSSL=false&characterEncoding=utf8
+              username: root
+              password: ${{ inputs.mysql_password }}
+              max-pool-size: 10
+              min-idle: 2
+            - name: tpcc
+              dialect: MYSQL
+              jdbc-url: jdbc:mysql://host.docker.internal:${{ inputs.mysql_port }}/tpcc?useSSL=false&characterEncoding=utf8
+              username: root
+              password: ${{ inputs.mysql_password }}
+              max-pool-size: 10
+              min-idle: 2
+          translation:
+            keyword-case: UPPER
+            identifier-case: LOWER
+          YAML
+
+          docker run -d --name sdtp \
+            --add-host host.docker.internal:host-gateway \
+            -p ${{ inputs.sdtp_port }}:5432 \
+            -v /tmp/sdtp-config.yml:/opt/sdtp/config/proxy-config.yml \
+            sdtp:latest
+
+          echo "等待 SDTP 启动..."
+          for i in $(seq 1 30); do
+            if docker logs sdtp 2>&1 | grep -qi "started\|listening\|POSTGRESQL"; then
+              echo "SDTP 就绪 (尝试 $i)"
+              break
+            fi
+            sleep 3
+          done
+          docker logs sdtp --tail 20
+
+      # ====================================================================
+      # 6. 准备 Python 环境（数据生成 / 后端建表）
+      # ====================================================================
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install backend deps
+        run: pip install pymysql
+
+      # ====================================================================
+      # 7. 在 MySQL 后端创建表结构并加载数据
+      # ====================================================================
+      - name: Create TPC-H / TPC-C tables on MySQL backend
+        run: |
+          mysql -h 127.0.0.1 -P ${{ inputs.mysql_port }} -u root -p${{ inputs.mysql_password }} \
+            -e "CREATE DATABASE IF NOT EXISTS tpch; CREATE DATABASE IF NOT EXISTS tpcc;"
+          mysql -h 127.0.0.1 -P ${{ inputs.mysql_port }} -u root -p${{ inputs.mysql_password }} tpch \
+            < benchmark/tpch/schema_mysql.sql
+          mysql -h 127.0.0.1 -P ${{ inputs.mysql_port }} -u root -p${{ inputs.mysql_password }} tpcc \
+            < benchmark/tpcc/schema_mysql.sql
+
+      - name: Load TPC-H / TPC-C data into MySQL backend
+        run: |
+          python benchmark/tpch/load_mysql.py \
+            --mysql-host 127.0.0.1 --mysql-port ${{ inputs.mysql_port }} \
+            --mysql-user root --mysql-password ${{ inputs.mysql_password }} \
+            --mysql-db tpch --scale 0.01 --schema tpch
+          python benchmark/tpcc/load_mysql.py \
+            --mysql-host 127.0.0.1 --mysql-port ${{ inputs.mysql_port }} \
+            --mysql-user root --mysql-password ${{ inputs.mysql_password }} \
+            --mysql-db tpcc --warehouses 1 --schema tpcc
+
+      # ====================================================================
+      # 8. 执行集成测试（客户端以 PostgreSQL 协议连接 SDTP）
+      # ====================================================================
+      - name: Run integration test (${{ inputs.test_mode }})
+        run: |
+          bash benchmark/run-docker-test-pg.sh \
+            --mode ${{ inputs.test_mode }} \
+            --host host.docker.internal \
+            --port ${{ inputs.sdtp_port }} \
+            --user ${{ inputs.sdtp_user }} \
+            --password ${{ inputs.sdtp_password }} \
+            --database ${{ inputs.sdtp_db }} \
+            --benchmark smoke \
+            --output-dir benchmark/reports
+          # 注：tpch/tpcc 查询目录目前为 MySQL 方言，前端=PG 时需 PG 方言版本
+          # （见 docs/pg-mock/TODO.md）。先用内置 smoke 冒烟集验证 PG->MySQL 链路。
+
+      # ====================================================================
+      # 9. 收集 SDTP 日志 & 上传报告
+      # ====================================================================
+      - name: Collect SDTP logs
+        if: always()
+        run: |
+          mkdir -p /tmp/sdtp-logs
+          docker logs sdtp > /tmp/sdtp-logs/sdtp.log 2>&1 || true
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.report_name }}
+          path: |
+            benchmark/reports/
+            /tmp/sdtp-logs/
+
+      # ====================================================================
+      # 10. 打印摘要
+      # ====================================================================
+      - name: Print summary
+        if: always()
+        run: |
+          {
+            echo "## ${{ inputs.summary_title }}"
+            echo ""
+            for report in benchmark/reports/report_*.txt; do
+              if [ -f "$report" ]; then
+                echo '```'
+                cat "$report"
+                echo '```'
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
