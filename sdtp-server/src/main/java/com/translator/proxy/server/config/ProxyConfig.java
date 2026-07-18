@@ -14,6 +14,12 @@ public class ProxyConfig {
 
     private int port = 3306;
 
+    /**
+     * 前端协议类型：MYSQL（默认）或 POSTGRESQL。
+     * 决定 Proxy 伪装成哪种数据库服务端（编解码/认证/命令分发不同）。
+     */
+    private String frontendProtocol = "MYSQL";
+
     /** MySQL 协议单包最大限制，默认 64MB */
     private int maxAllowedPacket = 67108864;
 
@@ -37,6 +43,14 @@ public class ProxyConfig {
 
     public void setPort(int port) {
         this.port = port;
+    }
+
+    public String getFrontendProtocol() {
+        return frontendProtocol;
+    }
+
+    public void setFrontendProtocol(String frontendProtocol) {
+        this.frontendProtocol = frontendProtocol;
     }
 
     public int getMaxAllowedPacket() {

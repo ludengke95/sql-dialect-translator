@@ -21,6 +21,12 @@ public class FrontendSession {
     /** 当前选择的 database，null 表示未选择 */
     private volatile String database;
 
+    /**
+     * PostgreSQL 前端使用的 search_path（逗号分隔的模式列表）。
+     * MySQL 前端不使用此字段；PG 的 {@code current_schema()} 取首个元素。
+     */
+    private volatile String searchPath;
+
     /** 当前客户端字符集编码 */
     private volatile Charset charset;
 
@@ -40,6 +46,14 @@ public class FrontendSession {
         this.charset = StandardCharsets.UTF_8;
         this.autoCommit = true;
         this.scramble = new byte[0]; // Phase 2 中由 HandshakeHandler 设置
+    }
+
+    /**
+     * 无参构造：用于单元测试或无需底层 Channel 的会话占位。
+     * channel 置为 null，其余状态与默认会话一致。
+     */
+    public FrontendSession() {
+        this(null, 0L);
     }
 
     private FrontendSession(Channel channel, long connectionId, byte[] scramble) {
@@ -70,6 +84,20 @@ public class FrontendSession {
 
     public String getDatabase() {
         return database;
+    }
+
+    /**
+     * 获取 PG 前端的 search_path（模式列表）。
+     */
+    public String getSearchPath() {
+        return searchPath;
+    }
+
+    /**
+     * 设置 PG 前端的 search_path（模式列表）。
+     */
+    public void setSearchPath(String searchPath) {
+        this.searchPath = searchPath;
     }
 
     public Charset getCharset() {

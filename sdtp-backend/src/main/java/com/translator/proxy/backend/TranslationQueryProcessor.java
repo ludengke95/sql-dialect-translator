@@ -1,5 +1,7 @@
 package com.translator.proxy.backend;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -57,8 +59,8 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
     /** 被包装的实际后端处理器 */
     private final CommandHandler.QueryProcessor delegate;
 
-    /** 源方言（始终为 MySQL——Proxy 对外伪装成 MySQL） */
-    private static final DialectType SOURCE_DIALECT = DialectType.MYSQL;
+    /** 源方言（由前端协议驱动：MySQL 前端=MYSQL，PostgreSQL 前端=POSTGRESQL） */
+    private final DialectType sourceDialect;
 
     /** 目标方言 */
     private final DialectType targetDialect;
@@ -87,7 +89,7 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
      */
     public TranslationQueryProcessor(
             CommandHandler.QueryProcessor delegate, String targetDialectId, TranslationConfig translationConfig) {
-        this(delegate, targetDialectId, translationConfig, null);
+        this(delegate, targetDialectId, translationConfig, null, DialectType.MYSQL.name());
     }
 
     /**
@@ -103,8 +105,29 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
             String targetDialectId,
             TranslationConfig translationConfig,
             String backendName) {
+        this(delegate, targetDialectId, translationConfig, backendName, DialectType.MYSQL.name());
+    }
+
+    /**
+     * 创建翻译处理器（带自定义大小写配置 + 源方言）。
+     *
+     * @param delegate          实际后端查询处理器
+     * @param targetDialectId   目标方言标识符
+     * @param translationConfig 翻译配置（关键词/标识符大小写策略）
+     * @param backendName       后端名称（用于指标打点），可为 null
+     * @param sourceDialectId   源方言标识符（前端协议决定：MYSQL / POSTGRESQL）
+     */
+    public TranslationQueryProcessor(
+            CommandHandler.QueryProcessor delegate,
+            String targetDialectId,
+            TranslationConfig translationConfig,
+            String backendName,
+            String sourceDialectId) {
         this.delegate = delegate;
-        this.enabled = !SOURCE_DIALECT.getIdentifier().equalsIgnoreCase(targetDialectId);
+        this.sourceDialect = sourceDialectId != null
+                ? DialectType.fromIdentifier(sourceDialectId)
+                : DialectType.MYSQL;
+        this.enabled = !sourceDialect.getIdentifier().equalsIgnoreCase(targetDialectId);
         this.translationConfig = translationConfig != null ? translationConfig : TranslationConfig.DEFAULT;
         if (backendName != null) {
             this.backendName = backendName;
@@ -114,12 +137,12 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
             this.targetDialect = DialectType.fromIdentifier(targetDialectId);
             log.info(
                     "SQL translation enabled: {} → {} (config: {}, backend: {})",
-                    SOURCE_DIALECT.getIdentifier(),
+                    sourceDialect.getIdentifier(),
                     targetDialect.getIdentifier(),
                     this.translationConfig,
                     this.backendName);
         } else {
-            this.targetDialect = SOURCE_DIALECT;
+            this.targetDialect = sourceDialect;
             log.info("SQL translation disabled (source == target: {}, backend: {})", targetDialectId, this.backendName);
         }
     }
@@ -180,6 +203,63 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
         SqlTranslationContext sqlCtx = new SqlTranslationContext(sql, translatedSql);
         ctx.channel().attr(SessionAttribute.SQL_CONTEXT_KEY).set(sqlCtx);
         delegate.process(ctx, translatedSql, session);
+    }
+
+    /**
+     * 带绑定参数的翻译入口（PostgreSQL 扩展查询协议）。
+     * 剥离直通标记 → 翻译 → 转发给后端处理器（携带参数）。
+     */
+    @Override
+    public void process(ChannelHandlerContext ctx, String sql, List<String> params, FrontendSession session) {
+        log.info("SQL(params={}): {}", params.size(), formatSqlForLog(sql));
+
+        // 安全保护：超长 SQL 直接直通
+        if (sql != null && sql.length() > 1024 * 1024) {
+            SqlTranslationContext sqlCtx = new SqlTranslationContext(sql, sql);
+            ctx.channel().attr(SessionAttribute.SQL_CONTEXT_KEY).set(sqlCtx);
+            delegate.process(ctx, sql, params, session);
+            return;
+        }
+
+        if (!enabled) {
+            SqlTranslationContext sqlCtx = new SqlTranslationContext(sql, sql);
+            ctx.channel().attr(SessionAttribute.SQL_CONTEXT_KEY).set(sqlCtx);
+            delegate.process(ctx, sql, params, session);
+            return;
+        }
+
+        TranslationMetrics.recordRequest(targetDialect.getIdentifier(), backendName);
+
+        String stripped = stripDirectHint(sql);
+        if (stripped != null) {
+            log.debug("Direct pass-through: {}", formatSqlForLog(stripped));
+            TranslationMetrics.recordDirect();
+            SqlTranslationContext sqlCtx = new SqlTranslationContext(sql, stripped);
+            ctx.channel().attr(SessionAttribute.SQL_CONTEXT_KEY).set(sqlCtx);
+            delegate.process(ctx, stripped, params, session);
+            return;
+        }
+
+        String translatedSql;
+        try {
+            long startNanos = System.nanoTime();
+            translatedSql = translate(sql);
+            double seconds = (System.nanoTime() - startNanos) / 1_000_000_000.0;
+            TranslationMetrics.recordSuccess();
+            TranslationMetrics.recordDuration(targetDialect.getIdentifier(), backendName, seconds);
+            log.info("Translated: {} → {}", formatSqlForLog(sql), formatSqlForLog(translatedSql));
+        } catch (Exception e) {
+            log.warn(
+                    "Translation failed for SQL: {}. Falling back to original. Error: {}",
+                    formatSqlForLog(sql),
+                    e.getMessage());
+            TranslationMetrics.recordFallback();
+            translatedSql = sql;
+        }
+
+        SqlTranslationContext sqlCtx = new SqlTranslationContext(sql, translatedSql);
+        ctx.channel().attr(SessionAttribute.SQL_CONTEXT_KEY).set(sqlCtx);
+        delegate.process(ctx, translatedSql, params, session);
     }
 
     /**
@@ -249,7 +329,7 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
         }
 
         try {
-            SqlTranslator translator = new SqlTranslator(SOURCE_DIALECT, targetDialect, translationConfig);
+            SqlTranslator translator = new SqlTranslator(sourceDialect, targetDialect, translationConfig);
             return translator.translate(sql);
         } catch (SqlTranslationException e) {
             // 翻译失败，记录日志并降级

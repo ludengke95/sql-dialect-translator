@@ -17,6 +17,11 @@
         </dependency>
         <dependency>
             <groupId>com.draven.sql.translator</groupId>
+            <artifactId>sdtp-protocol-pg</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.draven.sql.translator</groupId>
             <artifactId>sdtp-metrics</artifactId>
             <version>${project.version}</version>
         </dependency>

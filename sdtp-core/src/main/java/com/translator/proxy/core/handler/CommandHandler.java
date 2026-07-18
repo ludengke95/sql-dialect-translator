@@ -561,6 +561,21 @@ public class CommandHandler extends ChannelInboundHandlerAdapter {
          * @param session 当前会话
          */
         void process(ChannelHandlerContext ctx, String sql, FrontendSession session);
+
+        /**
+         * 处理一条带绑定参数的 SQL 查询（用于 PostgreSQL 扩展查询协议 {@code $1} 占位符）。
+         *
+         * <p>默认实现不做参数绑定（不支持时抛出 {@link UnsupportedOperationException}）。
+         * 文本协议（MySQL / PG 简单查询）以空参数列表调用本方法，等价于 {@link #process}。
+         *
+         * @param ctx     Netty 上下文
+         * @param sql     原始 SQL（文本，可能含 {@code $1} 占位符）
+         * @param params  按序号绑定的文本参数值（扩展查询协议）；文本协议传空列表
+         * @param session 当前会话
+         */
+        default void process(ChannelHandlerContext ctx, String sql, List<String> params, FrontendSession session) {
+            throw new UnsupportedOperationException("Parameterized execution is not supported by this processor");
+        }
         /**
          * 提交当前会话绑定的事务。
          */

@@ -1,23 +1,21 @@
 package com.translator.proxy.backend;
 
 import java.sql.*;
+import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.translator.metrics.BackendMetrics;
 import com.translator.proxy.backend.mapper.ResultSetEncoder;
-import com.translator.proxy.core.handler.AuthHandler;
 import com.translator.proxy.core.handler.CommandHandler;
 import com.translator.proxy.core.handler.SessionAttribute;
 import com.translator.proxy.core.handler.SqlTranslationContext;
 import com.translator.proxy.core.session.FrontendSession;
 import com.translator.proxy.metrics.HikariMetricsTrackerFactory;
-import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
-import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 
 /**
@@ -36,6 +34,10 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
     private final HikariDataSource dataSource;
     /** 后端名称（用于指标打点） */
     private volatile String backendName = "unknown";
+    /**
+     * 结果/错误写出器（协议相关）。默认 MySQL 实现，由 ProxyBootstrap 按前端协议注入（如 PgResultEncoder）。
+     */
+    private BackendResultWriter resultWriter = new MysqlResultWriter();
 
     private JdbcBackendQueryProcessor(HikariDataSource dataSource) {
         this.dataSource = dataSource;
@@ -81,6 +83,11 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
 
     @Override
     public void process(ChannelHandlerContext ctx, String sql, FrontendSession session) {
+        process(ctx, sql, java.util.Collections.<String>emptyList(), session);
+    }
+
+    @Override
+    public void process(ChannelHandlerContext ctx, String sql, List<String> params, FrontendSession session) {
         String queryType = BackendMetrics.classifyQueryType(sql);
         BackendMetrics.recordQuery(backendName, queryType);
         long startNanos = System.nanoTime();
@@ -88,6 +95,7 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
         boolean isTx = !session.isAutoCommit() || session.isInTransaction();
         Connection conn = null;
         boolean isNewConnection = false;
+        boolean useParams = params != null && !params.isEmpty();
 
         // 获取并清除 SQL 翻译审计上下文
         SqlTranslationContext transCtx =
@@ -106,18 +114,34 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
                 conn = dataSource.getConnection();
                 isNewConnection = true;
             }
-            log.debug("Executing SQL [isTx={}, isNew={}]: {}", isTx, isNewConnection, formatSqlForLog(sql));
-            try (Statement stmt = createStatement(conn)) {
-                boolean isResultSet = stmt.execute(sql);
-                if (isResultSet) {
-                    try (ResultSet rs = stmt.getResultSet()) {
-                        ResultSetEncoder.encodeAndWrite(ctx, rs, new ResultSetEncoder.SeqGenerator(), backendName);
+            log.debug("Executing SQL [isTx={}, isNew={}, params={}]: {}", isTx, isNewConnection, params.size(), formatSqlForLog(sql));
+            if (useParams) {
+                // PostgreSQL 扩展查询协议：$1 占位符通过 PreparedStatement 绑定
+                try (PreparedStatement ps = createPreparedStatement(conn, sql, params)) {
+                    boolean isResultSet = ps.execute();
+                    if (isResultSet) {
+                        try (ResultSet rs = ps.getResultSet()) {
+                            resultWriter.encodeAndWrite(ctx, rs, new ResultSetEncoder.SeqGenerator(), backendName);
+                        }
+                    } else {
+                        int updateCount = ps.getUpdateCount();
+                        resultWriter.encodeEmpty(ctx, Math.max(updateCount, 0), 0);
+                        BackendMetrics.observeAffectedRows(backendName, Math.max(updateCount, 0));
                     }
-                } else {
-                    // UPDATE/INSERT/DELETE 等
-                    int updateCount = stmt.getUpdateCount();
-                    ResultSetEncoder.encodeEmpty(ctx, Math.max(updateCount, 0), 0);
-                    BackendMetrics.observeAffectedRows(backendName, Math.max(updateCount, 0));
+                }
+            } else {
+                try (Statement stmt = createStatement(conn)) {
+                    boolean isResultSet = stmt.execute(sql);
+                    if (isResultSet) {
+                        try (ResultSet rs = stmt.getResultSet()) {
+                            resultWriter.encodeAndWrite(ctx, rs, new ResultSetEncoder.SeqGenerator(), backendName);
+                        }
+                    } else {
+                        // UPDATE/INSERT/DELETE 等
+                        int updateCount = stmt.getUpdateCount();
+                        resultWriter.encodeEmpty(ctx, Math.max(updateCount, 0), 0);
+                        BackendMetrics.observeAffectedRows(backendName, Math.max(updateCount, 0));
+                    }
                 }
             }
             double elapsed = (System.nanoTime() - startNanos) / 1_000_000_000.0;
@@ -131,7 +155,7 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
             BackendMetrics.recordError(backendName, sqlState);
             double elapsed = (System.nanoTime() - startNanos) / 1_000_000_000.0;
             BackendMetrics.recordQueryDuration(backendName, elapsed);
-            writeError(ctx, e);
+            resultWriter.writeError(ctx, e);
 
             // 记录执行错误审计日志
             logSqlTranslationRecord(ctx, transCtx, false, e.getMessage());
@@ -140,7 +164,7 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
             BackendMetrics.recordError(backendName, "HY000");
             double elapsed = (System.nanoTime() - startNanos) / 1_000_000_000.0;
             BackendMetrics.recordQueryDuration(backendName, elapsed);
-            writeError(ctx, 1105, "HY000", e.getMessage());
+            resultWriter.writeError(ctx, 1105, "HY000", e.getMessage());
 
             // 记录其它异常审计日志
             logSqlTranslationRecord(ctx, transCtx, false, e.getMessage());
@@ -155,11 +179,33 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
             }
         }
     }
+
+    /**
+     * 为带 {@code $1} 占位符的 SQL 创建 PreparedStatement 并按序号绑定文本参数。
+     */
+    private PreparedStatement createPreparedStatement(Connection conn, String sql, List<String> params) throws SQLException {
+        PreparedStatement ps = conn.prepareStatement(sql);
+        ps.setFetchSize(1000);
+        for (int i = 0; i < params.size(); i++) {
+            ps.setString(i + 1, params.get(i));
+        }
+        return ps;
+    }
     /**
      * 设置后端名称（用于指标打点）。
      */
     public void setBackendName(String backendName) {
         this.backendName = backendName;
+    }
+
+    /**
+     * 注入协议相关的结果/错误写出器（如 PG 前端的 PgResultEncoder）。
+     * 默认 MySQL 的 {@link ResultSetEncoder}。
+     */
+    public void setResultWriter(BackendResultWriter resultWriter) {
+        if (resultWriter != null) {
+            this.resultWriter = resultWriter;
+        }
     }
     /**
      * 创建 Statement 并配置流式读取。
@@ -171,22 +217,6 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
         // 对于大结果集，驱动内部会用游标分批获取。
         stmt.setFetchSize(1000);
         return stmt;
-    }
-    // ==================== 错误处理 ====================
-    private void writeError(ChannelHandlerContext ctx, SQLException e) {
-        int errorCode = e.getErrorCode();
-        String sqlState = e.getSQLState();
-        String message = e.getMessage();
-        writeError(
-                ctx,
-                errorCode != 0 ? errorCode : 1105,
-                sqlState != null ? sqlState : "HY000",
-                message != null ? message : "Unknown SQL error");
-    }
-
-    private void writeError(ChannelHandlerContext ctx, int errorCode, String sqlState, String message) {
-        ByteBuf err = AuthHandler.buildErrPacket(ctx.alloc(), errorCode, sqlState, message);
-        ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(err, (byte) 1));
     }
 
     @Override

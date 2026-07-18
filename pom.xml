@@ -12,6 +12,7 @@
         <module>sdt-core</module>
         <module>sdt-jdbc</module>
         <module>sdtp-protocol</module>
+        <module>sdtp-protocol-pg</module>
         <module>sdtp-core</module>
         <module>sdtp-backend</module>
         <module>sdtp-server</module>

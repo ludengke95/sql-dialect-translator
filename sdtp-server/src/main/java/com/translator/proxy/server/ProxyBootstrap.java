@@ -10,6 +10,8 @@ import com.translator.core.config.TranslationConfig;
 import com.translator.metrics.MetricsConfig;
 import com.translator.proxy.backend.BackendEntry;
 import com.translator.proxy.backend.BackendPoolManager;
+import com.translator.proxy.protocol.pg.PgResponseWriter;
+import com.translator.proxy.core.frontend.FrontendProtocol;
 import com.translator.proxy.core.handler.BackendRouter;
 import com.translator.proxy.core.handler.CommandHandler;
 import com.translator.proxy.core.handler.HandshakeHandler;
@@ -17,6 +19,8 @@ import com.translator.proxy.core.handler.NettyMetricsHandler;
 import com.translator.proxy.metrics.MetricsModule;
 import com.translator.proxy.protocol.codec.MySQLPacketDecoder;
 import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
+import com.translator.proxy.protocol.pg.PgProtocol;
+import com.translator.proxy.protocol.pg.PostgreSqlFrontendProtocol;
 import com.translator.proxy.server.config.ConfigLoader;
 import com.translator.proxy.server.config.ConfigWatcher;
 import com.translator.proxy.server.config.ProxyConfig;
@@ -94,9 +98,21 @@ public class ProxyBootstrap {
             backends.add(ConfigWatcher.toBackendEntry(tc));
         }
 
+        // 解析前端协议（MYSQL 默认；POSTGRESQL 启用 PG 前端管线）
+        boolean pgFrontend = "POSTGRESQL".equalsIgnoreCase(config.getFrontendProtocol());
+        FrontendProtocol frontendProtocol = pgFrontend ? new PostgreSqlFrontendProtocol() : null;
+
         // 初始化多后端连接池管理器（传入 reload 参数）
-        backendPoolManager = new BackendPoolManager(
-                backends, defaultTranslationConfig, config.getReloadQueueCapacity(), config.getReloadDrainTimeoutMs());
+        backendPoolManager = pgFrontend
+                ? new BackendPoolManager(
+                        backends,
+                        defaultTranslationConfig,
+                        config.getReloadQueueCapacity(),
+                        config.getReloadDrainTimeoutMs(),
+                        new PgResponseWriter(),
+                        "POSTGRESQL")
+                : new BackendPoolManager(
+                        backends, defaultTranslationConfig, config.getReloadQueueCapacity(), config.getReloadDrainTimeoutMs());
 
         // 将路由器注入 CommandHandler
         CommandHandler.setBackendRouter(backendPoolManager);
@@ -124,22 +140,39 @@ public class ProxyBootstrap {
                         @Override
                         protected void initChannel(SocketChannel ch) {
                             ChannelPipeline pipeline = ch.pipeline();
-
                             pipeline.addLast("nettyMetrics", new NettyMetricsHandler());
-                            pipeline.addLast("decoder", new MySQLPacketDecoder(config.getMaxAllowedPacket()));
-                            pipeline.addLast("encoder", new MySQLPacketEncoder());
-
                             pipeline.addLast("idleHandler", new IdleStateHandler(28800, 28800, 0));
 
-                            pipeline.addLast(
-                                    "handshakeHandler",
-                                    new HandshakeHandler(cachedAuthUser, cachedAuthPassword, bizExecutorGroup));
+                            if (pgFrontend && frontendProtocol != null) {
+                                // PostgreSQL 前端管线
+                                pipeline.addLast("decoder", frontendProtocol.newDecoder(config.getMaxAllowedPacket()));
+                                pipeline.addLast("encoder", frontendProtocol.newEncoder());
+                                pipeline.addLast(
+                                        "handshakeHandler",
+                                        frontendProtocol.newHandshakeHandler(
+                                                cachedAuthUser, cachedAuthPassword, bizExecutorGroup, backendPoolManager));
+                            } else {
+                                // MySQL 前端管线（默认，保持原行为零回归）
+                                pipeline.addLast("decoder", new MySQLPacketDecoder(config.getMaxAllowedPacket()));
+                                pipeline.addLast("encoder", new MySQLPacketEncoder());
+                                pipeline.addLast(
+                                        "handshakeHandler",
+                                        new HandshakeHandler(cachedAuthUser, cachedAuthPassword, bizExecutorGroup));
+                            }
                         }
                     });
 
-            ChannelFuture future = bootstrap.bind(config.getPort()).sync();
+            // 端口自适应：PG 前端且未显式设置端口时默认 5432（MySQL 默认 3306）
+            int bindPort = config.getPort();
+            if (pgFrontend && bindPort == 3306) {
+                bindPort = PgProtocol.DEFAULT_PORT;
+            }
+
+            ChannelFuture future = bootstrap.bind(bindPort).sync();
             log.info("========================================");
-            log.info("  MySQL Proxy started on port {}", config.getPort());
+            log.info(
+                    "  SDT Proxy ({}) started on port {}",
+                    pgFrontend ? "POSTGRESQL frontend" : "MySQL frontend", bindPort);
             log.info(
                     "  Backends: {} configured",
                     backendPoolManager.getBackendNames().size());
@@ -198,7 +231,7 @@ public class ProxyBootstrap {
         if (workerGroup != null) {
             workerGroup.shutdownGracefully();
         }
-        log.info("MySQL Proxy stopped.");
+        log.info("SDT Proxy stopped.");
     }
 
     public static void main(String[] args) throws Exception {

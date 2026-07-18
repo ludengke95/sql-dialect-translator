@@ -112,6 +112,7 @@ public final class ResultSetEncoder {
         ok.writeShortLE(0); // warnings
         ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(ok, (byte) 1));
     }
+
     // ==================== Column Definition Builder ====================
     private static ByteBuf buildColumnDef(ChannelHandlerContext ctx, ResultSetMetaData meta, int colIndex)
             throws SQLException {

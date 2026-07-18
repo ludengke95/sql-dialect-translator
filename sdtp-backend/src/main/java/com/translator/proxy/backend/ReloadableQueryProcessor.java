@@ -1,5 +1,7 @@
 package com.translator.proxy.backend;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -98,15 +100,34 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
 
     @Override
     public void process(ChannelHandlerContext ctx, String sql, FrontendSession session) {
+        route(ctx, sql, Collections.emptyList(), session);
+    }
+
+    @Override
+    public void process(ChannelHandlerContext ctx, String sql, List<String> params, FrontendSession session) {
+        route(ctx, sql, params, session);
+    }
+
+    /**
+     * 统一的请求路由：根据当前状态将请求派发给 delegate 或排队。
+     * 简单查询（无参数）与扩展查询（带参数）共用同一路由逻辑。
+     */
+    private void route(ChannelHandlerContext ctx, String sql, List<String> params, FrontendSession session) {
         inFlightCount.incrementAndGet();
         try {
             State s = state.get();
             switch (s) {
                 case ACTIVE:
-                    delegate.process(ctx, sql, session);
+                    // 无参数时走 3 参简单查询路径，兼容未实现参数化执行的既有处理器；
+                    // 仅当存在真实参数（PG 扩展查询 $1）时才走 4 参路径。
+                    if (params.isEmpty()) {
+                        delegate.process(ctx, sql, session);
+                    } else {
+                        delegate.process(ctx, sql, params, session);
+                    }
                     break;
                 case RELOADING:
-                    enqueue(ctx, sql, session);
+                    enqueue(ctx, sql, params, session);
                     break;
                 case DRAINING:
                     writeError(ctx, "Server shutdown in progress, backend '" + backendName + "' is being removed");
@@ -221,7 +242,11 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
         while ((pr = pendingQueue.poll()) != null) {
             inFlightCount.incrementAndGet();
             try {
-                newDelegate.process(pr.ctx, pr.sql, pr.session);
+                if (pr.params.isEmpty()) {
+                    newDelegate.process(pr.ctx, pr.sql, pr.session);
+                } else {
+                    newDelegate.process(pr.ctx, pr.sql, pr.params, pr.session);
+                }
             } catch (Exception e) {
                 log.error("Backend '{}': error processing queued request: {}", backendName, e.getMessage());
                 writeError(pr.ctx, "Backend reload completed but request failed: " + e.getMessage());
@@ -260,8 +285,8 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
     /**
      * 将请求放入等待队列；队列满时返回错误。
      */
-    private void enqueue(ChannelHandlerContext ctx, String sql, FrontendSession session) {
-        PendingRequest pr = new PendingRequest(ctx, sql, session);
+    private void enqueue(ChannelHandlerContext ctx, String sql, List<String> params, FrontendSession session) {
+        PendingRequest pr = new PendingRequest(ctx, sql, params, session);
         if (!pendingQueue.offer(pr)) {
             log.warn(
                     "Backend '{}': reload queue full (capacity={}), rejecting request",
@@ -313,11 +338,13 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
     private static class PendingRequest {
         final ChannelHandlerContext ctx;
         final String sql;
+        final List<String> params;
         final FrontendSession session;
 
-        PendingRequest(ChannelHandlerContext ctx, String sql, FrontendSession session) {
+        PendingRequest(ChannelHandlerContext ctx, String sql, List<String> params, FrontendSession session) {
             this.ctx = ctx;
             this.sql = sql;
+            this.params = params;
             this.session = session;
         }
     }

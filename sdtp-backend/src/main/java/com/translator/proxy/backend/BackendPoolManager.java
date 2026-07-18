@@ -9,6 +9,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.translator.core.config.TranslationConfig;
+import com.translator.proxy.backend.BackendResultWriter;
+import com.translator.proxy.backend.MysqlResultWriter;
 import com.translator.proxy.core.handler.BackendRouter;
 import com.translator.proxy.core.handler.CommandHandler;
 import com.translator.proxy.core.session.FrontendSession;
@@ -43,6 +45,12 @@ public class BackendPoolManager implements BackendRouter {
     /** reload drain 超时（毫秒） */
     private final int reloadDrainTimeoutMs;
 
+    /** 后端结果写出器（协议相关）：PG 前端传 PgResultWriter，MySQL 传默认 MysqlResultWriter */
+    private final BackendResultWriter resultWriter;
+
+    /** 源方言 id（前端协议决定：MYSQL / POSTGRESQL），供翻译层决定 SQL 解析口径 */
+    private final String sourceDialect;
+
     /**
      * 创建管理器并初始化所有后端连接池（兼容旧接口，使用默认 reload 参数）。
      *
@@ -61,14 +69,37 @@ public class BackendPoolManager implements BackendRouter {
      * @param reloadQueueCapacity     reload 请求队列容量
      * @param reloadDrainTimeoutMs    reload drain 超时（毫秒）
      */
+    /**
+     * MySQL 默认路径：结果写出器为 {@link MysqlResultWriter}，源方言为 MYSQL（保持零回归）。
+     */
     public BackendPoolManager(
             List<BackendEntry> backends,
             TranslationConfig defaultTranslationConfig,
             int reloadQueueCapacity,
             int reloadDrainTimeoutMs) {
+        this(backends, defaultTranslationConfig, reloadQueueCapacity, reloadDrainTimeoutMs,
+                new MysqlResultWriter(), "MYSQL");
+    }
+
+    /**
+     * 完整构造：允许指定前端协议相关的结果写出器与源方言。
+     *
+     * @param resultWriter  后端结果写出器（PG 前端传 {@code PgResultWriter}，MySQL 传默认）
+     * @param sourceDialect 源方言 id（前端协议决定：MYSQL / POSTGRESQL），
+     *                       用于 {@link TranslationQueryProcessor} 决定 SQL 解析口径
+     */
+    public BackendPoolManager(
+            List<BackendEntry> backends,
+            TranslationConfig defaultTranslationConfig,
+            int reloadQueueCapacity,
+            int reloadDrainTimeoutMs,
+            BackendResultWriter resultWriter,
+            String sourceDialect) {
         this.defaultTranslationConfig = defaultTranslationConfig;
         this.reloadQueueCapacity = reloadQueueCapacity;
         this.reloadDrainTimeoutMs = reloadDrainTimeoutMs;
+        this.resultWriter = resultWriter;
+        this.sourceDialect = sourceDialect != null ? sourceDialect : "MYSQL";
 
         for (BackendEntry be : backends) {
             String name = be.getName();
@@ -256,15 +287,17 @@ public class BackendPoolManager implements BackendRouter {
                 be.getPassword(),
                 be.getMaxPoolSize(),
                 be.getMinIdle());
+        jdbcProcessor.setResultWriter(resultWriter);
 
         TranslationConfig tc = resolveTranslationConfig(be);
+        String target = be.getDialect();
 
-        // 包装翻译装饰器
-        if (be.getDialect() != null && !be.getDialect().equalsIgnoreCase("MYSQL")) {
-            return new TranslationQueryProcessor(jdbcProcessor, be.getDialect(), tc, be.getName());
-        } else {
-            return jdbcProcessor;
+        // 源方言与目标方言不同 → 启用翻译（PG 前端→MySQL 后端、MySQL 前端→PG 后端）
+        boolean translate = target != null && !sourceDialect.equalsIgnoreCase(target);
+        if (translate) {
+            return new TranslationQueryProcessor(jdbcProcessor, target, tc, be.getName(), sourceDialect);
         }
+        return jdbcProcessor;
     }
 
     /**
