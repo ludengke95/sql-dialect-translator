@@ -77,3 +77,9 @@ logs/
 # Python
 __pycache__/
 *.pyc
+
+# === Local build helpers (offline Maven workaround) ===
+# 离线环境下由 dependency:build-classpath 生成的 classpath 快照，非源码
+sdtp-protocol-pg/cp.txt
+# 本地离线 Maven 启动封装脚本（含环境相关路径，不宜入库）
+run-mvn.sh
