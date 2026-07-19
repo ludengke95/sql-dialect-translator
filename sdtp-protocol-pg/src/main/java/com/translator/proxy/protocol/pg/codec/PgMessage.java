@@ -37,7 +37,7 @@ public class PgMessage {
 
     @Override
     public String toString() {
-        return "PgMessage{type=" + (char) type + ", payloadLen="
-                + (payload != null ? payload.readableBytes() : 0) + "}";
+        return "PgMessage{type=" + (char) type + ", payloadLen=" + (payload != null ? payload.readableBytes() : 0)
+                + "}";
     }
 }

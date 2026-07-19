@@ -9,11 +9,10 @@ import com.translator.metrics.ConnectionMetrics;
 import com.translator.proxy.core.handler.SessionAttribute;
 import com.translator.proxy.core.session.FrontendSession;
 import com.translator.proxy.protocol.mysql.codec.MySQLPacketDecoder;
-import com.translator.proxy.protocol.mysql.codec.MySQLPacketEncoder;
-import com.translator.proxy.protocol.mysql.constant.CapabilityFlags;
-import com.translator.proxy.protocol.mysql.util.BufferUtils;
 import com.translator.proxy.protocol.mysql.command.MySQLCommandHandler;
+import com.translator.proxy.protocol.mysql.constant.CapabilityFlags;
 import com.translator.proxy.protocol.mysql.result.MySQLResponseWriter;
+import com.translator.proxy.protocol.mysql.util.BufferUtils;
 import com.translator.proxy.protocol.mysql.util.MySQLAuth;
 
 import io.netty.buffer.ByteBuf;

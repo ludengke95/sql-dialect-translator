@@ -7,7 +7,6 @@ import org.slf4j.LoggerFactory;
 
 import com.translator.proxy.protocol.frontend.ResponseWriter;
 import com.translator.proxy.protocol.mysql.codec.MySQLPacketEncoder;
-import com.translator.proxy.protocol.mysql.constant.ServerStatus;
 import com.translator.proxy.protocol.mysql.util.BufferUtils;
 
 import io.netty.buffer.ByteBuf;
@@ -26,7 +25,12 @@ public class MySQLResponseWriter implements ResponseWriter {
     private static final Logger log = LoggerFactory.getLogger(MySQLResponseWriter.class);
 
     @Override
-    public void writeOk(ChannelHandlerContext ctx, long affectedRows, long lastInsertId, int statusFlags, int warnings,
+    public void writeOk(
+            ChannelHandlerContext ctx,
+            long affectedRows,
+            long lastInsertId,
+            int statusFlags,
+            int warnings,
             String info) {
         ByteBuf ok = buildOkPacket(ctx.alloc(), affectedRows, lastInsertId, statusFlags, warnings, info);
         ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(ok, (byte) 1));
@@ -205,7 +209,8 @@ public class MySQLResponseWriter implements ResponseWriter {
         if (colLen <= 0) {
             colLen = MySQLTypeMapper.defaultColumnLengthStatic(jdbcType);
         }
-        int charset = MySQLTypeMapper.isBinaryStatic(jdbcType) ? MySQLTypeMapper.CHARSET_BINARY
+        int charset = MySQLTypeMapper.isBinaryStatic(jdbcType)
+                ? MySQLTypeMapper.CHARSET_BINARY
                 : MySQLTypeMapper.CHARSET_UTF8MB4;
         int decimals = meta.getScale(colIndex);
 

@@ -9,12 +9,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.translator.proxy.protocol.frontend.ResponseWriter;
+import com.translator.proxy.protocol.pg.codec.PgMessage;
+import com.translator.proxy.protocol.pg.codec.PgWire;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
-import com.translator.proxy.protocol.pg.codec.PgMessage;
-import com.translator.proxy.protocol.pg.codec.PgWire;
-import com.translator.proxy.protocol.pg.result.PgTypeMapper;
 
 /**
  * PostgreSQL 响应写入器 —— 将 JDBC ResultSet 编码为 PG 协议消息。
@@ -31,7 +30,12 @@ public class PgResponseWriter implements ResponseWriter {
     private final PgTypeMapper typeMapper = new PgTypeMapper();
 
     @Override
-    public void writeOk(ChannelHandlerContext ctx, long affectedRows, long lastInsertId, int statusFlags, int warnings,
+    public void writeOk(
+            ChannelHandlerContext ctx,
+            long affectedRows,
+            long lastInsertId,
+            int statusFlags,
+            int warnings,
             String info) {
         // PG 用 CommandComplete + ReadyForQuery 代替 OK
         String tag = "";
@@ -91,12 +95,12 @@ public class PgResponseWriter implements ResponseWriter {
             int typeModifier = -1;
 
             PgWire.cstr(payload, colName);
-            payload.writeInt(0);       // table OID
-            payload.writeShort(0);     // column attribute number
-            payload.writeInt(pgOid);   // data type OID
+            payload.writeInt(0); // table OID
+            payload.writeShort(0); // column attribute number
+            payload.writeInt(pgOid); // data type OID
             payload.writeShort(colLen > 0 ? colLen : 255); // type size
             payload.writeInt(typeModifier); // type modifier
-            payload.writeShort(0);     // format code (0 = text)
+            payload.writeShort(0); // format code (0 = text)
         }
 
         ctx.write(new PgMessage(PgWire.MSG_ROW_DESCRIPTION, payload));

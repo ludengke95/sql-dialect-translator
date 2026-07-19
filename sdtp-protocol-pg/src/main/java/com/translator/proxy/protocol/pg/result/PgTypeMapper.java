@@ -3,7 +3,6 @@ package com.translator.proxy.protocol.pg.result;
 import java.sql.Types;
 
 import com.translator.proxy.protocol.frontend.TypeMapper;
-import com.translator.proxy.protocol.pg.result.PgOid;
 
 /**
  * PostgreSQL 类型映射器 —— 将 JDBC 类型映射为 PG OID。

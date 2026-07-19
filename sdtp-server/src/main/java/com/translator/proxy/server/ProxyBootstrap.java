@@ -10,12 +10,12 @@ import com.translator.core.config.TranslationConfig;
 import com.translator.metrics.MetricsConfig;
 import com.translator.proxy.backend.BackendEntry;
 import com.translator.proxy.backend.BackendPoolManager;
-import com.translator.proxy.protocol.frontend.AuthConfig;
-import com.translator.proxy.protocol.frontend.FrontendProtocol;
-import com.translator.proxy.protocol.frontend.FrontendProtocols;
 import com.translator.proxy.core.handler.BackendRouter;
 import com.translator.proxy.core.handler.NettyMetricsHandler;
 import com.translator.proxy.metrics.MetricsModule;
+import com.translator.proxy.protocol.frontend.AuthConfig;
+import com.translator.proxy.protocol.frontend.FrontendProtocol;
+import com.translator.proxy.protocol.frontend.FrontendProtocols;
 import com.translator.proxy.protocol.mysql.command.MySQLCommandHandler;
 import com.translator.proxy.server.config.ConfigLoader;
 import com.translator.proxy.server.config.ConfigWatcher;
@@ -70,8 +70,11 @@ public class ProxyBootstrap {
             log.error("Failed to load frontend protocol '{}'", protocolId);
             throw e;
         }
-        log.info("Using frontend protocol: {} (id={}, port={})",
-                frontendProtocol.getClass().getSimpleName(), frontendProtocol.id(), frontendProtocol.defaultPort());
+        log.info(
+                "Using frontend protocol: {} (id={}, port={})",
+                frontendProtocol.getClass().getSimpleName(),
+                frontendProtocol.id(),
+                frontendProtocol.defaultPort());
 
         // 同步系统变量中的 max_allowed_packet
         com.translator.proxy.protocol.mysql.util.SystemVariableInterceptor.setSystemVariable(
@@ -100,8 +103,7 @@ public class ProxyBootstrap {
 
         // 初始化多后端连接池管理器
         backendPoolManager = new BackendPoolManager(
-                backends, defaultTranslationConfig, config.getReloadQueueCapacity(),
-                config.getReloadDrainTimeoutMs());
+                backends, defaultTranslationConfig, config.getReloadQueueCapacity(), config.getReloadDrainTimeoutMs());
 
         // 将路由器注入命令处理器（兼容旧 CommandHandler 和新 MySQLCommandHandler）
         MySQLCommandHandler.setBackendRouter(backendPoolManager);
@@ -154,8 +156,7 @@ public class ProxyBootstrap {
 
             ChannelFuture future = bootstrap.bind(port).sync();
             log.info("========================================");
-            log.info("  SDT Proxy started (frontend: {}) on port {}",
-                    frontendProtocol.id(), port);
+            log.info("  SDT Proxy started (frontend: {}) on port {}", frontendProtocol.id(), port);
             log.info(
                     "  Backends: {} configured",
                     backendPoolManager.getBackendNames().size());

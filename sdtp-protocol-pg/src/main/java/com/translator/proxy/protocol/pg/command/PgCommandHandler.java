@@ -7,18 +7,18 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.translator.proxy.core.handler.SessionAttribute;
 import com.translator.proxy.core.handler.QueryProcessor;
+import com.translator.proxy.core.handler.SessionAttribute;
 import com.translator.proxy.core.session.FrontendSession;
-
-import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
 import com.translator.proxy.protocol.pg.catalog.PgSystemCatalogProvider;
 import com.translator.proxy.protocol.pg.codec.PgMessage;
 import com.translator.proxy.protocol.pg.codec.PgRawMessage;
 import com.translator.proxy.protocol.pg.codec.PgWire;
 import com.translator.proxy.protocol.pg.result.PgResponseWriter;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
 
 /**
  * PostgreSQL 命令分发器 —— 处理 Simple Query 和 Extended Query。
@@ -112,7 +112,8 @@ public class PgCommandHandler extends ChannelInboundHandlerAdapter {
         String sql = payload.toString(StandardCharsets.UTF_8);
         log.debug("PG Query: {}", sql);
 
-        FrontendSession session = ctx.channel().attr(SessionAttribute.SESSION_KEY).get();
+        FrontendSession session =
+                ctx.channel().attr(SessionAttribute.SESSION_KEY).get();
 
         if (sql == null || sql.trim().isEmpty()) {
             responseWriter.sendEmptyQuery(ctx);
@@ -204,7 +205,8 @@ public class PgCommandHandler extends ChannelInboundHandlerAdapter {
         }
 
         if (sql != null) {
-            FrontendSession session = ctx.channel().attr(SessionAttribute.SESSION_KEY).get();
+            FrontendSession session =
+                    ctx.channel().attr(SessionAttribute.SESSION_KEY).get();
 
             if (systemCatalog.canHandle(sql)) {
                 systemCatalog.handleQuery(ctx, sql, session);

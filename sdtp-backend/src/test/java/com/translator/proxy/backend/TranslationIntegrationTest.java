@@ -48,8 +48,7 @@ public class TranslationIntegrationTest {
     @Test
     public void testTranslationDisabledWhenSameDialect() {
         // MySQL → MySQL：TranslationQueryProcessor 应跳过翻译
-        TranslationQueryProcessor processor =
-                new TranslationQueryProcessor(QueryProcessor.NOOP, "mysql");
+        TranslationQueryProcessor processor = new TranslationQueryProcessor(QueryProcessor.NOOP, "mysql");
 
         // 通过 NOOP 委托执行，不会抛异常
         // 由于 NOOP 会返回错误，这里只验证翻译逻辑不抛异常

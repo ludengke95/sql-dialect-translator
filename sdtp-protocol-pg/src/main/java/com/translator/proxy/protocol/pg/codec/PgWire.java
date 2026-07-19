@@ -1,7 +1,8 @@
 package com.translator.proxy.protocol.pg.codec;
 
-import io.netty.buffer.ByteBuf;
 import java.nio.charset.StandardCharsets;
+
+import io.netty.buffer.ByteBuf;
 
 /**
  * PostgreSQL 线协议常量与辅助方法。

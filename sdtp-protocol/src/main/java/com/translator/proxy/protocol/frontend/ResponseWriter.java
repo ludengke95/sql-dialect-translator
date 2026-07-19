@@ -1,9 +1,10 @@
 package com.translator.proxy.protocol.frontend;
 
-import io.netty.channel.ChannelHandlerContext;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+
+import io.netty.channel.ChannelHandlerContext;
 
 /**
  * 响应写入器接口 —— 将内部执行结果按协议格式编码并写入 Netty Channel。
@@ -23,7 +24,12 @@ public interface ResponseWriter {
      * @param warnings     警告数
      * @param info         附加信息（如 "Rows matched: 1  Changed: 1"）
      */
-    void writeOk(ChannelHandlerContext ctx, long affectedRows, long lastInsertId, int statusFlags, int warnings,
+    void writeOk(
+            ChannelHandlerContext ctx,
+            long affectedRows,
+            long lastInsertId,
+            int statusFlags,
+            int warnings,
             String info);
 
     /**

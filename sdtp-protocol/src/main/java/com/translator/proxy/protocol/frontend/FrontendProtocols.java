@@ -39,8 +39,11 @@ public final class FrontendProtocols {
                         try {
                             FrontendProtocol protocol = it.next();
                             list.add(protocol);
-                            log.info("Loaded frontend protocol: {} (id={}, port={})",
-                                    protocol.getClass().getName(), protocol.id(), protocol.defaultPort());
+                            log.info(
+                                    "Loaded frontend protocol: {} (id={}, port={})",
+                                    protocol.getClass().getName(),
+                                    protocol.id(),
+                                    protocol.defaultPort());
                         } catch (Exception e) {
                             log.warn("Failed to load frontend protocol implementation", e);
                         }
@@ -71,8 +74,7 @@ public final class FrontendProtocols {
         }
 
         throw new IllegalArgumentException(
-                "No frontend protocol found for id='" + protocolId
-                        + "'. Available protocols: " + getAvailableIds());
+                "No frontend protocol found for id='" + protocolId + "'. Available protocols: " + getAvailableIds());
     }
 
     /**
@@ -84,9 +86,8 @@ public final class FrontendProtocols {
     public static FrontendProtocol loadDefault() {
         List<FrontendProtocol> all = loadAll();
         if (all.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "No frontend protocol implementations found on classpath. "
-                            + "Ensure sdtp-protocol or sdtp-protocol-pg is on the classpath.");
+            throw new IllegalArgumentException("No frontend protocol implementations found on classpath. "
+                    + "Ensure sdtp-protocol or sdtp-protocol-pg is on the classpath.");
         }
         return all.get(0);
     }

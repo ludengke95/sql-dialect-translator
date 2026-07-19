@@ -1,8 +1,10 @@
 package com.translator.proxy.protocol.frontend;
 
-import com.translator.proxy.core.session.FrontendSession;
-import io.netty.channel.ChannelHandlerContext;
 import java.util.Map;
+
+import com.translator.proxy.core.session.FrontendSession;
+
+import io.netty.channel.ChannelHandlerContext;
 
 /**
  * 系统目录提供者接口 —— 模拟数据库系统表/系统变量查询，

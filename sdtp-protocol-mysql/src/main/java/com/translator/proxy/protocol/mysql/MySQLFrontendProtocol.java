@@ -6,10 +6,10 @@ import com.translator.proxy.protocol.frontend.ResponseWriter;
 import com.translator.proxy.protocol.frontend.SystemCatalogProvider;
 import com.translator.proxy.protocol.frontend.TypeMapper;
 import com.translator.proxy.protocol.mysql.auth.MySQLHandshakeHandler;
+import com.translator.proxy.protocol.mysql.catalog.MySQLSystemCatalogProvider;
 import com.translator.proxy.protocol.mysql.codec.MySQLPacketDecoder;
 import com.translator.proxy.protocol.mysql.codec.MySQLPacketEncoder;
 import com.translator.proxy.protocol.mysql.command.MySQLCommandHandler;
-import com.translator.proxy.protocol.mysql.catalog.MySQLSystemCatalogProvider;
 import com.translator.proxy.protocol.mysql.result.MySQLResponseWriter;
 import com.translator.proxy.protocol.mysql.result.MySQLTypeMapper;
 

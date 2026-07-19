@@ -18,18 +18,17 @@ import com.translator.metrics.ConnectionMetrics;
 import com.translator.proxy.core.handler.BackendRouter;
 import com.translator.proxy.core.handler.QueryProcessor;
 import com.translator.proxy.core.handler.SessionAttribute;
-import com.translator.proxy.protocol.mysql.auth.MySQLAuthHandler;
-import com.translator.proxy.protocol.mysql.catalog.MySQLSystemCatalogProvider;
-import com.translator.proxy.protocol.mysql.result.MySQLResponseWriter;
-import com.translator.proxy.protocol.mysql.util.SystemVariableInterceptor;
 import com.translator.proxy.core.session.FrontendSession;
 import com.translator.proxy.metrics.CommandMetrics;
 import com.translator.proxy.metrics.NettyMetrics;
+import com.translator.proxy.protocol.mysql.auth.MySQLAuthHandler;
+import com.translator.proxy.protocol.mysql.catalog.MySQLSystemCatalogProvider;
 import com.translator.proxy.protocol.mysql.codec.MySQLPacketDecoder;
 import com.translator.proxy.protocol.mysql.codec.MySQLPacketEncoder;
 import com.translator.proxy.protocol.mysql.constant.CommandType;
-import com.translator.proxy.protocol.mysql.constant.ServerStatus;
+import com.translator.proxy.protocol.mysql.result.MySQLResponseWriter;
 import com.translator.proxy.protocol.mysql.util.BufferUtils;
+import com.translator.proxy.protocol.mysql.util.SystemVariableInterceptor;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
@@ -231,8 +230,7 @@ public class MySQLCommandHandler extends ChannelInboundHandlerAdapter {
         }
 
         // 5. 系统变量查询
-        SystemVariableInterceptor.InterceptResult ir =
-                SystemVariableInterceptor.intercept(sql, session.getDatabase());
+        SystemVariableInterceptor.InterceptResult ir = SystemVariableInterceptor.intercept(sql, session.getDatabase());
         if (ir != null) {
             log.debug("Intercepted system variable query: {}", sql);
             CommandMetrics.recordSystemVarInterception();
@@ -297,16 +295,14 @@ public class MySQLCommandHandler extends ChannelInboundHandlerAdapter {
                 MySQLResponseWriter.buildColumnDef(ctx.alloc(), "def", "", "Database", "Database", 255, 0xFD, 33),
                 seq++));
 
-        ctx.write(new MySQLPacketEncoder.OutgoingPacket(
-                MySQLResponseWriter.buildEof(ctx.alloc(), statusFlags), seq++));
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(MySQLResponseWriter.buildEof(ctx.alloc(), statusFlags), seq++));
 
         for (String name : sorted) {
             ByteBuf row = MySQLResponseWriter.buildTextRow(ctx.alloc(), new String[] {name});
             ctx.write(new MySQLPacketEncoder.OutgoingPacket(row, seq++));
         }
 
-        ctx.write(new MySQLPacketEncoder.OutgoingPacket(
-                MySQLResponseWriter.buildEof(ctx.alloc(), statusFlags), seq));
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(MySQLResponseWriter.buildEof(ctx.alloc(), statusFlags), seq));
         ctx.flush();
     }
 
@@ -333,7 +329,8 @@ public class MySQLCommandHandler extends ChannelInboundHandlerAdapter {
 
     private void handlePing(ChannelHandlerContext ctx) {
         int statusFlags = 0;
-        FrontendSession session = ctx.channel().attr(SessionAttribute.SESSION_KEY).get();
+        FrontendSession session =
+                ctx.channel().attr(SessionAttribute.SESSION_KEY).get();
         if (session != null) {
             statusFlags = MySQLAuthHandler.getStatusFlags(session);
         }
@@ -436,8 +433,7 @@ public class MySQLCommandHandler extends ChannelInboundHandlerAdapter {
         QueryProcessor NOOP = new QueryProcessor() {
             @Override
             public void process(ChannelHandlerContext ctx, String sql, FrontendSession session) {
-                ByteBuf err = MySQLResponseWriter.buildErrPacket(
-                        ctx.alloc(), 1105, "HY000", "Backend not configured");
+                ByteBuf err = MySQLResponseWriter.buildErrPacket(ctx.alloc(), 1105, "HY000", "Backend not configured");
                 ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(err, (byte) 1));
             }
         };

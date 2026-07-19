@@ -11,10 +11,9 @@ import com.translator.core.SqlTranslationException;
 import com.translator.core.SqlTranslator;
 import com.translator.core.config.TranslationConfig;
 import com.translator.metrics.TranslationMetrics;
+import com.translator.proxy.core.handler.QueryProcessor;
 import com.translator.proxy.core.handler.SessionAttribute;
-import com.translator.proxy.core.handler.QueryProcessor;
 import com.translator.proxy.core.handler.SqlTranslationContext;
-import com.translator.proxy.core.handler.QueryProcessor;
 import com.translator.proxy.core.session.FrontendSession;
 
 import io.netty.channel.ChannelHandlerContext;
@@ -100,10 +99,7 @@ public class TranslationQueryProcessor implements QueryProcessor {
      * @param backendName       后端名称（用于指标打点），可为 null
      */
     public TranslationQueryProcessor(
-            QueryProcessor delegate,
-            String targetDialectId,
-            TranslationConfig translationConfig,
-            String backendName) {
+            QueryProcessor delegate, String targetDialectId, TranslationConfig translationConfig, String backendName) {
         this.delegate = delegate;
         this.sourceDialect = DialectType.MYSQL; // 默认源方言为 MySQL
         this.enabled = !this.sourceDialect.getIdentifier().equalsIgnoreCase(targetDialectId);

@@ -6,7 +6,6 @@ import org.slf4j.LoggerFactory;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
-import com.translator.proxy.protocol.pg.codec.PgMessage;
 
 /**
  * PostgreSQL 协议封包器。

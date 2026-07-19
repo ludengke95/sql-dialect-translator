@@ -5,14 +5,13 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import com.translator.proxy.core.session.FrontendSession;
 import com.translator.proxy.protocol.frontend.SystemCatalogProvider;
 import com.translator.proxy.protocol.mysql.auth.MySQLAuthHandler;
 import com.translator.proxy.protocol.mysql.result.MySQLResponseWriter;
 import com.translator.proxy.protocol.mysql.util.SystemVariableInterceptor;
-import com.translator.proxy.core.session.FrontendSession;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
 
 /**
@@ -58,22 +57,19 @@ public class MySQLSystemCatalogProvider implements SystemCatalogProvider {
         if (useDb != null) {
             session.setDatabase(useDb);
             MySQLResponseWriter responseWriter = new MySQLResponseWriter();
-            responseWriter.writeOk(ctx, 0, 0,
-                    MySQLAuthHandler.getStatusFlags(session), 0, "");
+            responseWriter.writeOk(ctx, 0, 0, MySQLAuthHandler.getStatusFlags(session), 0, "");
             return;
         }
 
         // 检查 SET 语句
         if (SystemVariableInterceptor.isSetStatement(sql)) {
             MySQLResponseWriter responseWriter = new MySQLResponseWriter();
-            responseWriter.writeOk(ctx, 0, 0,
-                    MySQLAuthHandler.getStatusFlags(session), 0, "");
+            responseWriter.writeOk(ctx, 0, 0, MySQLAuthHandler.getStatusFlags(session), 0, "");
             return;
         }
 
         // 检查系统变量查询
-        SystemVariableInterceptor.InterceptResult ir =
-                SystemVariableInterceptor.intercept(sql, database);
+        SystemVariableInterceptor.InterceptResult ir = SystemVariableInterceptor.intercept(sql, database);
         if (ir != null) {
             writeInterceptedResult(ctx, ir, session);
             return;
@@ -85,8 +81,8 @@ public class MySQLSystemCatalogProvider implements SystemCatalogProvider {
     /**
      * 将拦截结果写入 Channel。
      */
-    private void writeInterceptedResult(ChannelHandlerContext ctx,
-            SystemVariableInterceptor.InterceptResult ir, FrontendSession session) {
+    private void writeInterceptedResult(
+            ChannelHandlerContext ctx, SystemVariableInterceptor.InterceptResult ir, FrontendSession session) {
         if (ir.isMultiColumn()) {
             writeMultiColumnResult(ctx, ir, session);
             return;
@@ -100,28 +96,26 @@ public class MySQLSystemCatalogProvider implements SystemCatalogProvider {
         // Column Count Packet
         ByteBuf colCountBuf = ctx.alloc().buffer(2);
         com.translator.proxy.protocol.mysql.util.BufferUtils.writeLengthEncodedInt(colCountBuf, colCount);
-        ctx.write(new com.translator.proxy.protocol.mysql.codec.MySQLPacketEncoder.OutgoingPacket(colCountBuf, (byte) 1));
+        ctx.write(
+                new com.translator.proxy.protocol.mysql.codec.MySQLPacketEncoder.OutgoingPacket(colCountBuf, (byte) 1));
         byte seq = 2;
 
         // Column Def 1
         ctx.write(new com.translator.proxy.protocol.mysql.codec.MySQLPacketEncoder.OutgoingPacket(
-                MySQLResponseWriter.buildColumnDef(
-                        ctx.alloc(), "def", "", ir.colName1, ir.colName1, 255, 0xFD, 33),
+                MySQLResponseWriter.buildColumnDef(ctx.alloc(), "def", "", ir.colName1, ir.colName1, 255, 0xFD, 33),
                 seq++));
 
         // Column Def 2
         if (ir.twoColumns || ir.colName3 != null) {
             ctx.write(new com.translator.proxy.protocol.mysql.codec.MySQLPacketEncoder.OutgoingPacket(
-                    MySQLResponseWriter.buildColumnDef(
-                            ctx.alloc(), "def", "", ir.colName2, ir.colName2, 255, 0xFD, 33),
+                    MySQLResponseWriter.buildColumnDef(ctx.alloc(), "def", "", ir.colName2, ir.colName2, 255, 0xFD, 33),
                     seq++));
         }
 
         // Column Def 3
         if (ir.colName3 != null) {
             ctx.write(new com.translator.proxy.protocol.mysql.codec.MySQLPacketEncoder.OutgoingPacket(
-                    MySQLResponseWriter.buildColumnDef(
-                            ctx.alloc(), "def", "", ir.colName3, ir.colName3, 255, 0xFD, 33),
+                    MySQLResponseWriter.buildColumnDef(ctx.alloc(), "def", "", ir.colName3, ir.colName3, 255, 0xFD, 33),
                     seq++));
         }
 
@@ -132,12 +126,10 @@ public class MySQLSystemCatalogProvider implements SystemCatalogProvider {
         // Row
         if (!isEmpty) {
             if (ir.twoColumns) {
-                ByteBuf row = MySQLResponseWriter.buildTextRow(
-                        ctx.alloc(), new String[] {ir.value1, ir.value2});
+                ByteBuf row = MySQLResponseWriter.buildTextRow(ctx.alloc(), new String[] {ir.value1, ir.value2});
                 ctx.write(new com.translator.proxy.protocol.mysql.codec.MySQLPacketEncoder.OutgoingPacket(row, seq++));
             } else {
-                ByteBuf row = MySQLResponseWriter.buildTextRow(
-                        ctx.alloc(), new String[] {ir.value1});
+                ByteBuf row = MySQLResponseWriter.buildTextRow(ctx.alloc(), new String[] {ir.value1});
                 ctx.write(new com.translator.proxy.protocol.mysql.codec.MySQLPacketEncoder.OutgoingPacket(row, seq++));
             }
         }
@@ -148,15 +140,16 @@ public class MySQLSystemCatalogProvider implements SystemCatalogProvider {
         ctx.flush();
     }
 
-    private void writeMultiColumnResult(ChannelHandlerContext ctx,
-            SystemVariableInterceptor.InterceptResult ir, FrontendSession session) {
+    private void writeMultiColumnResult(
+            ChannelHandlerContext ctx, SystemVariableInterceptor.InterceptResult ir, FrontendSession session) {
         java.util.List<SystemVariableInterceptor.ColumnInfo> columns = ir.columns;
         int colCount = columns.size();
         int statusFlags = MySQLAuthHandler.getStatusFlags(session);
 
         ByteBuf colCountBuf = ctx.alloc().buffer(2);
         com.translator.proxy.protocol.mysql.util.BufferUtils.writeLengthEncodedInt(colCountBuf, colCount);
-        ctx.write(new com.translator.proxy.protocol.mysql.codec.MySQLPacketEncoder.OutgoingPacket(colCountBuf, (byte) 1));
+        ctx.write(
+                new com.translator.proxy.protocol.mysql.codec.MySQLPacketEncoder.OutgoingPacket(colCountBuf, (byte) 1));
         byte seq = 2;
 
         for (SystemVariableInterceptor.ColumnInfo col : columns) {
@@ -200,7 +193,8 @@ public class MySQLSystemCatalogProvider implements SystemCatalogProvider {
         vars.put("max_allowed_packet", "16777216");
         vars.put("wait_timeout", "28800");
         vars.put("interactive_timeout", "28800");
-        vars.put("sql_mode",
+        vars.put(
+                "sql_mode",
                 "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION");
         vars.put("lower_case_table_names", "1");
         vars.put("license", "GPL");

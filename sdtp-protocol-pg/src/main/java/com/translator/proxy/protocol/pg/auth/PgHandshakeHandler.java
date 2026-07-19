@@ -5,18 +5,17 @@ import java.nio.charset.StandardCharsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.translator.proxy.protocol.frontend.AuthConfig;
 import com.translator.proxy.core.session.FrontendSession;
+import com.translator.proxy.protocol.frontend.AuthConfig;
+import com.translator.proxy.protocol.pg.codec.PgMessage;
+import com.translator.proxy.protocol.pg.codec.PgRawMessage;
+import com.translator.proxy.protocol.pg.codec.PgWire;
+import com.translator.proxy.protocol.pg.command.PgCommandHandler;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.util.concurrent.EventExecutorGroup;
-import com.translator.proxy.protocol.pg.auth.PgAuth;
-import com.translator.proxy.protocol.pg.codec.PgMessage;
-import com.translator.proxy.protocol.pg.codec.PgRawMessage;
-import com.translator.proxy.protocol.pg.codec.PgWire;
-import com.translator.proxy.protocol.pg.command.PgCommandHandler;
 
 /**
  * PostgreSQL 握手处理器 —— 处理 StartupMessage 和 MD5 认证。
@@ -130,8 +129,7 @@ public class PgHandshakeHandler extends ChannelInboundHandlerAdapter {
 
         if (!PgAuth.verify(clientUser, authPassword, salt, clientResponse)) {
             log.warn("Auth failed: wrong password for user '{}'", clientUser);
-            sendError(ctx, "FATAL", "28000",
-                    "Authentication failed for user '" + clientUser + "' (wrong password)");
+            sendError(ctx, "FATAL", "28000", "Authentication failed for user '" + clientUser + "' (wrong password)");
             ctx.close();
             return;
         }
@@ -144,7 +142,9 @@ public class PgHandshakeHandler extends ChannelInboundHandlerAdapter {
         if (clientDatabase != null && !clientDatabase.isEmpty()) {
             session.setDatabase(clientDatabase);
         }
-        ctx.channel().attr(com.translator.proxy.core.handler.SessionAttribute.SESSION_KEY).set(session);
+        ctx.channel()
+                .attr(com.translator.proxy.core.handler.SessionAttribute.SESSION_KEY)
+                .set(session);
 
         // 发送 AuthenticationOk
         sendAuthenticationOk(ctx);
@@ -165,8 +165,7 @@ public class PgHandshakeHandler extends ChannelInboundHandlerAdapter {
 
         // 切换到命令分发器
         if (bizExecutorGroup != null) {
-            ctx.pipeline().addAfter(bizExecutorGroup, "handshakeHandler", "commandHandler",
-                    new PgCommandHandler());
+            ctx.pipeline().addAfter(bizExecutorGroup, "handshakeHandler", "commandHandler", new PgCommandHandler());
             ctx.pipeline().remove(this);
         } else {
             ctx.pipeline().replace(this, "commandHandler", new PgCommandHandler());

@@ -1,23 +1,21 @@
 package com.translator.proxy.protocol.pg.catalog;
 
 import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
-import java.sql.ResultSet;
 import java.util.HashMap;
 import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.translator.proxy.protocol.frontend.SystemCatalogProvider;
 import com.translator.proxy.core.session.FrontendSession;
-
-import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelHandlerContext;
+import com.translator.proxy.protocol.frontend.SystemCatalogProvider;
 import com.translator.proxy.protocol.pg.codec.PgMessage;
 import com.translator.proxy.protocol.pg.codec.PgWire;
 import com.translator.proxy.protocol.pg.result.PgOid;
 import com.translator.proxy.protocol.pg.result.PgResponseWriter;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandlerContext;
 
 /**
  * PostgreSQL 系统目录提供者 —— 模拟 pg_catalog 相关查询。
@@ -89,12 +87,12 @@ public class PgSystemCatalogProvider implements SystemCatalogProvider {
         ByteBuf rowDesc = ctx.alloc().buffer(64);
         rowDesc.writeShort(1);
         PgWire.cstr(rowDesc, colName);
-        rowDesc.writeInt(0);        // table OID
-        rowDesc.writeShort(0);      // attr num
+        rowDesc.writeInt(0); // table OID
+        rowDesc.writeShort(0); // attr num
         rowDesc.writeInt(PgOid.TEXT); // type OID
-        rowDesc.writeShort(-1);     // type size
-        rowDesc.writeInt(-1);       // type modifier
-        rowDesc.writeShort(0);      // format
+        rowDesc.writeShort(-1); // type size
+        rowDesc.writeInt(-1); // type modifier
+        rowDesc.writeShort(0); // format
         ctx.write(new PgMessage(PgWire.MSG_ROW_DESCRIPTION, rowDesc));
 
         // DataRow
