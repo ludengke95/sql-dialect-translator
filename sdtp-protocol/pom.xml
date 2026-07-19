@@ -8,8 +8,13 @@
     </parent>
     <artifactId>sdtp-protocol</artifactId>
     <name>SDTP Protocol</name>
-    <description>MySQL wire protocol definitions, packet codec (decoder/encoder)</description>
+    <description>Frontend protocol SPI abstraction (FrontendProtocol, ResponseWriter, TypeMapper, etc.)</description>
     <dependencies>
+        <dependency>
+            <groupId>com.draven.sql.translator</groupId>
+            <artifactId>sdtp-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-all</artifactId>

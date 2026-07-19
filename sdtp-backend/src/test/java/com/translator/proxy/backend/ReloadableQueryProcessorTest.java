@@ -10,7 +10,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.translator.proxy.core.handler.CommandHandler;
 import com.translator.proxy.core.session.FrontendSession;
 
 import io.netty.channel.ChannelHandlerContext;
@@ -208,7 +207,7 @@ public class ReloadableQueryProcessorTest {
     /**
      * 计数处理器 —— 记录请求次数。
      */
-    static class CountingProcessor implements CommandHandler.QueryProcessor {
+    static class CountingProcessor implements QueryProcessor {
         private final AtomicInteger count = new AtomicInteger(0);
         private volatile boolean closed = false;
 
@@ -234,7 +233,7 @@ public class ReloadableQueryProcessorTest {
     /**
      * 慢处理器 —— 每个请求延迟指定毫秒，用于测试 drain 超时。
      */
-    static class SlowProcessor implements CommandHandler.QueryProcessor {
+    static class SlowProcessor implements QueryProcessor {
         private final long delayMs;
 
         SlowProcessor(long delayMs) {

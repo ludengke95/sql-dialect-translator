@@ -12,10 +12,12 @@
         <module>sdt-core</module>
         <module>sdt-jdbc</module>
         <module>sdtp-protocol</module>
+        <module>sdtp-protocol-mysql</module>
         <module>sdtp-core</module>
         <module>sdtp-backend</module>
         <module>sdtp-server</module>
         <module>sdtp-metrics</module>
+        <module>sdtp-protocol-pg</module>
         <module>demo/sdt-spring-boot-jdbc-demo</module>
         <module>demo/sdtp-spring-boot-demo</module>
         <module>demo/sdtp-business-simulator</module>

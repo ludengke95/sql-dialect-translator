@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory;
 
 import com.translator.core.config.TranslationConfig;
 import com.translator.proxy.core.handler.BackendRouter;
-import com.translator.proxy.core.handler.CommandHandler;
+import com.translator.proxy.core.handler.QueryProcessor;
 import com.translator.proxy.core.session.FrontendSession;
 import com.translator.proxy.metrics.ReloadMetrics;
 
@@ -32,7 +32,7 @@ public class BackendPoolManager implements BackendRouter {
     private final ConcurrentMap<String, ReloadableQueryProcessor> processorMap = new ConcurrentHashMap<>();
 
     /** 默认后端（列表中的第一个） */
-    private volatile CommandHandler.QueryProcessor defaultProcessor;
+    private volatile QueryProcessor defaultProcessor;
 
     /** 全局默认翻译配置（后端未指定时使用） */
     private final TranslationConfig defaultTranslationConfig;
@@ -94,7 +94,7 @@ public class BackendPoolManager implements BackendRouter {
             log.info("Default backend: '{}'", processorMap.keySet().iterator().next());
         } else {
             log.warn("No backends configured, using NOOP processor");
-            defaultProcessor = CommandHandler.QueryProcessor.NOOP;
+            defaultProcessor = QueryProcessor.NOOP;
         }
         // 初始化后更新后端总数指标
         ReloadMetrics.setBackendCount(processorMap.size());
@@ -103,7 +103,7 @@ public class BackendPoolManager implements BackendRouter {
     // ==================== BackendRouter 接口 ====================
 
     @Override
-    public CommandHandler.QueryProcessor resolve(FrontendSession session) {
+    public QueryProcessor resolve(FrontendSession session) {
         String database = session.getDatabase();
         if (database != null && processorMap.containsKey(database)) {
             return processorMap.get(database);
@@ -111,14 +111,14 @@ public class BackendPoolManager implements BackendRouter {
         return defaultProcessor;
     }
 
-    public CommandHandler.QueryProcessor getProcessor(String databaseName) {
+    public QueryProcessor getProcessor(String databaseName) {
         if (databaseName != null && processorMap.containsKey(databaseName)) {
             return processorMap.get(databaseName);
         }
         return defaultProcessor;
     }
 
-    public CommandHandler.QueryProcessor getDefaultProcessor() {
+    public QueryProcessor getDefaultProcessor() {
         return defaultProcessor;
     }
 
@@ -220,7 +220,7 @@ public class BackendPoolManager implements BackendRouter {
         boolean drained = rp.drainAndClose();
 
         // 2. 创建新 delegate
-        CommandHandler.QueryProcessor newDelegate = createInnerProcessor(be);
+        QueryProcessor newDelegate = createInnerProcessor(be);
 
         // 3. 激活新 delegate
         rp.activateNew(newDelegate);
@@ -247,7 +247,7 @@ public class BackendPoolManager implements BackendRouter {
     /**
      * 根据 BackendEntry 创建带翻译装饰器的真实 QueryProcessor。
      */
-    private CommandHandler.QueryProcessor createInnerProcessor(BackendEntry be) {
+    private QueryProcessor createInnerProcessor(BackendEntry be) {
         // 创建原始 JDBC 后端处理器
         JdbcBackendQueryProcessor jdbcProcessor = JdbcBackendQueryProcessor.create(
                 be.getName(),
@@ -271,7 +271,7 @@ public class BackendPoolManager implements BackendRouter {
      * 创建完整的 ReloadableQueryProcessor（内含翻译装饰器链）。
      */
     private ReloadableQueryProcessor createReloadableProcessor(BackendEntry be) {
-        CommandHandler.QueryProcessor inner = createInnerProcessor(be);
+        QueryProcessor inner = createInnerProcessor(be);
         return new ReloadableQueryProcessor(be.getName(), inner, reloadQueueCapacity, reloadDrainTimeoutMs);
     }
 
@@ -303,7 +303,7 @@ public class BackendPoolManager implements BackendRouter {
                     "Default backend updated to: '{}'",
                     processorMap.keySet().iterator().next());
         } else {
-            defaultProcessor = CommandHandler.QueryProcessor.NOOP;
+            defaultProcessor = QueryProcessor.NOOP;
             log.warn("No backends remaining, default processor is NOOP");
         }
     }

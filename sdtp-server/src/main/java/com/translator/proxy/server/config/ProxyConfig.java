@@ -31,6 +31,9 @@ public class ProxyConfig {
     private TranslationConf translation = new TranslationConf(); // 全局默认值
     private MetricsConf metrics = new MetricsConf(); // 指标暴露配置
 
+    /** 前端协议标识符，默认 "MYSQL"，可通过 YAML 的 frontend-protocol 键配置 */
+    private String frontendProtocol = "MYSQL";
+
     public int getPort() {
         return port;
     }
@@ -101,6 +104,14 @@ public class ProxyConfig {
 
     public void setMetrics(MetricsConf metrics) {
         this.metrics = metrics;
+    }
+
+    public String getFrontendProtocol() {
+        return frontendProtocol;
+    }
+
+    public void setFrontendProtocol(String frontendProtocol) {
+        this.frontendProtocol = frontendProtocol;
     }
 
     // ==================== 内嵌配置类 ====================

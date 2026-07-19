@@ -9,11 +9,11 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.translator.proxy.core.handler.AuthHandler;
-import com.translator.proxy.core.handler.CommandHandler;
+import com.translator.proxy.protocol.mysql.result.MySQLResponseWriter;
+import com.translator.proxy.core.handler.QueryProcessor;
 import com.translator.proxy.core.session.FrontendSession;
 import com.translator.proxy.metrics.ReloadMetrics;
-import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
+import com.translator.proxy.protocol.mysql.codec.MySQLPacketEncoder;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
@@ -21,7 +21,7 @@ import io.netty.channel.ChannelHandlerContext;
 /**
  * 支持热 reload 的查询处理器包装器。
  *
- * <p>包装一个真实的 {@link CommandHandler.QueryProcessor} delegate，
+ * <p>包装一个真实的 {@link QueryProcessor} delegate，
  * 通过状态机控制请求路由，实现后端配置变更时的优雅切换。
  *
  * <h3>状态机</h3>
@@ -41,7 +41,7 @@ import io.netty.channel.ChannelHandlerContext;
  *
  * <p>线程安全：使用 AtomicReference 管理状态，AtomicInteger 跟踪 in-flight 请求数。
  */
-public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
+public class ReloadableQueryProcessor implements QueryProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(ReloadableQueryProcessor.class);
 
@@ -67,7 +67,7 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
     private final AtomicReference<State> state = new AtomicReference<>(State.ACTIVE);
 
     /** 被包装的真实处理器 */
-    private volatile CommandHandler.QueryProcessor delegate;
+    private volatile QueryProcessor delegate;
 
     /** reload 期间请求等待队列 */
     private final BlockingQueue<PendingRequest> pendingQueue;
@@ -87,7 +87,7 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
      * @param drainTimeoutMs drain 超时（毫秒）
      */
     public ReloadableQueryProcessor(
-            String backendName, CommandHandler.QueryProcessor delegate, int queueCapacity, int drainTimeoutMs) {
+            String backendName, QueryProcessor delegate, int queueCapacity, int drainTimeoutMs) {
         this.backendName = backendName;
         this.delegate = delegate;
         this.pendingQueue = new LinkedBlockingQueue<>(queueCapacity);
@@ -122,7 +122,7 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
 
     @Override
     public void commit(ChannelHandlerContext ctx, FrontendSession session) throws Exception {
-        CommandHandler.QueryProcessor d = delegate;
+        QueryProcessor d = delegate;
         if (d != null) {
             d.commit(ctx, session);
         }
@@ -130,7 +130,7 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
 
     @Override
     public void rollback(ChannelHandlerContext ctx, FrontendSession session) throws Exception {
-        CommandHandler.QueryProcessor d = delegate;
+        QueryProcessor d = delegate;
         if (d != null) {
             d.rollback(ctx, session);
         }
@@ -138,7 +138,7 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
 
     @Override
     public void closeSessionConnection(ChannelHandlerContext ctx, FrontendSession session) {
-        CommandHandler.QueryProcessor d = delegate;
+        QueryProcessor d = delegate;
         if (d != null) {
             d.closeSessionConnection(ctx, session);
         }
@@ -146,7 +146,7 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
 
     @Override
     public void close() {
-        CommandHandler.QueryProcessor d = delegate;
+        QueryProcessor d = delegate;
         if (d != null) {
             d.close();
         }
@@ -157,7 +157,7 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
     /**
      * 进入 RELOADING 状态，等待 in-flight 请求完成，关闭旧 delegate。
      *
-     * <p>调用后必须紧接着调用 {@link #activateNew(CommandHandler.QueryProcessor)}。
+     * <p>调用后必须紧接着调用 {@link #activateNew(QueryProcessor)}。
      *
      * @return true 表示 drain 成功完成；false 表示超时（旧 delegate 仍被强行关闭）
      */
@@ -194,7 +194,7 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
         ReloadMetrics.recordDrain(backendName, drained);
 
         // 关闭旧连接池
-        CommandHandler.QueryProcessor old = delegate;
+        QueryProcessor old = delegate;
         delegate = null;
         if (old != null) {
             old.close();
@@ -210,7 +210,7 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
      *
      * @param newDelegate 新创建的查询处理器
      */
-    public void activateNew(CommandHandler.QueryProcessor newDelegate) {
+    public void activateNew(QueryProcessor newDelegate) {
         Objects.requireNonNull(newDelegate, "newDelegate must not be null");
         this.delegate = newDelegate;
         state.set(State.ACTIVE);
@@ -298,7 +298,7 @@ public class ReloadableQueryProcessor implements CommandHandler.QueryProcessor {
      */
     private void writeError(ChannelHandlerContext ctx, String message) {
         try {
-            ByteBuf err = AuthHandler.buildErrPacket(ctx.alloc(), ERR_SERVER_SHUTDOWN, SQL_STATE, message);
+            ByteBuf err = MySQLResponseWriter.buildErrPacket(ctx.alloc(), ERR_SERVER_SHUTDOWN, SQL_STATE, message);
             ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(err, (byte) 1));
         } catch (Exception e) {
             log.error("Backend '{}': failed to write error packet", backendName, e);
