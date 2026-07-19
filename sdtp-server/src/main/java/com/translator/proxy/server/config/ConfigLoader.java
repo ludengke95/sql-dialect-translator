@@ -136,6 +136,13 @@ public final class ConfigLoader {
                     auth.setPassword((String) authMap.get("password"));
                 }
             }
+            // 前端协议：frontend 主键，frontend-protocol 为兼容别名
+            // （ProxyBootstrap 据此切换 MySQL / PostgreSQL 前端线协议）
+            if (proxy.get("frontend") != null) {
+                config.setFrontendProtocol((String) proxy.get("frontend"));
+            } else if (proxy.get("frontend-protocol") != null) {
+                config.setFrontendProtocol((String) proxy.get("frontend-protocol"));
+            }
         }
 
         // === backends 列表（新格式） ===
