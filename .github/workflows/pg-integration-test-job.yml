@@ -127,6 +127,18 @@ jobs:
           sleep 10 # Wait for SDTP to be ready
           docker logs sdtp --tail 20
 
+          # 主机侧端口就绪等待：确认 5432 已对外发布并可接受连接，
+          # 避免测试容器首次连接时撞上端口映射尚未生效的瞬时窗口（CI 偶发）。
+          echo "Waiting for SDTP published port 5432 to accept connections..."
+          for i in $(seq 1 30); do
+            if timeout 2 bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/5432' 2>/dev/null; then
+              echo "  ✅ port 5432 ready (attempt $i)"
+              break
+            fi
+            echo "  waiting for port 5432... ($i)"
+            sleep 2
+          done
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -180,3 +192,26 @@ jobs:
             --tpcc-database tpcc \
             --benchmark all \
             --output-dir benchmark/reports
+
+      - name: Collect SDTP diagnostics (always)
+        if: always()
+        run: |
+          {
+            echo "===== docker ps -a ====="
+            docker ps -a
+            echo "===== SDTP container status ====="
+            docker inspect -f 'State: {{.State.Status}}  ExitCode: {{.State.ExitCode}}  StartedAt: {{.State.StartedAt}}  FinishedAt: {{.State.FinishedAt}}' sdtp 2>/dev/null || echo "(sdtp container not found)"
+            echo "===== SDTP logs (tail 120) ====="
+            docker logs sdtp --tail 120 2>&1 || echo "(no sdtp logs)"
+            echo "===== listening ports (5432/3306) ====="
+            (ss -ltnp 2>/dev/null || netstat -ltnp 2>/dev/null) | grep -E ':5432|:3306' || echo "(no 5432/3306 listener info)"
+          } > /tmp/sdtp-diag.txt 2>&1
+          cat /tmp/sdtp-diag.txt
+
+      - name: Upload SDTP diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdtp-diag-${{ inputs.report_name }}
+          path: /tmp/sdtp-diag.txt
+          if-no-files-found: ignore

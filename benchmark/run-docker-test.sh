@@ -491,14 +491,29 @@ main() {
     }
 
     # 快速连通性验证（使用默认 DATABASE）
+    # 代理刚启动或 CI 网络偶发抖动时，首次连接可能失败；这里做有限次重试，
+    # 避免把瞬时网络抖动误判为“代理不可达”而直接终止整个测试。
     echo ""
     echo "验证连通性..."
     local ping_sql="SELECT 1 AS ping;"
-    execute_sql "$ping_sql" "$DATABASE"
-    if is_success "$_EXEC_RC" "$_EXEC_OUTPUT"; then
-        echo "  ✅ SDTP 可达 ($MODE)"
-    else
-        echo "  ❌ SDTP 不可达"
+    local ping_ok=0
+    local ping_tries=5
+    local ping_wait=3
+    for ((try=1; try<=ping_tries; try++)); do
+        execute_sql "$ping_sql" "$DATABASE"
+        if is_success "$_EXEC_RC" "$_EXEC_OUTPUT"; then
+            ping_ok=1
+            echo "  ✅ SDTP 可达 ($MODE) (第 $try 次尝试)"
+            break
+        fi
+        echo "  ⚠️ 第 $try/$ping_tries 次连通性检查未通过，重试前等待 ${ping_wait}s ..."
+        echo "    (诊断) rc=$_EXEC_RC output=${_EXEC_OUTPUT:0:200}"
+        if [[ $try -lt $ping_tries ]]; then
+            sleep "$ping_wait"
+        fi
+    done
+    if [[ $ping_ok -ne 1 ]]; then
+        echo "  ❌ SDTP 不可达（已重试 $ping_tries 次）"
         echo "  ${_EXEC_OUTPUT:0:300}"
         exit 1
     fi
