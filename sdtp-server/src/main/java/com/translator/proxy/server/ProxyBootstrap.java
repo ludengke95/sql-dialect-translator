@@ -10,6 +10,7 @@ import com.translator.core.config.TranslationConfig;
 import com.translator.metrics.MetricsConfig;
 import com.translator.proxy.backend.BackendEntry;
 import com.translator.proxy.backend.BackendPoolManager;
+import com.translator.proxy.backend.mapper.ResultSetEncoder;
 import com.translator.proxy.core.handler.BackendRouter;
 import com.translator.proxy.core.handler.NettyMetricsHandler;
 import com.translator.proxy.metrics.MetricsModule;
@@ -105,6 +106,13 @@ public class ProxyBootstrap {
         // 初始化多后端连接池管理器
         backendPoolManager = new BackendPoolManager(
                 backends, defaultTranslationConfig, config.getReloadQueueCapacity(), config.getReloadDrainTimeoutMs());
+
+        // 注入前端协议的结果集编码器（SPI 可插拔）：
+        // PG 等前端按各自线协议编码结果；MySQL 前端沿用内置默认实现（responseWriter 保持 null）。
+        if (!"MYSQL".equalsIgnoreCase(frontendProtocol.id())) {
+            ResultSetEncoder.setResponseWriter(frontendProtocol.newResponseWriter());
+            ResultSetEncoder.setTypeMapper(frontendProtocol.newTypeMapper());
+        }
 
         // 初始化指标模块
         ProxyConfig.MetricsConf mc = config.getMetrics();

@@ -15,6 +15,7 @@ import com.translator.proxy.protocol.frontend.ResponseWriter;
 import com.translator.proxy.protocol.frontend.TypeMapper;
 import com.translator.proxy.protocol.mysql.codec.MySQLPacketEncoder;
 import com.translator.proxy.protocol.mysql.constant.ServerStatus;
+import com.translator.proxy.protocol.mysql.result.MySQLResponseWriter;
 import com.translator.proxy.protocol.mysql.util.BufferUtils;
 
 import io.netty.buffer.ByteBuf;
@@ -63,6 +64,13 @@ public final class ResultSetEncoder {
      */
     public static void encodeAndWrite(ChannelHandlerContext ctx, ResultSet rs, SeqGenerator seqGen, String backendName)
             throws SQLException {
+        if (responseWriter != null) {
+            int rowCount = responseWriter.writeResultSet(ctx, rs);
+            if (backendName != null) {
+                BackendMetrics.observeResultRows(backendName, rowCount);
+            }
+            return;
+        }
         ResultSetMetaData meta = rs.getMetaData();
         int columnCount = meta.getColumnCount();
         log.info("Encoding ResultSet: {} columns", columnCount);
@@ -133,6 +141,26 @@ public final class ResultSetEncoder {
         ok.writeShortLE(getStatusFlags(ctx));
         ok.writeShortLE(0);
         ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(ok, (byte) 1));
+    }
+
+    /**
+     * 协议无关的错误写入。
+     *
+     * <p>注入了 ResponseWriter 时委托给协议实现（如 PG ErrorResponse），
+     * 否则回退为 MySQL ERR 包（向后兼容）。
+     *
+     * @param ctx          Netty 上下文
+     * @param errorCode    错误码
+     * @param sqlState     SQL 状态码
+     * @param message      错误消息
+     */
+    public static void writeError(ChannelHandlerContext ctx, int errorCode, String sqlState, String message) {
+        if (responseWriter != null) {
+            responseWriter.writeErr(ctx, errorCode, sqlState, message);
+            return;
+        }
+        ByteBuf err = MySQLResponseWriter.buildErrPacket(ctx.alloc(), errorCode, sqlState, message);
+        ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(err, (byte) 1));
     }
 
     // ==================== Column Definition Builder ====================

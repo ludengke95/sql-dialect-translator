@@ -69,4 +69,17 @@ public interface ResponseWriter {
      * @throws SQLException 如果 JDBC 数据访问失败
      */
     void writeTextRow(ChannelHandlerContext ctx, ResultSet rs, int columnCount) throws SQLException;
+
+    /**
+     * 写入完整结果集（按协议格式编码列定义 + 行数据 + 结束标记）。
+     *
+     * <p>不同协议的消息序列不同（MySQL: ColumnCount + ColumnDef + EOF + Rows + EOF；
+     * PG: RowDescription + Rows + CommandComplete + ReadyForQuery），由各实现自行决定。
+     *
+     * @param ctx Netty 上下文
+     * @param rs  JDBC 结果集（游标位于第一行之前）
+     * @return 写入的行数
+     * @throws SQLException 如果 JDBC 访问失败
+     */
+    int writeResultSet(ChannelHandlerContext ctx, ResultSet rs) throws SQLException;
 }

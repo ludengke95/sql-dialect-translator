@@ -10,6 +10,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.translator.proxy.core.handler.QueryProcessor;
 import com.translator.proxy.core.session.FrontendSession;
 
 import io.netty.channel.ChannelHandlerContext;

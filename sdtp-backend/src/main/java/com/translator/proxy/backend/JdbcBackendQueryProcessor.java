@@ -12,12 +12,9 @@ import com.translator.proxy.core.handler.SessionAttribute;
 import com.translator.proxy.core.handler.SqlTranslationContext;
 import com.translator.proxy.core.session.FrontendSession;
 import com.translator.proxy.metrics.HikariMetricsTrackerFactory;
-import com.translator.proxy.protocol.mysql.codec.MySQLPacketEncoder;
-import com.translator.proxy.protocol.mysql.result.MySQLResponseWriter;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
-import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 
 /**
@@ -185,8 +182,7 @@ public class JdbcBackendQueryProcessor implements QueryProcessor {
     }
 
     private void writeError(ChannelHandlerContext ctx, int errorCode, String sqlState, String message) {
-        ByteBuf err = MySQLResponseWriter.buildErrPacket(ctx.alloc(), errorCode, sqlState, message);
-        ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(err, (byte) 1));
+        ResultSetEncoder.writeError(ctx, errorCode, sqlState, message);
     }
 
     @Override

@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 
 import com.translator.proxy.protocol.frontend.ResponseWriter;
 import com.translator.proxy.protocol.mysql.codec.MySQLPacketEncoder;
+import com.translator.proxy.protocol.mysql.constant.ServerStatus;
 import com.translator.proxy.protocol.mysql.util.BufferUtils;
 
 import io.netty.buffer.ByteBuf;
@@ -60,6 +61,31 @@ public class MySQLResponseWriter implements ResponseWriter {
             throws java.sql.SQLException {
         ByteBuf row = buildTextRow(ctx.alloc(), rs, columnCount);
         ctx.write(new MySQLPacketEncoder.OutgoingPacket(row, (byte) 0));
+    }
+
+    @Override
+    public int writeResultSet(ChannelHandlerContext ctx, java.sql.ResultSet rs) throws java.sql.SQLException {
+        java.sql.ResultSetMetaData meta = rs.getMetaData();
+        int columnCount = meta.getColumnCount();
+        byte seq = 1;
+        ByteBuf colCount = ctx.alloc().buffer(9);
+        BufferUtils.writeLengthEncodedInt(colCount, columnCount);
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(colCount, seq++));
+        int statusFlags = ServerStatus.SERVER_STATUS_AUTOCOMMIT;
+        for (int i = 1; i <= columnCount; i++) {
+            ByteBuf colDef = buildColumnDef(ctx, meta, i);
+            ctx.write(new MySQLPacketEncoder.OutgoingPacket(colDef, seq++));
+        }
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx.alloc(), statusFlags), seq++));
+        int rowCount = 0;
+        while (rs.next()) {
+            ByteBuf row = buildTextRow(ctx.alloc(), rs, columnCount);
+            ctx.write(new MySQLPacketEncoder.OutgoingPacket(row, seq++));
+            rowCount++;
+        }
+        ctx.write(new MySQLPacketEncoder.OutgoingPacket(buildEof(ctx.alloc(), statusFlags), seq++));
+        ctx.flush();
+        return rowCount;
     }
 
     // ==================== 辅助写入方法 ====================

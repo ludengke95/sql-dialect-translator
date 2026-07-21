@@ -75,6 +75,22 @@ public class PgResponseWriter implements ResponseWriter {
         sendDataRow(ctx, rs, columnCount);
     }
 
+    @Override
+    public int writeResultSet(ChannelHandlerContext ctx, ResultSet rs) throws SQLException {
+        ResultSetMetaData meta = rs.getMetaData();
+        writeRowDescription(ctx, meta);
+        int columnCount = meta.getColumnCount();
+        int rowCount = 0;
+        while (rs.next()) {
+            sendDataRow(ctx, rs, columnCount);
+            rowCount++;
+        }
+        String tag = "SELECT " + rowCount;
+        sendCommandComplete(ctx, tag);
+        sendReadyForQuery(ctx, PgWire.TXN_IDLE);
+        return rowCount;
+    }
+
     // ==================== PG 特定的写入方法 ====================
 
     /**

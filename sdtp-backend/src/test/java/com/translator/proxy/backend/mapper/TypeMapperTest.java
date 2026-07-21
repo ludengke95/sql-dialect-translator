@@ -6,7 +6,7 @@ import java.sql.Types;
 
 import org.junit.Test;
 
-import com.translator.proxy.protocol.constant.ColumnType;
+import com.translator.proxy.protocol.mysql.constant.ColumnType;
 
 /**
  * TypeMapper 测试：JDBC Types → MySQL ColumnType 映射正确性。
