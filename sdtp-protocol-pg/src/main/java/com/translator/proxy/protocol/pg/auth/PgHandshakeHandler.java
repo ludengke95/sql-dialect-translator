@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.translator.proxy.core.handler.BackendRouter;
 import com.translator.proxy.core.session.FrontendSession;
 import com.translator.proxy.protocol.frontend.AuthConfig;
 import com.translator.proxy.protocol.pg.codec.PgMessage;
@@ -40,15 +41,17 @@ public class PgHandshakeHandler extends ChannelInboundHandlerAdapter {
     private final String authUser;
     private final String authPassword;
     private final EventExecutorGroup bizExecutorGroup;
+    private final BackendRouter backendRouter;
 
     private byte[] salt;
     private String clientUser;
     private String clientDatabase;
 
-    public PgHandshakeHandler(AuthConfig authConfig, EventExecutorGroup bizExecutorGroup) {
+    public PgHandshakeHandler(AuthConfig authConfig, EventExecutorGroup bizExecutorGroup, BackendRouter backendRouter) {
         this.authUser = authConfig.getUsername();
         this.authPassword = authConfig.getPassword();
         this.bizExecutorGroup = bizExecutorGroup;
+        this.backendRouter = backendRouter;
     }
 
     @Override
@@ -166,10 +169,10 @@ public class PgHandshakeHandler extends ChannelInboundHandlerAdapter {
 
         // 切换到命令分发器
         if (bizExecutorGroup != null) {
-            ctx.pipeline().addAfter(bizExecutorGroup, "handshakeHandler", "commandHandler", new PgCommandHandler());
+            ctx.pipeline().addAfter(bizExecutorGroup, "handshakeHandler", "commandHandler", new PgCommandHandler(backendRouter));
             ctx.pipeline().remove(this);
         } else {
-            ctx.pipeline().replace(this, "commandHandler", new PgCommandHandler());
+            ctx.pipeline().replace(this, "commandHandler", new PgCommandHandler(backendRouter));
         }
     }
 

@@ -12,6 +12,7 @@ import com.translator.proxy.protocol.pg.codec.PgPacketEncoder;
 import com.translator.proxy.protocol.pg.result.PgResponseWriter;
 import com.translator.proxy.protocol.pg.result.PgTypeMapper;
 
+import com.translator.proxy.core.handler.BackendRouter;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.EventLoopGroup;
 import io.netty.handler.codec.ByteToMessageDecoder;
@@ -23,6 +24,9 @@ import io.netty.handler.codec.ByteToMessageDecoder;
  * 工厂方法创建所有 PG 协议相关的 Handler、编解码器、响应写入器等。
  */
 public class PostgreSQLFrontendProtocol implements FrontendProtocol {
+
+    /** 后端路由器（由启动层经 newHandshakeHandler 注入，供 newSystemCatalog 复用） */
+    private BackendRouter backendRouter;
 
     @Override
     public String id() {
@@ -45,13 +49,9 @@ public class PostgreSQLFrontendProtocol implements FrontendProtocol {
     }
 
     @Override
-    public ChannelHandler newHandshakeHandler(AuthConfig authConfig, EventLoopGroup executor) {
-        return new PgHandshakeHandler(authConfig, executor);
-    }
-
-    @Override
-    public ChannelHandler newCommandHandler() {
-        return new com.translator.proxy.protocol.pg.command.PgCommandHandler();
+    public ChannelHandler newHandshakeHandler(AuthConfig authConfig, EventLoopGroup executor, BackendRouter backendRouter) {
+        this.backendRouter = backendRouter;
+        return new PgHandshakeHandler(authConfig, executor, backendRouter);
     }
 
     @Override
@@ -66,7 +66,7 @@ public class PostgreSQLFrontendProtocol implements FrontendProtocol {
 
     @Override
     public SystemCatalogProvider newSystemCatalog() {
-        return new PgSystemCatalogProvider();
+        return new PgSystemCatalogProvider(backendRouter);
     }
 
     @Override

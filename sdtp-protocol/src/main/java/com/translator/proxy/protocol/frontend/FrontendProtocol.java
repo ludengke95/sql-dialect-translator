@@ -4,6 +4,8 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.EventLoopGroup;
 import io.netty.handler.codec.ByteToMessageDecoder;
 
+import com.translator.proxy.core.handler.BackendRouter;
+
 /**
  * SPI 主接口 —— 前端协议抽象。
  *
@@ -51,14 +53,7 @@ public interface FrontendProtocol {
      * @param executor   业务线程池（用于 pipeline 中 handler 的线程绑定）
      * @return 握手处理器实例
      */
-    ChannelHandler newHandshakeHandler(AuthConfig authConfig, EventLoopGroup executor);
-
-    /**
-     * 创建命令处理器（认证完成后使用）。
-     *
-     * @return 命令处理器实例
-     */
-    ChannelHandler newCommandHandler();
+    ChannelHandler newHandshakeHandler(AuthConfig authConfig, EventLoopGroup executor, BackendRouter backendRouter);
 
     /**
      * 创建响应写入器。

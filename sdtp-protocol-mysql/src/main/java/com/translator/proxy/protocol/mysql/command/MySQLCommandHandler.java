@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -16,7 +15,6 @@ import org.slf4j.LoggerFactory;
 
 import com.translator.metrics.ConnectionMetrics;
 import com.translator.proxy.core.handler.BackendRouter;
-import com.translator.proxy.core.handler.QueryProcessor;
 import com.translator.proxy.core.handler.SessionAttribute;
 import com.translator.proxy.core.session.FrontendSession;
 import com.translator.proxy.metrics.CommandMetrics;
@@ -65,12 +63,8 @@ public class MySQLCommandHandler extends ChannelInboundHandlerAdapter {
     private static final Pattern COMMIT_PATTERN = Pattern.compile("^\\s*COMMIT\\s*$", Pattern.CASE_INSENSITIVE);
     private static final Pattern ROLLBACK_PATTERN = Pattern.compile("^\\s*ROLLBACK\\s*$", Pattern.CASE_INSENSITIVE);
 
-    /** 后端路由器（多后端模式下按数据库名路由） */
-    private static volatile BackendRouter backendRouter = null;
-
-    /** 默认后端查询处理器 */
-    private static volatile com.translator.proxy.core.handler.QueryProcessor queryProcessor =
-            com.translator.proxy.core.handler.QueryProcessor.NOOP;
+    /** 后端路由器（多后端模式下按数据库名路由，由握手链路构造注入） */
+    private final BackendRouter backendRouter;
 
     /** 系统目录提供者 */
     private final MySQLSystemCatalogProvider systemCatalog = new MySQLSystemCatalogProvider();
@@ -79,17 +73,12 @@ public class MySQLCommandHandler extends ChannelInboundHandlerAdapter {
     private final MySQLResponseWriter responseWriter = new MySQLResponseWriter();
 
     /**
-     * 设置后端路由器（多后端模式）。
+     * 构造命令处理器。
+     *
+     * @param backendRouter 后端路由器，按会话 database 解析对应后端 QueryProcessor
      */
-    public static void setBackendRouter(BackendRouter router) {
-        backendRouter = router;
-    }
-
-    /**
-     * 设置全局查询处理器（单后端模式）。
-     */
-    public static void setQueryProcessor(com.translator.proxy.core.handler.QueryProcessor processor) {
-        queryProcessor = processor != null ? processor : com.translator.proxy.core.handler.QueryProcessor.NOOP;
+    public MySQLCommandHandler(BackendRouter backendRouter) {
+        this.backendRouter = backendRouter;
     }
 
     @Override
@@ -242,10 +231,7 @@ public class MySQLCommandHandler extends ChannelInboundHandlerAdapter {
     }
 
     private com.translator.proxy.core.handler.QueryProcessor resolveProcessor(FrontendSession session) {
-        if (backendRouter != null) {
-            return backendRouter.resolve(session);
-        }
-        return queryProcessor;
+        return backendRouter.resolve(session);
     }
 
     // ==================== SHOW DATABASES ====================
@@ -255,12 +241,7 @@ public class MySQLCommandHandler extends ChannelInboundHandlerAdapter {
     }
 
     private void handleShowDatabases(ChannelHandlerContext ctx, String sql, FrontendSession session) {
-        Set<String> names;
-        if (backendRouter != null) {
-            names = backendRouter.getBackendNames();
-        } else {
-            names = Collections.emptySet();
-        }
+        Set<String> names = backendRouter.getBackendNames();
 
         Matcher m = SHOW_DATABASES.matcher(sql.trim());
         if (m.matches()) {
@@ -416,30 +397,5 @@ public class MySQLCommandHandler extends ChannelInboundHandlerAdapter {
                             || msg.contains("abort"));
         }
         return false;
-    }
-
-    // ==================== 查询处理器接口 ====================
-
-    /**
-     * 后端查询处理器接口。
-     * sdtp-backend 模块实现此接口，注入到 MySQLCommandHandler。
-     *
-     * <p>此接口扩展 sdtp-core 的 {@link QueryProcessor}，兼容旧代码。
-     */
-    public interface QueryProcessor extends com.translator.proxy.core.handler.QueryProcessor {
-        /** 空实现（占位） */
-        QueryProcessor NOOP = new QueryProcessor() {
-            @Override
-            public void process(ChannelHandlerContext ctx, String sql, FrontendSession session) {
-                ByteBuf err = MySQLResponseWriter.buildErrPacket(ctx.alloc(), 1105, "HY000", "Backend not configured");
-                ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(err, (byte) 1));
-            }
-        };
-
-        /**
-         * 处理一条 SQL 查询。
-         */
-        @Override
-        void process(ChannelHandlerContext ctx, String sql, FrontendSession session);
     }
 }

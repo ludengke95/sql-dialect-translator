@@ -7,7 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.translator.proxy.core.handler.QueryProcessor;
+import com.translator.proxy.core.handler.BackendRouter;
 import com.translator.proxy.core.handler.SessionAttribute;
 import com.translator.proxy.core.session.FrontendSession;
 import com.translator.proxy.protocol.pg.catalog.PgSystemCatalogProvider;
@@ -36,10 +36,9 @@ public class PgCommandHandler extends ChannelInboundHandlerAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(PgCommandHandler.class);
 
-    private static volatile QueryProcessor queryProcessor = QueryProcessor.NOOP;
-
+    private final BackendRouter backendRouter;
     private final PgResponseWriter responseWriter = new PgResponseWriter();
-    private final PgSystemCatalogProvider systemCatalog = new PgSystemCatalogProvider();
+    private final PgSystemCatalogProvider systemCatalog;
 
     /** 已准备的语句缓存（statement name → sql） */
     private final Map<String, String> preparedStatements = new ConcurrentHashMap<String, String>();
@@ -48,10 +47,13 @@ public class PgCommandHandler extends ChannelInboundHandlerAdapter {
     private final Map<String, String> portals = new ConcurrentHashMap<String, String>();
 
     /**
-     * 设置全局查询处理器。
+     * 构造命令分发器。
+     *
+     * @param backendRouter 后端路由器，按会话 database 解析对应后端 QueryProcessor
      */
-    public static void setQueryProcessor(QueryProcessor processor) {
-        queryProcessor = processor != null ? processor : QueryProcessor.NOOP;
+    public PgCommandHandler(BackendRouter backendRouter) {
+        this.backendRouter = backendRouter;
+        this.systemCatalog = new PgSystemCatalogProvider(backendRouter);
     }
 
     @Override
@@ -128,7 +130,7 @@ public class PgCommandHandler extends ChannelInboundHandlerAdapter {
         }
 
         // 转发到后端
-        queryProcessor.process(ctx, sql, session);
+        backendRouter.resolve(session).process(ctx, sql, session);
     }
 
     // ==================== Extended Query ====================
@@ -211,7 +213,7 @@ public class PgCommandHandler extends ChannelInboundHandlerAdapter {
             if (systemCatalog.canHandle(sql)) {
                 systemCatalog.handleQuery(ctx, sql, session);
             } else {
-                queryProcessor.process(ctx, sql, session);
+                backendRouter.resolve(session).process(ctx, sql, session);
             }
         } else {
             // EmptyQuery

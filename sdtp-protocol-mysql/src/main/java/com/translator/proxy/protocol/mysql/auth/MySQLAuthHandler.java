@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.translator.metrics.ConnectionMetrics;
+import com.translator.proxy.core.handler.BackendRouter;
 import com.translator.proxy.core.handler.SessionAttribute;
 import com.translator.proxy.core.session.FrontendSession;
 import com.translator.proxy.protocol.mysql.codec.MySQLPacketDecoder;
@@ -39,6 +40,7 @@ public class MySQLAuthHandler extends ChannelInboundHandlerAdapter {
     private final String expectedUser;
     private final String expectedPassword;
     private final EventExecutorGroup bizExecutorGroup;
+    private final BackendRouter backendRouter;
 
     /** 是否在等待 AuthSwitchResponse（caching_sha2_password 第二步） */
     private boolean expectingAuthSwitchResponse;
@@ -52,10 +54,12 @@ public class MySQLAuthHandler extends ChannelInboundHandlerAdapter {
     /** 响应写入器 */
     private final MySQLResponseWriter responseWriter;
 
-    public MySQLAuthHandler(String expectedUser, String expectedPassword, EventExecutorGroup bizExecutorGroup) {
+    public MySQLAuthHandler(String expectedUser, String expectedPassword, EventExecutorGroup bizExecutorGroup,
+            BackendRouter backendRouter) {
         this.expectedUser = expectedUser;
         this.expectedPassword = expectedPassword;
         this.bizExecutorGroup = bizExecutorGroup;
+        this.backendRouter = backendRouter;
         this.responseWriter = new MySQLResponseWriter();
     }
 
@@ -215,10 +219,10 @@ public class MySQLAuthHandler extends ChannelInboundHandlerAdapter {
 
     private void switchToCommandHandler(ChannelHandlerContext ctx) {
         if (bizExecutorGroup != null) {
-            ctx.pipeline().addAfter(bizExecutorGroup, "authHandler", "commandHandler", new MySQLCommandHandler());
+            ctx.pipeline().addAfter(bizExecutorGroup, "authHandler", "commandHandler", new MySQLCommandHandler(backendRouter));
             ctx.pipeline().remove(this);
         } else {
-            ctx.pipeline().replace(this, "commandHandler", new MySQLCommandHandler());
+            ctx.pipeline().replace(this, "commandHandler", new MySQLCommandHandler(backendRouter));
         }
     }
 

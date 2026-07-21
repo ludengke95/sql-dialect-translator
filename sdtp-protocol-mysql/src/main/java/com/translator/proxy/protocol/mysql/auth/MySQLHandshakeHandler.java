@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.translator.metrics.ConnectionMetrics;
+import com.translator.proxy.core.handler.BackendRouter;
 import com.translator.proxy.core.handler.SessionAttribute;
 import com.translator.proxy.core.session.FrontendSession;
 import com.translator.proxy.metrics.NettyMetrics;
@@ -48,14 +49,19 @@ public class MySQLHandshakeHandler extends ChannelInboundHandlerAdapter {
     private final String authUser;
     private final String authPassword;
     private final EventExecutorGroup bizExecutorGroup;
+    private final BackendRouter backendRouter;
 
     /**
      * 使用自定义账密和业务线程池。
+     *
+     * @param backendRouter 后端路由器（由启动层经 SPI 注入）
      */
-    public MySQLHandshakeHandler(String authUser, String authPassword, EventExecutorGroup bizExecutorGroup) {
+    public MySQLHandshakeHandler(String authUser, String authPassword, EventExecutorGroup bizExecutorGroup,
+            BackendRouter backendRouter) {
         this.authUser = authUser;
         this.authPassword = authPassword;
         this.bizExecutorGroup = bizExecutorGroup;
+        this.backendRouter = backendRouter;
     }
 
     @Override
@@ -77,7 +83,7 @@ public class MySQLHandshakeHandler extends ChannelInboundHandlerAdapter {
 
         ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(handshake, (byte) 0));
 
-        ctx.pipeline().replace(this, "authHandler", new MySQLAuthHandler(authUser, authPassword, bizExecutorGroup));
+        ctx.pipeline().replace(this, "authHandler", new MySQLAuthHandler(authUser, authPassword, bizExecutorGroup, backendRouter));
     }
 
     /**

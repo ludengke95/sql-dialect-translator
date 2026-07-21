@@ -3,10 +3,13 @@ package com.translator.proxy.protocol.pg.catalog;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.translator.proxy.core.handler.BackendRouter;
 import com.translator.proxy.core.session.FrontendSession;
 import com.translator.proxy.protocol.frontend.SystemCatalogProvider;
 import com.translator.proxy.protocol.pg.codec.PgMessage;
@@ -26,7 +29,17 @@ public class PgSystemCatalogProvider implements SystemCatalogProvider {
 
     private static final Logger log = LoggerFactory.getLogger(PgSystemCatalogProvider.class);
 
+    /** 后端路由器（用于 pg_database 枚举返回后端名） */
+    private final BackendRouter backendRouter;
+
+    private static final Pattern PG_DATABASE =
+            Pattern.compile("^\\s*SELECT\\s+.*\\bFROM\\s+PG_DATABASE\\b", Pattern.CASE_INSENSITIVE);
+
     private final PgResponseWriter responseWriter = new PgResponseWriter();
+
+    public PgSystemCatalogProvider(BackendRouter backendRouter) {
+        this.backendRouter = backendRouter;
+    }
 
     @Override
     public boolean canHandle(String sql) {
@@ -37,7 +50,12 @@ public class PgSystemCatalogProvider implements SystemCatalogProvider {
                 || upper.startsWith("SELECT CURRENT_DATABASE")
                 || upper.startsWith("SELECT VERSION()")
                 || upper.startsWith("SELECT PG_")
-                || upper.startsWith("SET ");
+                || upper.startsWith("SET ")
+                || isPgDatabaseQuery(sql);
+    }
+
+    private static boolean isPgDatabaseQuery(String sql) {
+        return sql != null && PG_DATABASE.matcher(sql.trim()).find();
     }
 
     @Override
@@ -72,6 +90,11 @@ public class PgSystemCatalogProvider implements SystemCatalogProvider {
             String value = getVariables().get(varName.toLowerCase());
             if (value == null) value = "";
             sendSingleValueResult(ctx, varName.toLowerCase(), value);
+            return;
+        }
+
+        if (isPgDatabaseQuery(sql)) {
+            sendDatabasesResult(ctx, backendRouter.getBackendNames());
             return;
         }
 
@@ -118,6 +141,35 @@ public class PgSystemCatalogProvider implements SystemCatalogProvider {
         ctx.write(new PgMessage(PgWire.MSG_ROW_DESCRIPTION, rowDesc));
 
         responseWriter.sendCommandComplete(ctx, tag + " 0");
+        responseWriter.sendReadyForQuery(ctx, PgWire.TXN_IDLE);
+    }
+
+    /**
+     * 发送 pg_database 枚举结果（与 MySQL SHOW DATABASES 对称，返回后端名列表）。
+     */
+    private void sendDatabasesResult(ChannelHandlerContext ctx, Set<String> names) {
+        // RowDescription (1 column: datname, text type)
+        ByteBuf rowDesc = ctx.alloc().buffer(64);
+        rowDesc.writeShort(1);
+        PgWire.cstr(rowDesc, "datname");
+        rowDesc.writeInt(0);  // table OID
+        rowDesc.writeShort(0); // attr num
+        rowDesc.writeInt(PgOid.TEXT); // type OID
+        rowDesc.writeShort(-1); // type size
+        rowDesc.writeInt(-1); // type modifier
+        rowDesc.writeShort(0); // format
+        ctx.write(new PgMessage(PgWire.MSG_ROW_DESCRIPTION, rowDesc));
+
+        for (String name : names) {
+            byte[] bytes = name.getBytes(StandardCharsets.UTF_8);
+            ByteBuf dataRow = ctx.alloc().buffer(4 + bytes.length);
+            dataRow.writeShort(1);
+            dataRow.writeInt(bytes.length);
+            dataRow.writeBytes(bytes);
+            ctx.write(new PgMessage(PgWire.MSG_DATA_ROW, dataRow));
+        }
+
+        responseWriter.sendCommandComplete(ctx, "SELECT " + names.size());
         responseWriter.sendReadyForQuery(ctx, PgWire.TXN_IDLE);
     }
 

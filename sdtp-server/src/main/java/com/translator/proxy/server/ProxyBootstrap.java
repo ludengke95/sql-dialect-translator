@@ -16,7 +16,6 @@ import com.translator.proxy.metrics.MetricsModule;
 import com.translator.proxy.protocol.frontend.AuthConfig;
 import com.translator.proxy.protocol.frontend.FrontendProtocol;
 import com.translator.proxy.protocol.frontend.FrontendProtocols;
-import com.translator.proxy.protocol.mysql.command.MySQLCommandHandler;
 import com.translator.proxy.server.config.ConfigLoader;
 import com.translator.proxy.server.config.ConfigWatcher;
 import com.translator.proxy.server.config.ProxyConfig;
@@ -107,10 +106,6 @@ public class ProxyBootstrap {
         backendPoolManager = new BackendPoolManager(
                 backends, defaultTranslationConfig, config.getReloadQueueCapacity(), config.getReloadDrainTimeoutMs());
 
-        // 将路由器注入命令处理器（兼容旧 CommandHandler 和新 MySQLCommandHandler）
-        //todo pg 有没有类似的操作，CommandHandler有没有更优雅的方式使用backendPoolManager
-        MySQLCommandHandler.setBackendRouter(backendPoolManager);
-
         // 初始化指标模块
         ProxyConfig.MetricsConf mc = config.getMetrics();
         if (mc.isEnabled()) {
@@ -148,7 +143,7 @@ public class ProxyBootstrap {
 
                             pipeline.addLast(
                                     "handshakeHandler",
-                                    frontendProtocol.newHandshakeHandler(authConfigAdapter, bizExecutorGroup));
+                                    frontendProtocol.newHandshakeHandler(authConfigAdapter, bizExecutorGroup, backendPoolManager));
                         }
                     });
 

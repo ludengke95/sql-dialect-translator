@@ -464,3 +464,39 @@ sequenceDiagram
 ---
 
 > **一句话总结**：以「握手处理器构造注入 `BackendRouter`，MySQL/PG 对称」为唯一注入入口，彻底替代静态 setter 反模式，并补上 PG 后端接线与 `pg_database` 枚举对齐，同时清理全部已确认死代码——PG 不再是「没接线的 MySQL 早期版」。
+
+---
+
+## 十二、v3 复核（重构后核对，2026-07-21）
+
+> **触发原因**：用户反馈「代码合并了新功能进来」，需核对 v2 方案是否仍适用。
+> **复核方式**：主理人亲自 read 当前 4 个模块全部相关源码 + grep 复核引用，对照 v2 文档。
+
+### 12.1 结论
+
+**方案仍然适用（YES），无需重写。** v2 文档 §5 文件级改动清单与当前重构后代码**逐行吻合**（路径、行号、改法全部正确）。合并进来的「多协议支持 + PG 适配 + 协议包重构」只新增了基础设施抽象，未触及本方案的目标（路由器注入方式 / PG 接线 / pg_database 拦截 / 死代码清理）。
+
+### 12.2 重构带来的现状变化（与 v2 假设的差异）
+
+| 维度 | v2 假设 | 当前真实状态（HEAD=4c687d6） | 影响 |
+|------|---------|------------------------------|------|
+| 注入入口 | 路由器经握手处理器构造注入（v2 关键修正） | 实测握手链路：`FrontendProtocol.newHandshakeHandler` → `MySQLHandshakeHandler` → `MySQLAuthHandler` → `MySQLCommandHandler`；PG：`PgHandshakeHandler` → `PgCommandHandler`。`newCommandHandler()` 确为死代码（仅接口+2 实现，零调用） | ✅ 假设成立，链路与文档 §4.1 完全一致 |
+| `FrontendProtocol.newHandshakeHandler` 签名 | 需加 `BackendRouter` 参数 | 当前仍为 `(AuthConfig, EventLoopGroup)`，未变 | ✅ 改动点仍有效 |
+| `newCommandHandler()` | 删除 | 接口 line 61 + 2 实现均存在、零调用 | ✅ 删除计划仍有效 |
+| PG 接线 | `PgCommandHandler` 改构造注入 `BackendRouter`，补 `resolve` | 当前 `static volatile QueryProcessor` + `setQueryProcessor`（零调用死代码）+ `new PgSystemCatalogProvider()` 无参 | ✅ 改动点仍有效 |
+| `ProxyBootstrap` 注入 | 删 `import MySQLCommandHandler` + 静态 `setBackendRouter` | 当前 line 19 import、line 110-112 静态调用 + 原始 todo 原封未动 | ✅ 改动点仍有效 |
+| **新增抽象（不冲突）** | — | ① `applyMaxPacketSize(long)` 默认方法钩子（启动期下发全局配置）② `newSystemCatalog()` SPI 工厂 ③ `FrontendProtocols` ServiceLoader 加载器 | ⚠️ 不冲突；但 `applyMaxPacketSize` 为**方案 B（initBackend 钩子）提供了同构先例** |
+| 其他 `FrontendProtocol` 实现 | 仅一组（Q1） | grep `implements FrontendProtocol` 仅 `MySQLFrontendProtocol` / `PostgreSQLFrontendProtocol`，无测试桩 | ✅ 与 Q1 一致 |
+
+### 12.3 对方案 A / B 的再评估（因重构可微调）
+
+- **方案 A（v2 选定，构造器注入 + 改 `newHandshakeHandler` 签名）**：仍完全成立，文件清单无需改动。优点：router 为必传构造参数，不可能被遗漏；单测可独立 mock。
+- **方案 B（`initBackend(BackendRouter)` 默认方法，类比 `applyMaxPacketSize`）**：重构后**吸引力上升**——因为 `applyMaxPacketSize` 已被本代码库接受为「启动期向协议下发全局配置」的标准范式，且 `backendPoolManager` 本就是单一全局实例（存到协议实例字段语义正确）。B 不破坏 `newHandshakeHandler` 签名、向后兼容更好、改动更小。
+- **方案 C（service-locator）**：仍不推荐。
+
+> **建议**：维持 v2 的**方案 A**（已决策、清单精确、利于单测）。仅当你更偏好「不破坏 SPI 接口签名、改动最小」时，可改用方案 B（在 `FrontendProtocol` 加 `default void initBackend(BackendRouter)`，两个协议实现存字段并透传给握手处理器）。两种方案对最终运行行为无差异。
+
+### 12.4 实施前最后确认
+
+- grep 复核（2026-07-21）：`setBackendRouter` 仅 `ProxyBootstrap:112` 一处调用；`setQueryProcessor` 仅定义、零调用；`newCommandHandler` 仅接口 + 2 实现、零调用；`new MySQLCommandHandler()` / `new PgCommandHandler()` 仅握手/认证处理器内部调用（即本方案需改的注入点）。**无残留引用风险。**
+- 历史派发的实现 agent 未落地任何改动（工作区干净），可基于本方案干净实施。
