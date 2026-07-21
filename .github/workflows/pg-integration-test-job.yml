@@ -96,14 +96,14 @@ jobs:
           backends:
             - name: tpch
               dialect: ${{ inputs.backend_dialect }}
-              jdbc-url: jdbc:mysql://host.docker.internal:${{ inputs.backend_port }}/tpch
+              jdbc-url: jdbc:mysql://host.docker.internal:${{ inputs.backend_port }}/tpch?allowMultiQueries=true
               username: ${{ inputs.backend_user }}
               password: ${{ inputs.backend_password }}
               max-pool-size: 10
               min-idle: 2
             - name: tpcc
               dialect: ${{ inputs.backend_dialect }}
-              jdbc-url: jdbc:mysql://host.docker.internal:${{ inputs.backend_port }}/tpcc
+              jdbc-url: jdbc:mysql://host.docker.internal:${{ inputs.backend_port }}/tpcc?allowMultiQueries=true
               username: ${{ inputs.backend_user }}
               password: ${{ inputs.backend_password }}
               max-pool-size: 10
