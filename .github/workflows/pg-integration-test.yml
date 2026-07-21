@@ -36,7 +36,7 @@ jobs:
         run: mvn clean package -DskipTests -B
 
       - name: Build SDTP Docker image
-        run: docker build -t sdtp:latest .
+        run: docker build -f docker/Dockerfile -t sdtp:latest .
 
       - name: Save SDTP Docker image
         run: docker save sdtp:latest | gzip > /tmp/sdtp-image.tar.gz

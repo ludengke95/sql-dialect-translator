@@ -88,7 +88,11 @@ jobs:
         run: |
           cat > /tmp/sdtp-config.yml << 'YAML'
           proxy:
-            pg-port: ${{ inputs.sdtp_port }} # PG frontend port
+            port: ${{ inputs.sdtp_port }} # PG frontend listen port
+            frontend-protocol: POSTGRESQL
+            auth:
+              user: ${{ inputs.backend_user }}
+              password: ${{ inputs.backend_password }}
           backends:
             - name: tpch
               dialect: ${{ inputs.backend_dialect }}
