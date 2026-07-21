@@ -96,14 +96,14 @@ jobs:
           backends:
             - name: tpch
               dialect: ${{ inputs.backend_dialect }}
-              jdbc-url: jdbc:mysql://host.docker.internal:${{ inputs.backend_port }}/${{ inputs.backend_db }}
+              jdbc-url: jdbc:mysql://host.docker.internal:${{ inputs.backend_port }}/tpch
               username: ${{ inputs.backend_user }}
               password: ${{ inputs.backend_password }}
               max-pool-size: 10
               min-idle: 2
             - name: tpcc
               dialect: ${{ inputs.backend_dialect }}
-              jdbc-url: jdbc:mysql://host.docker.internal:${{ inputs.backend_port }}/${{ inputs.backend_db }}
+              jdbc-url: jdbc:mysql://host.docker.internal:${{ inputs.backend_port }}/tpcc
               username: ${{ inputs.backend_user }}
               password: ${{ inputs.backend_password }}
               max-pool-size: 10
@@ -145,7 +145,7 @@ jobs:
             --mysql-password ${{ inputs.backend_password }} \
             --mysql-db ${{ inputs.backend_db }} \
             --scale 0.01 \
-            --schema ${{ inputs.backend_db }}
+            --schema tpch
 
       - name: Create TPC-C tables in MySQL
         run: |
@@ -161,7 +161,7 @@ jobs:
             --mysql-password ${{ inputs.backend_password }} \
             --mysql-db ${{ inputs.backend_db }} \
             --warehouses 1 \
-            --schema ${{ inputs.backend_db }}
+            --schema tpcc
 
       - name: Run integration test (${{ inputs.test_mode }})
         run: |
@@ -172,5 +172,7 @@ jobs:
             --user ${{ inputs.backend_user }} \
             --password ${{ inputs.backend_password }} \
             --database ${{ inputs.backend_db }} \
+            --tpch-database tpch \
+            --tpcc-database tpcc \
             --benchmark all \
             --output-dir benchmark/reports

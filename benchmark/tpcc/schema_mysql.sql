@@ -1,6 +1,7 @@
 -- TPC-C Table Structure (MySQL DDL)
--- 注意：表创建在当前连接数据库（由工作流 backend_db 指定，如 testdb），
--- 不再硬编码 tpcc 库，以保证与代理后端 jdbc-url 及 data_gen --schema 保持一致。
+SET FOREIGN_KEY_CHECKS=0;
+CREATE DATABASE IF NOT EXISTS tpcc;
+USE tpcc;
 
 -- Warehouse Table
 DROP TABLE IF EXISTS warehouse;
