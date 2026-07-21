@@ -71,6 +71,15 @@ public class MySQLFrontendProtocol implements FrontendProtocol {
     }
 
     @Override
+    public void applyMaxPacketSize(long maxPacketSize) {
+        // 将全局配置的最大包大小同步进 MySQL 系统变量表，
+        // 使 SELECT @@max_allowed_packet 返回与配置一致的值。
+        // 共享变量表由 MySQLSystemCatalogProvider 内部持有，
+        // 通用启动类不再感知 MySQL 专属细节。
+        MySQLSystemCatalogProvider.setSystemVariable("max_allowed_packet", String.valueOf(maxPacketSize));
+    }
+
+    @Override
     public int defaultPort() {
         return 3306;
     }

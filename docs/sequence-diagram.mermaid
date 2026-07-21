@@ -40,8 +40,10 @@ sequenceDiagram
     Decoder->>CmdHandler: RawMySQLPacket (seq=0)
 
     alt SET / USE / 系统变量查询
-        CmdHandler->>SysCatalog: intercept(sql, database)
-        SysCatalog-->>CmdHandler: InterceptResult or null
+        CmdHandler->>SysCatalog: canHandle(sql)
+        SysCatalog-->>CmdHandler: true
+        CmdHandler->>SysCatalog: handleQuery(ctx, sql, session)
+        SysCatalog-->>CmdHandler: 写入结果集（内部使用 InterceptResult）
         CmdHandler->>RespWriter: writeColumnDef / writeTextRow / writeEof
         RespWriter->>Client: 协议标准的结果集包序列
     else 普通 SQL 查询

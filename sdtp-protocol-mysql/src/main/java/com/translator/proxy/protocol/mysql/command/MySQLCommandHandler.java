@@ -28,7 +28,6 @@ import com.translator.proxy.protocol.mysql.codec.MySQLPacketEncoder;
 import com.translator.proxy.protocol.mysql.constant.CommandType;
 import com.translator.proxy.protocol.mysql.result.MySQLResponseWriter;
 import com.translator.proxy.protocol.mysql.util.BufferUtils;
-import com.translator.proxy.protocol.mysql.util.SystemVariableInterceptor;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
@@ -145,7 +144,7 @@ public class MySQLCommandHandler extends ChannelInboundHandlerAdapter {
         log.debug("SQL: {}", sql);
 
         // 1. 检查是否 USE 语句
-        String useDb = SystemVariableInterceptor.extractUseDatabase(sql);
+        String useDb = systemCatalog.extractUseDatabase(sql);
         if (useDb != null) {
             if (!useDb.equalsIgnoreCase(session.getDatabase())) {
                 rollbackActiveTransaction(ctx, session);
@@ -221,7 +220,7 @@ public class MySQLCommandHandler extends ChannelInboundHandlerAdapter {
         }
 
         // 4. 检查 SET 语句
-        if (SystemVariableInterceptor.isSetStatement(sql)) {
+        if (systemCatalog.isSetStatement(sql)) {
             log.debug("Handling SET statement locally: {}", sql);
             CommandMetrics.recordSystemVarInterception();
             int statusFlags = MySQLAuthHandler.getStatusFlags(session);
@@ -230,8 +229,7 @@ public class MySQLCommandHandler extends ChannelInboundHandlerAdapter {
         }
 
         // 5. 系统变量查询
-        SystemVariableInterceptor.InterceptResult ir = SystemVariableInterceptor.intercept(sql, session.getDatabase());
-        if (ir != null) {
+        if (systemCatalog.canHandle(sql)) {
             log.debug("Intercepted system variable query: {}", sql);
             CommandMetrics.recordSystemVarInterception();
             systemCatalog.handleQuery(ctx, sql, session);

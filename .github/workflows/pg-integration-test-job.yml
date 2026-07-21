@@ -1,0 +1,172 @@
+# =============================================================================
+# SDTP PG-Frontend Integration Test Job
+#
+# Reusable workflow for testing PG frontend against different backends.
+# =============================================================================
+
+name: SDTP PG-Frontend Integration Test Job
+
+on:
+  workflow_call:
+    inputs:
+      test_mode:
+        description: 'Test mode (e.g., pg-client)'
+        type: string
+        required: true
+      backend_image:
+        description: 'Backend database Docker image (e.g., mysql:8.0)'
+        type: string
+        required: true
+      backend_dialect:
+        description: 'Backend dialect for SDTP config (e.g., MYSQL)'
+        type: string
+        required: true
+      backend_user:
+        description: 'Backend database user'
+        type: string
+        required: true
+      backend_password:
+        description: 'Backend database password'
+        type: string
+        required: true
+      backend_db:
+        description: 'Backend database name'
+        type: string
+        required: true
+      backend_port:
+        description: 'Backend database port'
+        type: string
+        required: true
+      sdtp_port:
+        description: 'SDTP proxy port for PG clients'
+        type: string
+        required: true
+        default: '5432'
+      report_name:
+        description: 'Test report artifact name'
+        type: string
+        required: true
+      summary_title:
+        description: 'Step Summary title'
+        type: string
+        required: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      backend:
+        image: ${{ inputs.backend_image }}
+        env:
+          MYSQL_ROOT_PASSWORD: ${{ inputs.backend_password }}
+          MYSQL_DATABASE: ${{ inputs.backend_db }}
+        ports:
+          - '${{ inputs.backend_port }}:${{ inputs.backend_port }}'
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -uroot -p${{ inputs.backend_password }}"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download SDTP Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: sdtp-docker-image
+          path: /tmp/
+
+      - name: Load Docker images
+        run: |
+          gunzip -c /tmp/sdtp-image.tar.gz | docker load
+
+      - name: Create SDTP config and start
+        run: |
+          cat > /tmp/sdtp-config.yml << 'YAML'
+          proxy:
+            pg-port: ${{ inputs.sdtp_port }} # PG frontend port
+          backends:
+            - name: tpch
+              dialect: ${{ inputs.backend_dialect }}
+              jdbc-url: jdbc:mysql://host.docker.internal:${{ inputs.backend_port }}/${{ inputs.backend_db }}
+              username: ${{ inputs.backend_user }}
+              password: ${{ inputs.backend_password }}
+              max-pool-size: 10
+              min-idle: 2
+            - name: tpcc
+              dialect: ${{ inputs.backend_dialect }}
+              jdbc-url: jdbc:mysql://host.docker.internal:${{ inputs.backend_port }}/${{ inputs.backend_db }}
+              username: ${{ inputs.backend_user }}
+              password: ${{ inputs.backend_password }}
+              max-pool-size: 10
+              min-idle: 2
+          translation:
+            keyword-case: UPPER
+            identifier-case: LOWER
+          YAML
+
+          docker run -d --name sdtp \
+            --add-host host.docker.internal:host-gateway \
+            -p ${{ inputs.sdtp_port }}:${{ inputs.sdtp_port }} \
+            -v /tmp/sdtp-config.yml:/opt/sdtp/config/proxy-config.yml \
+            sdtp:latest
+
+          echo "Waiting for SDTP to start..."
+          sleep 10 # Wait for SDTP to be ready
+          docker logs sdtp --tail 20
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install mysql-connector-python
+
+      - name: Create TPC-H tables in MySQL
+        run: |
+          mysql -h 127.0.0.1 -u ${{ inputs.backend_user }} -p${{ inputs.backend_password }} ${{ inputs.backend_db }} < benchmark/tpch/schema_mysql.sql
+      
+      - name: Load TPC-H data into MySQL
+        run: |
+          python benchmark/tpch/data_gen.py \
+            --db-type mysql \
+            --mysql-host 127.0.0.1 \
+            --mysql-port ${{ inputs.backend_port }} \
+            --mysql-user ${{ inputs.backend_user }} \
+            --mysql-password ${{ inputs.backend_password }} \
+            --mysql-db ${{ inputs.backend_db }} \
+            --scale 0.01 \
+            --schema ${{ inputs.backend_db }}
+
+      - name: Create TPC-C tables in MySQL
+        run: |
+          mysql -h 127.0.0.1 -u ${{ inputs.backend_user }} -p${{ inputs.backend_password }} ${{ inputs.backend_db }} < benchmark/tpcc/schema_mysql.sql
+
+      - name: Load TPC-C data into MySQL
+        run: |
+          python benchmark/tpcc/data_gen.py \
+            --db-type mysql \
+            --mysql-host 127.0.0.1 \
+            --mysql-port ${{ inputs.backend_port }} \
+            --mysql-user ${{ inputs.backend_user }} \
+            --mysql-password ${{ inputs.backend_password }} \
+            --mysql-db ${{ inputs.backend_db }} \
+            --warehouses 1 \
+            --schema ${{ inputs.backend_db }}
+
+      - name: Run integration test (${{ inputs.test_mode }})
+        run: |
+          bash benchmark/run-docker-test.sh \
+            --mode ${{ inputs.test_mode }} \
+            --host host.docker.internal \
+            --port ${{ inputs.sdtp_port }} \
+            --user ${{ inputs.backend_user }} \
+            --password ${{ inputs.backend_password }} \
+            --database ${{ inputs.backend_db }} \
+            --benchmark all \
+            --output-dir benchmark/reports

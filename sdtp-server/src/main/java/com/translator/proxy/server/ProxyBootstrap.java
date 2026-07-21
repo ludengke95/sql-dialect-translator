@@ -76,13 +76,15 @@ public class ProxyBootstrap {
                 frontendProtocol.id(),
                 frontendProtocol.defaultPort());
 
-        // 同步系统变量中的 max_allowed_packet
-        com.translator.proxy.protocol.mysql.util.SystemVariableInterceptor.setSystemVariable(
-                "max_allowed_packet", String.valueOf(config.getMaxAllowedPacket()));
+        // 将连接级参数（最大包大小）下发给前端协议，由其自行决定如何应用：
+        // MySQL 会写入自身系统变量表，PG 等无此概念则忽略。
+        // 这样通用启动类不再直接依赖 MySQL 专属的 MySQLSystemCatalogProvider。
+        frontendProtocol.applyMaxPacketSize(config.getMaxAllowedPacket());
 
         bossGroup = new NioEventLoopGroup(1);
         workerGroup = new NioEventLoopGroup();
 
+        //todo 这个地方取最大值比较好，还是用累计求和比较好
         int bizThreads = 4;
         for (ProxyConfig.TargetConfig tcBackend : config.getBackends()) {
             bizThreads = Math.max(bizThreads, tcBackend.getMaxPoolSize());
@@ -106,6 +108,7 @@ public class ProxyBootstrap {
                 backends, defaultTranslationConfig, config.getReloadQueueCapacity(), config.getReloadDrainTimeoutMs());
 
         // 将路由器注入命令处理器（兼容旧 CommandHandler 和新 MySQLCommandHandler）
+        //todo pg 有没有类似的操作，CommandHandler有没有更优雅的方式使用backendPoolManager
         MySQLCommandHandler.setBackendRouter(backendPoolManager);
 
         // 初始化指标模块
@@ -136,6 +139,7 @@ public class ProxyBootstrap {
                         protected void initChannel(SocketChannel ch) {
                             ChannelPipeline pipeline = ch.pipeline();
 
+                            // todo 这个地方addLast，最后一个是最新执行的么，bizExecutorGroup为什么给handshakeHandler
                             pipeline.addLast("nettyMetrics", new NettyMetricsHandler());
                             pipeline.addLast("decoder", frontendProtocol.newDecoder(config.getMaxAllowedPacket()));
                             pipeline.addLast("encoder", frontendProtocol.newEncoder());
@@ -224,6 +228,7 @@ public class ProxyBootstrap {
     }
 
     /**
+     * todo 只有一个实现，还需要抽象么？这个地方为什么要抽象出AuthConfig？
      * AuthConfig 适配器 —— 从 ProxyConfig 获取认证信息，
      * 实现 {@link com.translator.proxy.protocol.frontend.AuthConfig} 接口。
      */
@@ -243,11 +248,6 @@ public class ProxyBootstrap {
         @Override
         public String getPassword() {
             return proxyConfig.getAuth().getPassword();
-        }
-
-        @Override
-        public long getMaxAllowedPacket() {
-            return proxyConfig.getMaxAllowedPacket();
         }
     }
 }

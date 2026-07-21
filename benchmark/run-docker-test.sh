@@ -103,9 +103,10 @@ case "$MODE" in
     mysql-jdbc-5)   DOCKER_IMAGE="mysql5-sqlline:latest" ;;
     mysql-jdbc-8)   DOCKER_IMAGE="mysql8-sqlline:latest" ;;
     python-mysql)   DOCKER_IMAGE="python-mysql:latest" ;;
+    pg-client)      DOCKER_IMAGE="postgres:15-alpine" ;;
     *)
         echo "错误: 不支持的 mode: $MODE"
-        echo "  支持: mysql-client-5, mysql-client-8, mysql-jdbc-5, mysql-jdbc-8, python-mysql"
+        echo "  支持: mysql-client-5, mysql-client-8, mysql-jdbc-5, mysql-jdbc-8, python-mysql, pg-client"
         exit 1
         ;;
 esac
@@ -185,6 +186,18 @@ execute_sql() {
                     -e "$sql" 2>&1
             )" || _EXEC_RC=$?
             ;;
+        pg-client)
+            # === PostgreSQL psql 客户端模式 ===
+            # 通过 -c 传递 SQL
+            _EXEC_OUTPUT="$(
+                docker run $DOCKER_BASE_FLAGS \
+                    -e PGPASSWORD="$PASSWORD" \
+                    "$DOCKER_IMAGE" \
+                    psql -h "$HOST" -p "$PORT" \
+                    -U "$USER" -d "$db" \
+                    -c "$sql" 2>&1
+            )" || _EXEC_RC=$?
+            ;;
         mysql-jdbc-*)
             # === JDBC / sqlline 模式 ===
             # 写 SQL 到临时文件，挂载到容器内，通过 sqlline !run 执行
@@ -249,7 +262,7 @@ is_success() {
 
     # 检查输出中的错误标志（sqlline 可能返回 0 但仍包含错误）
     # 排除 INFO/WARN 级别的日志行
-    if echo "$output" | grep -qE '(?<!INFO |WARN )(ERROR|Exception|Error:|FAILED)'; then
+    if echo "$output" | grep -qE '(?<!INFO |WARN )(ERROR|Exception|Error:|FAILED|psql.*: ERROR:)'; then
         return 1
     fi
 

@@ -1,0 +1,67 @@
+# =============================================================================
+# SDTP PG-Frontend Integration Test
+#
+# Tests the PG frontend with various backends.
+# =============================================================================
+
+name: SDTP PG-Frontend Integration Test
+
+on:
+  push:
+    branches: [rebuild] # Only run on the rebuild branch for now
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build SDTP with Maven
+        run: mvn clean package -DskipTests -B
+
+      - name: Build SDTP Docker image
+        run: docker build -t sdtp:latest .
+
+      - name: Save SDTP Docker image
+        run: docker save sdtp:latest | gzip > /tmp/sdtp-image.tar.gz
+
+      - name: Upload SDTP Docker image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdtp-docker-image
+          path: /tmp/sdtp-image.tar.gz
+          retention-days: 1
+
+  # ==========================================================================
+  # Job 2: PG-Frontend with MySQL 8 Backend
+  # ==========================================================================
+  pg-to-mysql8:
+    needs: [build]
+    uses: ./.github/workflows/pg-integration-test-job.yml
+    with:
+      test_mode: pg-client
+      backend_image: mysql:8.0
+      backend_dialect: MYSQL
+      backend_user: root
+      backend_password: test_password
+      backend_db: testdb
+      backend_port: '3306'
+      sdtp_port: '5432'
+      report_name: pg-to-mysql8-reports
+      summary_title: PG -> MySQL 8 Test Results

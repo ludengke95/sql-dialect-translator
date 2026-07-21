@@ -123,13 +123,14 @@ classDiagram
         +charsetBinary() int
     }
 
-    class MySQLSystemCatalog {
-        -variables Map~String,String~
-        +intercept(String, String) InterceptResult
+    class MySQLSystemCatalogProvider {
+        -SYSTEM_VARIABLES Map~String,String~
+        +canHandle(String) boolean
+        +handleQuery(ctx, sql, session) void
+        +getVariables() Map~String,String~
+        +setSystemVariable(String, String) void
         +isSetStatement(String) boolean
         +extractUseDatabase(String) String
-        +setVariable(String, String) void
-        +getVariables() Map~String,String~
     }
 
     %% ===== PG SPI 实现 =====
@@ -176,7 +177,7 @@ classDiagram
     
     MySQLFrontendProtocol ..> MySQLResponseWriter : creates
     MySQLFrontendProtocol ..> MySQLTypeMapper : creates
-    MySQLFrontendProtocol ..> MySQLSystemCatalog : creates
+    MySQLFrontendProtocol ..> MySQLSystemCatalogProvider : creates
     
     PostgreSQLFrontendProtocol ..> PgResponseWriter : creates
     PostgreSQLFrontendProtocol ..> PgTypeMapper : creates
@@ -195,10 +196,10 @@ classDiagram
     MySQLTypeMapper ..|> TypeMapper : implements
     PgTypeMapper ..|> TypeMapper : implements
     
-    MySQLSystemCatalog ..|> SystemCatalogProvider : implements
+    MySQLSystemCatalogProvider ..|> SystemCatalogProvider : implements
     PgSystemCatalogProvider ..|> SystemCatalogProvider : implements
 
     ResponseWriter ..> TypeMapper : uses
     ResponseWriter ..> SeqGenerator : uses
-    MySQLSystemCatalog --> InterceptResult : returns
+    MySQLSystemCatalogProvider --> InterceptResult : returns
     InterceptResult --> ColumnInfo : contains

@@ -18,11 +18,4 @@ public interface AuthConfig {
      * @return 密码
      */
     String getPassword();
-
-    /**
-     * 获取最大允许包大小（字节）。
-     *
-     * @return 最大包大小
-     */
-    long getMaxAllowedPacket();
 }

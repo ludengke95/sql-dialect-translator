@@ -31,7 +31,7 @@
 | **sdt-jdbc** | JDBC 包装器：`TranslatorDriver`（SPI）、`TranslatorConnection`、`TranslatorStatement`/`PreparedStatement`/`CallableStatement` — 拦截 SQL，通过 sdt-core 翻译，委托给真实 JDBC 执行。 |
 | **sdt-test** | 包含 sdt-core（单元测试 70+）和 sdt-jdbc（基于 Testcontainers 的集成测试）的测试模块。 |
 | **sdtp-protocol** | MySQL 线协议编解码：`MySQLPacketDecoder`/`Encoder`、常量（`CapabilityFlags`、`CommandType`、`ColumnType`）、认证（`MySQLAuth`）。 |
-| **sdtp-core** | 会话、认证、命令分发：`HandshakeHandler` → `AuthHandler` → `CommandHandler`、`SystemVariableInterceptor`（模拟 SET/系统变量查询）。 |
+| **sdtp-core** | 会话、认证、命令分发：`HandshakeHandler` → `AuthHandler` → `CommandHandler`。系统变量/SET/USE 模拟已合并进 `sdtp-protocol-mysql` 的 `MySQLSystemCatalogProvider`。 |
 | **sdtp-backend** | JDBC 执行 + 翻译集成：`TranslationQueryProcessor`（调用 sdt-core）、`JdbcBackendQueryProcessor`（裸 JDBC）、`ResultSetEncoder`（将 JDBC ResultSet 映射为 MySQL 协议行）。 |
 | **sdtp-server** | Netty 启动引导、YAML 配置（`ConfigLoader`、`ProxyConfig`）、分发包打包。 |
 

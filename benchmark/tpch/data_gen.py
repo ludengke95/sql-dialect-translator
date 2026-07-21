@@ -275,15 +275,11 @@ def load_csv_to_pg(conn_kwargs, table_name, columns, rows, schema, batch_size=10
     conn = psycopg2.connect(**conn_kwargs)
     try:
         cur = conn.cursor()
-        # 生成 CSV 数据
         buf = io.StringIO()
         writer = csv.writer(buf)
         for row in rows:
             writer.writerow(row)
         buf.seek(0)
-
-        # 使用 COPY FROM STDIN (CSV 格式，正确处理字段内的逗号引用)
-        # 限定 schema 避免写入错误的 schema
         qualified_name = f"{schema}.{table_name}"
         columns_sql = ', '.join(columns)
         cur.copy_expert(
@@ -295,10 +291,27 @@ def load_csv_to_pg(conn_kwargs, table_name, columns, rows, schema, batch_size=10
     finally:
         conn.close()
 
+def load_data_to_mysql(conn_kwargs, table_name, columns, rows, schema):
+    """使用 mysql.connector executemany 将数据批量导入 MySQL。"""
+    import mysql.connector
+    conn = mysql.connector.connect(**conn_kwargs)
+    try:
+        cur = conn.cursor()
+        if schema:
+            cur.execute(f"USE {schema}")
+        
+        placeholders = ', '.join(['%s'] * len(columns))
+        columns_sql = ', '.join(columns)
+        sql = f"INSERT INTO {table_name} ({columns_sql}) VALUES ({placeholders})"
+        
+        cur.executemany(sql, rows)
+        conn.commit()
+        print(f"  导入 {table_name}: {len(rows)} 行")
+    finally:
+        conn.close()
 
-def load_tpch_data(conn_kwargs, scale, schema):
-    """生成并加载所有 TPC-H 表（表须已清空）。"""
-    # 生成并加载所有 TPC-H 表
+def load_tpch_data(load_func, conn_kwargs, scale, schema):
+    """生成并加载所有 TPC-H 表。"""
     gen = TpchDataGenerator(scale)
     load_specs = [
         ('region', ['r_regionkey', 'r_name', 'r_comment'], gen.generate_region),
@@ -321,52 +334,93 @@ def load_tpch_data(conn_kwargs, scale, schema):
     ]
     for table, cols, gen_func in load_specs:
         rows = gen_func()
-        load_csv_to_pg(conn_kwargs, table, cols, rows, schema)
+        load_func(conn_kwargs, table, cols, rows, schema)
 
 
 def main():
     parser = argparse.ArgumentParser(description='TPC-H 数据生成器')
+    parser.add_argument('--db-type', default='postgres', choices=['postgres', 'mysql'])
+    # PG args
     parser.add_argument('--pg-host', default='localhost')
     parser.add_argument('--pg-port', type=int, default=5432)
     parser.add_argument('--pg-user', default='sdtpu')
     parser.add_argument('--pg-password', default='pg_password')
     parser.add_argument('--pg-db', default='mydb')
+    # MySQL args
+    parser.add_argument('--mysql-host', default='localhost')
+    parser.add_argument('--mysql-port', type=int, default=3306)
+    parser.add_argument('--mysql-user', default='root')
+    parser.add_argument('--mysql-password', default='')
+    parser.add_argument('--mysql-db', default='tpch')
+    
     parser.add_argument('--scale', type=float, default=SCALE_DEFAULT,
                         help='Scale factor (default: 0.01)')
     parser.add_argument('--schema', default='tpch',
-                        help='PostgreSQL schema 名 (默认: tpch)')
+                        help='数据库 schema/database 名 (默认: tpch)')
     args = parser.parse_args()
 
-    conn_kwargs = {
-        'host': args.pg_host,
-        'port': args.pg_port,
-        'user': args.pg_user,
-        'password': args.pg_password,
-        'dbname': args.pg_db,
-    }
+    if args.db_type == 'postgres':
+        import psycopg2
+        conn_kwargs = {
+            'host': args.pg_host,
+            'port': args.pg_port,
+            'user': args.pg_user,
+            'password': args.pg_password,
+            'dbname': args.pg_db,
+        }
+        load_func = load_csv_to_pg
+        connector = psycopg2
+        print(f"  目标: postgresql://{args.pg_host}:{args.pg_port}/{args.pg_db}")
+    else: # mysql
+        import mysql.connector
+        conn_kwargs = {
+            'host': args.mysql_host,
+            'port': args.mysql_port,
+            'user': args.mysql_user,
+            'password': args.mysql_password,
+            'database': args.mysql_db,
+        }
+        load_func = load_data_to_mysql
+        connector = mysql.connector
+        print(f"  目标: mysql://{args.mysql_host}:{args.mysql_port}/{args.mysql_db}")
 
     print(f"TPC-H 数据生成 (SF={args.scale}, schema={args.schema})")
-    print(f"  目标: {args.pg_host}:{args.pg_port}/{args.pg_db}")
 
-    # 清空所有 TPC-H 表（防止上次残留数据导致主键冲突）
-    import psycopg2
-    conn_clear = psycopg2.connect(**conn_kwargs)
+    # 清空所有 TPC-H 表
+    conn_clear = connector.connect(**conn_kwargs)
     cur_clear = conn_clear.cursor()
-    for t in ['lineitem', 'orders', 'customer', 'partsupp', 'part', 'supplier', 'nation', 'region']:
-        cur_clear.execute(f"DELETE FROM {args.schema}.{t}")
+    if args.db_type == 'mysql':
+        cur_clear.execute(f"USE {args.schema}")
+        cur_clear.execute("SET FOREIGN_KEY_CHECKS = 0")
+    
+    tables_to_clear = ['lineitem', 'orders', 'customer', 'partsupp', 'part', 'supplier', 'nation', 'region']
+    for t in tables_to_clear:
+        if args.db_type == 'postgres':
+            cur_clear.execute(f"DELETE FROM {args.schema}.{t}")
+        else:
+            cur_clear.execute(f"TRUNCATE TABLE {t}")
+    
+    if args.db_type == 'mysql':
+        cur_clear.execute("SET FOREIGN_KEY_CHECKS = 1")
     conn_clear.commit()
     conn_clear.close()
 
     # 使用 Python 生成器加载数据
     print("  使用 Python 生成器加载数据...")
-    load_tpch_data(conn_kwargs, args.scale, args.schema)
+    load_tpch_data(load_func, conn_kwargs, args.scale, args.schema)
     print("  Python 生成器加载完成")
 
     # 验证数据量
-    conn = psycopg2.connect(**conn_kwargs)
+    conn = connector.connect(**conn_kwargs)
     cur = conn.cursor()
-    for table in ['region', 'nation', 'supplier', 'part', 'partsupp', 'customer', 'orders', 'lineitem']:
-        cur.execute(f"SELECT COUNT(*) FROM {args.schema}.{table}")
+    if args.db_type == 'mysql':
+        cur.execute(f"USE {args.schema}")
+    
+    for table in tables_to_clear:
+        if args.db_type == 'postgres':
+            cur.execute(f"SELECT COUNT(*) FROM {args.schema}.{table}")
+        else:
+            cur.execute(f"SELECT COUNT(*) FROM {table}")
         cnt = cur.fetchone()[0]
         print(f"  {args.schema}.{table}: {cnt} 行")
     conn.close()

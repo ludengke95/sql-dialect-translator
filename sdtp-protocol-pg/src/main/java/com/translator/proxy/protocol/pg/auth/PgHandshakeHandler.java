@@ -54,6 +54,7 @@ public class PgHandshakeHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
         if (!(msg instanceof PgRawMessage)) {
+            //todo fireChannelRead是做什么的
             ctx.fireChannelRead(msg);
             return;
         }
@@ -121,9 +122,9 @@ public class PgHandshakeHandler extends ChannelInboundHandlerAdapter {
      */
     private void handlePassword(ChannelHandlerContext ctx, PgRawMessage raw) {
         ByteBuf payload = raw.getPayload();
-        byte[] passwordBytes = new byte[payload.readableBytes()];
-        payload.readBytes(passwordBytes);
-        String clientResponse = new String(passwordBytes, StandardCharsets.UTF_8);
+        // PG PasswordMessage 的密码字段是 NUL 终止串，复用 readCstr 剥离末尾的 0x00，
+        // 否则尾随 NUL 会导致 PgAuth.verify 的 equals 比对恒为 false（MD5 认证必败）。
+        String clientResponse = readCstr(payload);
 
         log.debug("Password response: {}", clientResponse);
 

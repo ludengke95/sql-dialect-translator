@@ -248,85 +248,139 @@ def load_csv_to_pg(conn_kwargs, table_name, columns, rows, schema, batch_size=50
     finally:
         conn.close()
 
+def load_data_to_mysql(conn_kwargs, table_name, columns, rows, schema):
+    import mysql.connector
+    conn = mysql.connector.connect(**conn_kwargs)
+    try:
+        cur = conn.cursor()
+        if schema:
+            cur.execute(f"USE {schema}")
+        
+        placeholders = ', '.join(['%s'] * len(columns))
+        columns_sql = ', '.join(columns)
+        sql = f"INSERT INTO {table_name} ({columns_sql}) VALUES ({placeholders})"
+        
+        cur.executemany(sql, rows)
+        conn.commit()
+        print(f"  导入 {table_name}: {len(rows)} 行")
+    finally:
+        conn.close()
+
 
 def main():
     parser = argparse.ArgumentParser(description='TPC-C 数据生成器')
+    parser.add_argument('--db-type', default='postgres', choices=['postgres', 'mysql'])
+    # PG args
     parser.add_argument('--pg-host', default='localhost')
     parser.add_argument('--pg-port', type=int, default=5432)
     parser.add_argument('--pg-user', default='sdtpu')
     parser.add_argument('--pg-password', default='pg_password')
     parser.add_argument('--pg-db', default='mydb')
+    # MySQL args
+    parser.add_argument('--mysql-host', default='localhost')
+    parser.add_argument('--mysql-port', type=int, default=3306)
+    parser.add_argument('--mysql-user', default='root')
+    parser.add_argument('--mysql-password', default='')
+    parser.add_argument('--mysql-db', default='tpcc')
+    
     parser.add_argument('--warehouses', type=int, default=1,
                         help='Warehouse 数量（默认 1）')
     parser.add_argument('--schema', default='tpcc',
-                        help='PostgreSQL schema 名 (默认: tpcc)')
+                        help='数据库 schema/database 名 (默认: tpcc)')
     args = parser.parse_args()
 
-    conn_kwargs = {
-        'host': args.pg_host,
-        'port': args.pg_port,
-        'user': args.pg_user,
-        'password': args.pg_password,
-        'dbname': args.pg_db,
-    }
+    if args.db_type == 'postgres':
+        conn_kwargs = {
+            'host': args.pg_host,
+            'port': args.pg_port,
+            'user': args.pg_user,
+            'password': args.pg_password,
+            'dbname': args.pg_db,
+        }
+        load_func = load_csv_to_pg
+        print(f"  目标: postgresql://{args.pg_host}:{args.pg_port}/{args.pg_db}")
+    else: # mysql
+        conn_kwargs = {
+            'host': args.mysql_host,
+            'port': args.mysql_port,
+            'user': args.mysql_user,
+            'password': args.mysql_password,
+            'database': args.mysql_db,
+        }
+        load_func = load_data_to_mysql
+        print(f"  目标: mysql://{args.mysql_host}:{args.mysql_port}/{args.mysql_db}")
+
 
     nw = args.warehouses
     schema = args.schema
     print(f"TPC-C 数据生成 ({nw} warehouse, schema={schema})")
-    print(f"  目标: {args.pg_host}:{args.pg_port}/{args.pg_db}")
-
+    
     gen = TpccDataGenerator(nw)
 
     import time
     t0 = time.time()
-
+    
+    # ... (generation logic is the same)
     # warehouse
     rows = gen.generate_warehouse()
-    load_csv_to_pg(conn_kwargs, 'warehouse', ['w_id','w_name','w_street_1','w_street_2','w_city','w_state','w_zip','w_tax','w_ytd'], rows, schema)
+    load_func(conn_kwargs, 'warehouse', ['w_id','w_name','w_street_1','w_street_2','w_city','w_state','w_zip','w_tax','w_ytd'], rows, schema)
 
     # district
     rows = gen.generate_district()
-    load_csv_to_pg(conn_kwargs, 'district', ['d_id','d_w_id','d_name','d_street_1','d_street_2','d_city','d_state','d_zip','d_tax','d_ytd','d_next_o_id'], rows, schema)
+    load_func(conn_kwargs, 'district', ['d_id','d_w_id','d_name','d_street_1','d_street_2','d_city','d_state','d_zip','d_tax','d_ytd','d_next_o_id'], rows, schema)
 
     # item (100K, shared across warehouses)
     rows = gen.generate_item()
-    load_csv_to_pg(conn_kwargs, 'item', ['i_id','i_im_id','i_name','i_price','i_data'], rows, schema)
+    load_func(conn_kwargs, 'item', ['i_id','i_im_id','i_name','i_price','i_data'], rows, schema)
 
     # stock (100K per warehouse)
     rows = gen.generate_stock()
-    load_csv_to_pg(conn_kwargs, 'stock', ['s_i_id','s_w_id','s_quantity',
+    load_func(conn_kwargs, 'stock', ['s_i_id','s_w_id','s_quantity',
         's_dist_01','s_dist_02','s_dist_03','s_dist_04','s_dist_05',
         's_dist_06','s_dist_07','s_dist_08','s_dist_09','s_dist_10',
         's_ytd','s_order_cnt','s_remote_cnt','s_data'], rows, schema)
 
     # customer (3000 per district, 10 districts per warehouse)
     rows = gen.generate_customer()
-    load_csv_to_pg(conn_kwargs, 'customer', ['c_id','c_d_id','c_w_id','c_first','c_middle','c_last',
+    load_func(conn_kwargs, 'customer', ['c_id','c_d_id','c_w_id','c_first','c_middle','c_last',
         'c_street_1','c_street_2','c_city','c_state','c_zip','c_phone','c_since','c_credit',
         'c_credit_lim','c_discount','c_balance','c_ytd_payment','c_payment_cnt','c_delivery_cnt','c_data'], rows, schema)
 
     # orders + new_orders + order_line
     order_rows, no_rows, ol_rows = gen.generate_orders_and_new_orders()
-    load_csv_to_pg(conn_kwargs, 'orders', ['o_id','o_d_id','o_w_id','o_c_id','o_entry_d','o_carrier_id','o_ol_cnt','o_all_local'], order_rows, schema)
-    load_csv_to_pg(conn_kwargs, 'new_orders', ['no_o_id','no_d_id','no_w_id'], no_rows, schema)
-    load_csv_to_pg(conn_kwargs, 'order_line', ['ol_o_id','ol_d_id','ol_w_id','ol_number','ol_i_id','ol_supply_w_id','ol_delivery_d','ol_quantity','ol_amount','ol_dist_info'], ol_rows, schema)
+    load_func(conn_kwargs, 'orders', ['o_id','o_d_id','o_w_id','o_c_id','o_entry_d','o_carrier_id','o_ol_cnt','o_all_local'], order_rows, schema)
+    load_func(conn_kwargs, 'new_orders', ['no_o_id','no_d_id','no_w_id'], no_rows, schema)
+    load_func(conn_kwargs, 'order_line', ['ol_o_id','ol_d_id','ol_w_id','ol_number','ol_i_id','ol_supply_w_id','ol_delivery_d','ol_quantity','ol_amount','ol_dist_info'], ol_rows, schema)
 
     # history
     rows = gen.generate_history()
-    load_csv_to_pg(conn_kwargs, 'history', ['h_c_id','h_c_d_id','h_c_w_id','h_d_id','h_w_id','h_date','h_amount','h_data'], rows, schema)
+    load_func(conn_kwargs, 'history', ['h_c_id','h_c_d_id','h_c_w_id','h_d_id','h_w_id','h_date','h_amount','h_data'], rows, schema)
+
 
     t1 = time.time()
     print(f"\n数据生成完成，耗时 {t1-t0:.1f}s")
 
     # 验证
-    import psycopg2
-    conn = psycopg2.connect(**conn_kwargs)
-    cur = conn.cursor()
-    for table in ['warehouse','district','item','stock','customer','orders','new_orders','order_line','history']:
-        cur.execute(f"SELECT COUNT(*) FROM {schema}.{table}")
-        cnt = cur.fetchone()[0]
-        print(f"  {schema}.{table}: {cnt} 行")
-    conn.close()
+    if args.db_type == 'postgres':
+        import psycopg2
+        conn = psycopg2.connect(**conn_kwargs)
+        cur = conn.cursor()
+        for table in ['warehouse','district','item','stock','customer','orders','new_orders','order_line','history']:
+            cur.execute(f"SELECT COUNT(*) FROM {schema}.{table}")
+            cnt = cur.fetchone()[0]
+            print(f"  {schema}.{table}: {cnt} 行")
+        conn.close()
+    else: # mysql
+        import mysql.connector
+        conn = mysql.connector.connect(**conn_kwargs)
+        cur = conn.cursor()
+        if schema:
+            cur.execute(f"USE {schema}")
+        for table in ['warehouse','district','item','stock','customer','orders','new_orders','order_line','history']:
+            cur.execute(f"SELECT COUNT(*) FROM {table}")
+            cnt = cur.fetchone()[0]
+            print(f"  {table}: {cnt} 行")
+        conn.close()
 
 
 if __name__ == '__main__':
