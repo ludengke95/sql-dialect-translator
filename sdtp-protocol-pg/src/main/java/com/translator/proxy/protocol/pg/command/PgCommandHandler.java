@@ -111,7 +111,10 @@ public class PgCommandHandler extends ChannelInboundHandlerAdapter {
 
     private void handleSimpleQuery(ChannelHandlerContext ctx, PgRawMessage raw) {
         ByteBuf payload = raw.getPayload();
-        String sql = payload.toString(StandardCharsets.UTF_8);
+        // PG Simple Query 消息的查询串以 NUL 结尾；同时去掉尾随分号/空白。
+        // 尾随分号在开启 allowMultiQueries 时会被 MySQL Connector/J 按 ';' 拆出空语句，
+        // 导致 "Query was empty"；分号仅为语句分隔符，去除不影响语义。
+        String sql = stripQueryTerminators(payload.toString(StandardCharsets.UTF_8));
         log.debug("PG Query: {}", sql);
 
         FrontendSession session =
@@ -207,6 +210,7 @@ public class PgCommandHandler extends ChannelInboundHandlerAdapter {
         }
 
         if (sql != null) {
+            sql = stripQueryTerminators(sql);
             FrontendSession session =
                     ctx.channel().attr(SessionAttribute.SESSION_KEY).get();
 
@@ -258,6 +262,23 @@ public class PgCommandHandler extends ChannelInboundHandlerAdapter {
     }
 
     // ==================== 辅助方法 ====================
+
+    /**
+     * 归一化 PG 查询串：截断 NUL 终止符并去除尾随的分号/空白。
+     *
+     * <p>PG 线协议以 NUL 结束查询串；尾随分号在开启 allowMultiQueries 的 MySQL 后端上
+     * 会被驱动按 ';' 拆分出空语句而报 "Query was empty"。分号仅为语句分隔符，去除安全。
+     */
+    private static String stripQueryTerminators(String s) {
+        if (s == null) {
+            return "";
+        }
+        int nul = s.indexOf(0);
+        if (nul >= 0) {
+            s = s.substring(0, nul);
+        }
+        return s.replaceAll("[;\\s]+$", "");
+    }
 
     private static String readCstr(ByteBuf buf) {
         int len = buf.bytesBefore((byte) 0x00);
