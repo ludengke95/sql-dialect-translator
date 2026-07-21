@@ -113,6 +113,10 @@ jobs:
             identifier-case: LOWER
           YAML
 
+          # 代理启动前先创建后端数据库，避免 BackendPoolManager 初始化时 Unknown database 导致代理崩溃
+          mysql -h 127.0.0.1 -u ${{ inputs.backend_user }} -p${{ inputs.backend_password }} \
+            -e "CREATE DATABASE IF NOT EXISTS tpch; CREATE DATABASE IF NOT EXISTS tpcc;"
+
           docker run -d --name sdtp \
             --add-host host.docker.internal:host-gateway \
             -p ${{ inputs.sdtp_port }}:${{ inputs.sdtp_port }} \
