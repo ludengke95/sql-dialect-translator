@@ -1,7 +1,6 @@
 -- TPC-H Table Structure (MySQL DDL)
-
-CREATE DATABASE IF NOT EXISTS tpch;
-USE tpch;
+-- 注意：表创建在当前连接数据库（由工作流 backend_db 指定，如 testdb），
+-- 不再硬编码 tpch 库，以保证与代理后端 jdbc-url 及 data_gen --schema 保持一致。
 
 -- Region Table
 DROP TABLE IF EXISTS region;
