@@ -7,6 +7,9 @@ name: Qodana
 on:
   workflow_dispatch:
   pull_request:
+    branches:
+      - main
+      - rebuild
   push:
     branches:
       - main
@@ -24,17 +27,17 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+
       - name: 'Qodana Scan'
         uses: JetBrains/qodana-action@v2025.3
+        continue-on-error: true
         env:
           QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
         with:
-          # When pr-mode is set to true, Qodana analyzes only the files that have been changed
           pr-mode: false
           use-caches: true
           post-pr-comment: true
           use-annotations: true
-          # Upload Qodana results (SARIF, other artifacts, logs) as an artifact to the job
-          upload-result: false
-          # quick-fixes available in Ultimate and Ultimate Plus plans
+          # 在未配置云端 Token 时将本地扫描分析报告打包为 Artifact 文件，避免流程强行阻断
+          upload-result: true
           push-fixes: 'none'
