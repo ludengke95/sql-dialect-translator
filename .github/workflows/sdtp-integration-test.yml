@@ -168,7 +168,7 @@ jobs:
       sdtp_password: proxy_password
       sdtp_port: '3306'
       report_name: mysql-client-5-reports
-      summary_title: MySQL Client 5 (FE: MySQL -> BE: PG) 测试结果
+      summary_title: "MySQL Client 5 (FE: MySQL -> BE: PG) 测试结果"
 
   mysql-client-8:
     needs: [build]
@@ -186,7 +186,7 @@ jobs:
       sdtp_password: proxy_password
       sdtp_port: '3306'
       report_name: mysql-client-8-reports
-      summary_title: MySQL Client 8 (FE: MySQL -> BE: PG) 测试结果
+      summary_title: "MySQL Client 8 (FE: MySQL -> BE: PG) 测试结果"
 
   mysql-jdbc-5:
     needs: [build]
@@ -206,7 +206,7 @@ jobs:
       extra_docker_image_artifact: mysql5-sqlline-docker-image
       extra_docker_image_file: mysql5-sqlline.tar.gz
       report_name: mysql-jdbc-5-reports
-      summary_title: MySQL JDBC 5 (sqlline) (FE: MySQL -> BE: PG) 测试结果
+      summary_title: "MySQL JDBC 5 (sqlline) (FE: MySQL -> BE: PG) 测试结果"
 
   mysql-jdbc-8:
     needs: [build]
@@ -226,7 +226,7 @@ jobs:
       extra_docker_image_artifact: mysql8-sqlline-docker-image
       extra_docker_image_file: mysql8-sqlline.tar.gz
       report_name: mysql-jdbc-8-reports
-      summary_title: MySQL JDBC 8 (sqlline) (FE: MySQL -> BE: PG) 测试结果
+      summary_title: "MySQL JDBC 8 (sqlline) (FE: MySQL -> BE: PG) 测试结果"
 
   python-mysql:
     needs: [build]
@@ -246,7 +246,7 @@ jobs:
       extra_docker_image_artifact: python-mysql-docker-image
       extra_docker_image_file: python-mysql.tar.gz
       report_name: python-mysql-reports
-      summary_title: Python mysql.connector (FE: MySQL -> BE: PG) 测试结果
+      summary_title: "Python mysql.connector (FE: MySQL -> BE: PG) 测试结果"
 
   # ==========================================================================
   # 类别二：前端 PostgreSQL -> 后端 MySQL (pg-mysql)
@@ -267,7 +267,7 @@ jobs:
       sdtp_password: test_password
       sdtp_port: '5432'
       report_name: pg-client-reports
-      summary_title: PG Client (FE: PG -> BE: MySQL) 测试结果
+      summary_title: "PG Client (FE: PG -> BE: MySQL) 测试结果"
 
   pg-jdbc:
     needs: [build]
@@ -287,7 +287,7 @@ jobs:
       extra_docker_image_artifact: pg-sqlline-docker-image
       extra_docker_image_file: pg-sqlline.tar.gz
       report_name: pg-jdbc-reports
-      summary_title: PG JDBC (sqlline) (FE: PG -> BE: MySQL) 测试结果
+      summary_title: "PG JDBC (sqlline) (FE: PG -> BE: MySQL) 测试结果"
 
   python-pg:
     needs: [build]
@@ -307,4 +307,4 @@ jobs:
       extra_docker_image_artifact: python-pg-docker-image
       extra_docker_image_file: python-pg.tar.gz
       report_name: python-pg-reports
-      summary_title: Python psycopg2 (FE: PG -> BE: MySQL) 测试结果
+      summary_title: "Python psycopg2 (FE: PG -> BE: MySQL) 测试结果"

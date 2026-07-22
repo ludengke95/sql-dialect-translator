@@ -164,32 +164,61 @@ jobs:
       # ====================================================================
       - name: Create SDTP config and start
         run: |
-          cat > /tmp/sdtp-config.yml << 'YAML'
-          proxy:
-            port: ${{ inputs.sdtp_port }}
-            frontend-protocol: ${{ inputs.frontend_protocol }}
-            auth:
-              user: ${{ inputs.sdtp_user }}
-              password: ${{ inputs.sdtp_password }}
-          backends:
-            - name: tpch
-              dialect: ${{ inputs.backend_dialect }}
-              jdbc-url: ${{ inputs.backend_type == 'postgres' && format('jdbc:postgresql://host.docker.internal:{0}/{1}?currentSchema=tpch', inputs.backend_port, inputs.backend_db) || format('jdbc:mysql://host.docker.internal:{0}/tpch?allowMultiQueries=true', inputs.backend_port) }}
-              username: ${{ inputs.backend_user }}
-              password: ${{ inputs.backend_password }}
-              max-pool-size: 10
-              min-idle: 2
-            - name: tpcc
-              dialect: ${{ inputs.backend_dialect }}
-              jdbc-url: ${{ inputs.backend_type == 'postgres' && format('jdbc:postgresql://host.docker.internal:{0}/{1}?currentSchema=tpcc', inputs.backend_port, inputs.backend_db) || format('jdbc:mysql://host.docker.internal:{0}/tpcc?allowMultiQueries=true', inputs.backend_port) }}
-              username: ${{ inputs.backend_user }}
-              password: ${{ inputs.backend_password }}
-              max-pool-size: 10
-              min-idle: 2
-          translation:
-            keyword-case: UPPER
-            identifier-case: LOWER
-          YAML
+          if [[ "${{ inputs.backend_type }}" == "postgres" ]]; then
+            cat > /tmp/sdtp-config.yml << YAML
+proxy:
+  port: ${{ inputs.sdtp_port }}
+  frontend-protocol: ${{ inputs.frontend_protocol }}
+  auth:
+    user: ${{ inputs.sdtp_user }}
+    password: ${{ inputs.sdtp_password }}
+backends:
+  - name: tpch
+    dialect: ${{ inputs.backend_dialect }}
+    jdbc-url: jdbc:postgresql://host.docker.internal:${{ inputs.backend_port }}/${{ inputs.backend_db }}?currentSchema=tpch
+    username: ${{ inputs.backend_user }}
+    password: ${{ inputs.backend_password }}
+    max-pool-size: 10
+    min-idle: 2
+  - name: tpcc
+    dialect: ${{ inputs.backend_dialect }}
+    jdbc-url: jdbc:postgresql://host.docker.internal:${{ inputs.backend_port }}/${{ inputs.backend_db }}?currentSchema=tpcc
+    username: ${{ inputs.backend_user }}
+    password: ${{ inputs.backend_password }}
+    max-pool-size: 10
+    min-idle: 2
+translation:
+  keyword-case: UPPER
+  identifier-case: LOWER
+YAML
+          else
+            cat > /tmp/sdtp-config.yml << YAML
+proxy:
+  port: ${{ inputs.sdtp_port }}
+  frontend-protocol: ${{ inputs.frontend_protocol }}
+  auth:
+    user: ${{ inputs.sdtp_user }}
+    password: ${{ inputs.sdtp_password }}
+backends:
+  - name: tpch
+    dialect: ${{ inputs.backend_dialect }}
+    jdbc-url: jdbc:mysql://host.docker.internal:${{ inputs.backend_port }}/tpch?allowMultiQueries=true
+    username: ${{ inputs.backend_user }}
+    password: ${{ inputs.backend_password }}
+    max-pool-size: 10
+    min-idle: 2
+  - name: tpcc
+    dialect: ${{ inputs.backend_dialect }}
+    jdbc-url: jdbc:mysql://host.docker.internal:${{ inputs.backend_port }}/tpcc?allowMultiQueries=true
+    username: ${{ inputs.backend_user }}
+    password: ${{ inputs.backend_password }}
+    max-pool-size: 10
+    min-idle: 2
+translation:
+  keyword-case: UPPER
+  identifier-case: LOWER
+YAML
+          fi
 
           docker run -d --name sdtp \
             --add-host host.docker.internal:host-gateway \
