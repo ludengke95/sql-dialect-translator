@@ -164,61 +164,51 @@ jobs:
       # ====================================================================
       - name: Create SDTP config and start
         run: |
-          if [[ "${{ inputs.backend_type }}" == "postgres" ]]; then
-            cat > /tmp/sdtp-config.yml << YAML
-proxy:
-  port: ${{ inputs.sdtp_port }}
-  frontend-protocol: ${{ inputs.frontend_protocol }}
-  auth:
-    user: ${{ inputs.sdtp_user }}
-    password: ${{ inputs.sdtp_password }}
-backends:
-  - name: tpch
-    dialect: ${{ inputs.backend_dialect }}
-    jdbc-url: jdbc:postgresql://host.docker.internal:${{ inputs.backend_port }}/${{ inputs.backend_db }}?currentSchema=tpch
-    username: ${{ inputs.backend_user }}
-    password: ${{ inputs.backend_password }}
-    max-pool-size: 10
-    min-idle: 2
-  - name: tpcc
-    dialect: ${{ inputs.backend_dialect }}
-    jdbc-url: jdbc:postgresql://host.docker.internal:${{ inputs.backend_port }}/${{ inputs.backend_db }}?currentSchema=tpcc
-    username: ${{ inputs.backend_user }}
-    password: ${{ inputs.backend_password }}
-    max-pool-size: 10
-    min-idle: 2
-translation:
-  keyword-case: UPPER
-  identifier-case: LOWER
-YAML
+          BE_TYPE="${{ inputs.backend_type }}"
+          BE_PORT="${{ inputs.backend_port }}"
+          BE_DB="${{ inputs.backend_db }}"
+          BE_USER="${{ inputs.backend_user }}"
+          BE_PASS="${{ inputs.backend_password }}"
+          BE_DIALECT="${{ inputs.backend_dialect }}"
+          SDTP_PORT="${{ inputs.sdtp_port }}"
+          SDTP_USER="${{ inputs.sdtp_user }}"
+          SDTP_PASS="${{ inputs.sdtp_password }}"
+          FRONTEND_PROTO="${{ inputs.frontend_protocol }}"
+
+          if [ "$BE_TYPE" = "postgres" ]; then
+            URL_TPCH="jdbc:postgresql://host.docker.internal:${BE_PORT}/${BE_DB}?currentSchema=tpch"
+            URL_TPCC="jdbc:postgresql://host.docker.internal:${BE_PORT}/${BE_DB}?currentSchema=tpcc"
           else
-            cat > /tmp/sdtp-config.yml << YAML
-proxy:
-  port: ${{ inputs.sdtp_port }}
-  frontend-protocol: ${{ inputs.frontend_protocol }}
-  auth:
-    user: ${{ inputs.sdtp_user }}
-    password: ${{ inputs.sdtp_password }}
-backends:
-  - name: tpch
-    dialect: ${{ inputs.backend_dialect }}
-    jdbc-url: jdbc:mysql://host.docker.internal:${{ inputs.backend_port }}/tpch?allowMultiQueries=true
-    username: ${{ inputs.backend_user }}
-    password: ${{ inputs.backend_password }}
-    max-pool-size: 10
-    min-idle: 2
-  - name: tpcc
-    dialect: ${{ inputs.backend_dialect }}
-    jdbc-url: jdbc:mysql://host.docker.internal:${{ inputs.backend_port }}/tpcc?allowMultiQueries=true
-    username: ${{ inputs.backend_user }}
-    password: ${{ inputs.backend_password }}
-    max-pool-size: 10
-    min-idle: 2
-translation:
-  keyword-case: UPPER
-  identifier-case: LOWER
-YAML
+            URL_TPCH="jdbc:mysql://host.docker.internal:${BE_PORT}/tpch?allowMultiQueries=true"
+            URL_TPCC="jdbc:mysql://host.docker.internal:${BE_PORT}/tpcc?allowMultiQueries=true"
           fi
+
+          {
+            echo "proxy:"
+            echo "  port: ${SDTP_PORT}"
+            echo "  frontend-protocol: ${FRONTEND_PROTO}"
+            echo "  auth:"
+            echo "    user: ${SDTP_USER}"
+            echo "    password: ${SDTP_PASS}"
+            echo "backends:"
+            echo "  - name: tpch"
+            echo "    dialect: ${BE_DIALECT}"
+            echo "    jdbc-url: ${URL_TPCH}"
+            echo "    username: ${BE_USER}"
+            echo "    password: ${BE_PASS}"
+            echo "    max-pool-size: 10"
+            echo "    min-idle: 2"
+            echo "  - name: tpcc"
+            echo "    dialect: ${BE_DIALECT}"
+            echo "    jdbc-url: ${URL_TPCC}"
+            echo "    username: ${BE_USER}"
+            echo "    password: ${BE_PASS}"
+            echo "    max-pool-size: 10"
+            echo "    min-idle: 2"
+            echo "translation:"
+            echo "  keyword-case: UPPER"
+            echo "  identifier-case: LOWER"
+          } > /tmp/sdtp-config.yml
 
           docker run -d --name sdtp \
             --add-host host.docker.internal:host-gateway \
