@@ -29,8 +29,9 @@ jobs:
           fetch-depth: 0
 
       - name: 'Qodana Scan'
+        # 仅在配置了 QODANA_TOKEN 时运行云端扫描，避免空 Token 导致 qodana scan 报错阻断 CI
+        if: ${{ secrets.QODANA_TOKEN != '' }}
         uses: JetBrains/qodana-action@v2025.3
-        continue-on-error: true
         env:
           QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
         with:
@@ -38,6 +39,5 @@ jobs:
           use-caches: true
           post-pr-comment: true
           use-annotations: true
-          # 在未配置云端 Token 时将本地扫描分析报告打包为 Artifact 文件，避免流程强行阻断
           upload-result: true
           push-fixes: 'none'
