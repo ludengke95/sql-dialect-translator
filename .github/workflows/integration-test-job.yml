@@ -160,7 +160,50 @@ jobs:
           fi
 
       # ====================================================================
-      # 5. 创建 SDTP 配置并启动代理
+      # 5. Python 环境与初始化测试数据（必须在 SDTP 启动前完成，确保 schema 已存在）
+      # ====================================================================
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install DB drivers for data-gen
+        run: pip install psycopg2-binary mysql-connector-python
+
+      - name: Create tables and load data (PostgreSQL backend)
+        if: inputs.backend_type == 'postgres'
+        run: |
+          PGPASSWORD=${{ inputs.backend_password }} psql -h localhost -p ${{ inputs.backend_port }} -U ${{ inputs.backend_user }} -d ${{ inputs.backend_db }} -f benchmark/mysql-pg/tpch/schema_pg.sql
+          python benchmark/mysql-pg/tpch/data_gen.py \
+            --pg-host localhost --pg-port ${{ inputs.backend_port }} \
+            --pg-user ${{ inputs.backend_user }} --pg-password ${{ inputs.backend_password }} \
+            --pg-db ${{ inputs.backend_db }} --scale 0.01 --schema tpch
+
+          PGPASSWORD=${{ inputs.backend_password }} psql -h localhost -p ${{ inputs.backend_port }} -U ${{ inputs.backend_user }} -d ${{ inputs.backend_db }} -f benchmark/mysql-pg/tpcc/schema_pg.sql
+          python benchmark/mysql-pg/tpcc/data_gen.py \
+            --pg-host localhost --pg-port ${{ inputs.backend_port }} \
+            --pg-user ${{ inputs.backend_user }} --pg-password ${{ inputs.backend_password }} \
+            --pg-db ${{ inputs.backend_db }} --warehouses 1 --schema tpcc
+
+      - name: Create tables and load data (MySQL backend)
+        if: inputs.backend_type == 'mysql'
+        run: |
+          docker exec -i backend-db mysql -u ${{ inputs.backend_user }} -p${{ inputs.backend_password }} ${{ inputs.backend_db }} < benchmark/pg-mysql/tpch/schema_mysql.sql
+          python benchmark/pg-mysql/tpch/data_gen.py \
+            --db-type mysql \
+            --mysql-host 127.0.0.1 --mysql-port ${{ inputs.backend_port }} \
+            --mysql-user ${{ inputs.backend_user }} --mysql-password ${{ inputs.backend_password }} \
+            --mysql-db ${{ inputs.backend_db }} --scale 0.01 --schema tpch
+
+          docker exec -i backend-db mysql -u ${{ inputs.backend_user }} -p${{ inputs.backend_password }} ${{ inputs.backend_db }} < benchmark/pg-mysql/tpcc/schema_mysql.sql
+          python benchmark/pg-mysql/tpcc/data_gen.py \
+            --db-type mysql \
+            --mysql-host 127.0.0.1 --mysql-port ${{ inputs.backend_port }} \
+            --mysql-user ${{ inputs.backend_user }} --mysql-password ${{ inputs.backend_password }} \
+            --mysql-db ${{ inputs.backend_db }} --warehouses 1 --schema tpcc
+
+      # ====================================================================
+      # 6. 创建 SDTP 配置并启动代理（schema 已初始化，HikariCP 可正常建连）
       # ====================================================================
       - name: Create SDTP config and start
         run: |
@@ -212,71 +255,39 @@ jobs:
 
           docker run -d --name sdtp \
             --add-host host.docker.internal:host-gateway \
-            -p ${{ inputs.sdtp_port }}:${{ inputs.sdtp_port }} \
+            -p ${SDTP_PORT}:${SDTP_PORT} \
             -v /tmp/sdtp-config.yml:/opt/sdtp/config/proxy-config.yml \
             sdtp:latest
 
-          echo "等待 SDTP 代理启动..."
+          echo "等待 SDTP 进程启动（日志探测）..."
           for i in $(seq 1 30); do
             if docker logs sdtp 2>&1 | grep -qi "started\|listening"; then
-              echo "SDTP 就绪 (尝试 $i)"
+              echo "SDTP 进程就绪 (尝试 $i)"
               break
             fi
             sleep 2
           done
-          docker logs sdtp --tail 20
+          docker logs sdtp --tail 30
 
-          echo "等待 SDTP 对外端口可连接..."
-          for i in $(seq 1 30); do
-            if timeout 2 bash -c "cat < /dev/null > /dev/tcp/127.0.0.1/${{ inputs.sdtp_port }}" 2>/dev/null; then
-              echo "  ✅ port ${{ inputs.sdtp_port }} ready (attempt $i)"
+          # 通过 Docker 容器做真实 MySQL 握手探测，路径与测试脚本完全一致
+          echo "等待 SDTP MySQL 握手层就绪..."
+          PROBE_IMAGE="mysql:8.0"
+          for i in $(seq 1 40); do
+            if docker run --rm \
+                 --add-host host.docker.internal:host-gateway \
+                 "$PROBE_IMAGE" \
+                 mysqladmin ping \
+                   -h host.docker.internal \
+                   -P ${SDTP_PORT} \
+                   -u ${SDTP_USER} \
+                   -p${SDTP_PASS} \
+                   --connect-timeout=3 > /dev/null 2>&1; then
+              echo "  ✅ SDTP MySQL handshake ready (attempt $i)"
               break
             fi
-            sleep 2
+            echo "  ⏳ 等待 SDTP 握手就绪... (attempt $i/40)"
+            sleep 3
           done
-
-      # ====================================================================
-      # 6. Python 环境与初始化测试数据
-      # ====================================================================
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install DB drivers for data-gen
-        run: pip install psycopg2-binary mysql-connector-python
-
-      - name: Create tables and load data (PostgreSQL backend)
-        if: inputs.backend_type == 'postgres'
-        run: |
-          PGPASSWORD=${{ inputs.backend_password }} psql -h localhost -p ${{ inputs.backend_port }} -U ${{ inputs.backend_user }} -d ${{ inputs.backend_db }} -f benchmark/mysql-pg/tpch/schema_pg.sql
-          python benchmark/mysql-pg/tpch/data_gen.py \
-            --pg-host localhost --pg-port ${{ inputs.backend_port }} \
-            --pg-user ${{ inputs.backend_user }} --pg-password ${{ inputs.backend_password }} \
-            --pg-db ${{ inputs.backend_db }} --scale 0.01 --schema tpch
-
-          PGPASSWORD=${{ inputs.backend_password }} psql -h localhost -p ${{ inputs.backend_port }} -U ${{ inputs.backend_user }} -d ${{ inputs.backend_db }} -f benchmark/mysql-pg/tpcc/schema_pg.sql
-          python benchmark/mysql-pg/tpcc/data_gen.py \
-            --pg-host localhost --pg-port ${{ inputs.backend_port }} \
-            --pg-user ${{ inputs.backend_user }} --pg-password ${{ inputs.backend_password }} \
-            --pg-db ${{ inputs.backend_db }} --warehouses 1 --schema tpcc
-
-      - name: Create tables and load data (MySQL backend)
-        if: inputs.backend_type == 'mysql'
-        run: |
-          docker exec -i backend-db mysql -u ${{ inputs.backend_user }} -p${{ inputs.backend_password }} ${{ inputs.backend_db }} < benchmark/pg-mysql/tpch/schema_mysql.sql
-          python benchmark/pg-mysql/tpch/data_gen.py \
-            --db-type mysql \
-            --mysql-host 127.0.0.1 --mysql-port ${{ inputs.backend_port }} \
-            --mysql-user ${{ inputs.backend_user }} --mysql-password ${{ inputs.backend_password }} \
-            --mysql-db ${{ inputs.backend_db }} --scale 0.01 --schema tpch
-
-          docker exec -i backend-db mysql -u ${{ inputs.backend_user }} -p${{ inputs.backend_password }} ${{ inputs.backend_db }} < benchmark/pg-mysql/tpcc/schema_mysql.sql
-          python benchmark/pg-mysql/tpcc/data_gen.py \
-            --db-type mysql \
-            --mysql-host 127.0.0.1 --mysql-port ${{ inputs.backend_port }} \
-            --mysql-user ${{ inputs.backend_user }} --mysql-password ${{ inputs.backend_password }} \
-            --mysql-db ${{ inputs.backend_db }} --warehouses 1 --schema tpcc
 
       # ====================================================================
       # 7. 执行集成测试

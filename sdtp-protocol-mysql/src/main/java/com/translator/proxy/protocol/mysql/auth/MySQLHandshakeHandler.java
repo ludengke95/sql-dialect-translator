@@ -41,8 +41,8 @@ public class MySQLHandshakeHandler extends ChannelInboundHandlerAdapter {
     /** 伪装的服务端版本 */
     private static final String SERVER_VERSION = "5.7.38-proxy";
 
-    /** 默认字符集 utf8mb4_general_ci → collation id 33 */
-    private static final int CHARSET_UTF8MB4 = 33;
+    /** 默认字符集 utf8_general_ci → collation id 33（注意：utf8mb4_general_ci 为 45） */
+    private static final int CHARSET_UTF8 = 33;
 
     private static final AtomicLong CONNECTION_ID_GENERATOR = new AtomicLong(1);
 
@@ -109,7 +109,7 @@ public class MySQLHandshakeHandler extends ChannelInboundHandlerAdapter {
         int capabilities = CapabilityFlags.SERVER_DEFAULT_CAPABILITIES;
         buf.writeShortLE(capabilities & 0xFFFF);
 
-        buf.writeByte(CHARSET_UTF8MB4);
+        buf.writeByte(CHARSET_UTF8);
 
         buf.writeShortLE(0x0002);
 

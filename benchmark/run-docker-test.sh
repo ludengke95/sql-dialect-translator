@@ -221,7 +221,7 @@ execute_sql() {
             printf '%s\n' "$sql" > "$tmpfile"
 
             _EXEC_OUTPUT="$(
-                wslc run $DOCKER_BASE_FLAGS \
+                docker run $DOCKER_BASE_FLAGS \
                     -v "$tmpfile:/tmp/q.sql:ro" \
                     "$DOCKER_IMAGE" \
                     -u "jdbc:postgresql://$HOST:$PORT/$db" \
