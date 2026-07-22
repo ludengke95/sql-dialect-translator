@@ -129,11 +129,13 @@ public class PgCommandHandler extends ChannelInboundHandlerAdapter {
         // 系统目录查询
         if (systemCatalog.canHandle(sql)) {
             systemCatalog.handleQuery(ctx, sql, session);
+            responseWriter.sendReadyForQuery(ctx, PgWire.TXN_IDLE);
             return;
         }
 
         // 转发到后端
         backendRouter.resolve(session).process(ctx, sql, session);
+        responseWriter.sendReadyForQuery(ctx, PgWire.TXN_IDLE);
     }
 
     // ==================== Extended Query ====================
@@ -152,14 +154,11 @@ public class PgCommandHandler extends ChannelInboundHandlerAdapter {
         }
 
         log.debug("Parse: {} → '{}'", stmtName, query);
-        if (!stmtName.isEmpty()) {
-            preparedStatements.put(stmtName, query);
-        }
+        preparedStatements.put(stmtName, query);
 
         // ParseComplete
-        ByteBuf response = ctx.alloc().buffer(1);
-        response.writeByte('1');
-        ctx.write(new PgMessage((byte) '1', response));
+        ByteBuf response = ctx.alloc().buffer(0);
+        ctx.write(new PgMessage(PgWire.MSG_PARSE_COMPLETE, response));
     }
 
     private void handleBind(ChannelHandlerContext ctx, PgRawMessage raw) {
@@ -170,18 +169,13 @@ public class PgCommandHandler extends ChannelInboundHandlerAdapter {
         log.debug("Bind: portal={}, stmt={}", portalName, stmtName);
 
         String sql = preparedStatements.get(stmtName);
-        if (sql == null) {
-            sql = stmtName;
-        }
-
-        if (!portalName.isEmpty()) {
+        if (sql != null) {
             portals.put(portalName, sql);
         }
 
         // BindComplete
-        ByteBuf response = ctx.alloc().buffer(1);
-        response.writeByte('2');
-        ctx.write(new PgMessage((byte) '2', response));
+        ByteBuf response = ctx.alloc().buffer(0);
+        ctx.write(new PgMessage(PgWire.MSG_BIND_COMPLETE, response));
     }
 
     private void handleDescribe(ChannelHandlerContext ctx, PgRawMessage raw) {
@@ -191,10 +185,17 @@ public class PgCommandHandler extends ChannelInboundHandlerAdapter {
 
         log.debug("Describe: type={}, name={}", (char) describeType, name);
 
-        // NoData（简化处理）
-        ByteBuf response = ctx.alloc().buffer(1);
-        response.writeByte('n');
-        ctx.write(new PgMessage((byte) 'n', response));
+        if (describeType == 'S') {
+            // 对于 Statement Describe ('S')，按照 PG 协议发送 ParameterDescription ('t') (0 个参数) 与 NoData ('n')
+            ByteBuf paramDesc = ctx.alloc().buffer(2);
+            paramDesc.writeShort(0);
+            ctx.write(new PgMessage(PgWire.MSG_PARAMETER_DESCRIPTION, paramDesc));
+
+            ByteBuf noData = ctx.alloc().buffer(0);
+            ctx.write(new PgMessage(PgWire.MSG_NO_DATA, noData));
+        }
+        // 对于 Portal Describe ('P')，不提前发送 NoData ('n')，
+        // 允许 handleExecute 返回真实的 RowDescription 或 CommandComplete
     }
 
     private void handleExecute(ChannelHandlerContext ctx, PgRawMessage raw) {
@@ -223,7 +224,7 @@ public class PgCommandHandler extends ChannelInboundHandlerAdapter {
             // EmptyQuery
             ByteBuf response = ctx.alloc().buffer(1);
             response.writeByte('I');
-            ctx.write(new PgMessage(PgWire.MSG_EMPTY_QUERY_RESPONSE, response));
+            ctx.writeAndFlush(new PgMessage(PgWire.MSG_EMPTY_QUERY_RESPONSE, response));
         }
     }
 
@@ -248,7 +249,7 @@ public class PgCommandHandler extends ChannelInboundHandlerAdapter {
         // CloseComplete
         ByteBuf response = ctx.alloc().buffer(1);
         response.writeByte('3');
-        ctx.write(new PgMessage((byte) '3', response));
+        ctx.writeAndFlush(new PgMessage((byte) '3', response));
     }
 
     private void handleFlush(ChannelHandlerContext ctx, PgRawMessage raw) {

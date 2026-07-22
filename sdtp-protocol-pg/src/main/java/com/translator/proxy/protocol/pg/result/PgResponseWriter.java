@@ -37,7 +37,7 @@ public class PgResponseWriter implements ResponseWriter {
             int statusFlags,
             int warnings,
             String info) {
-        // PG 用 CommandComplete + ReadyForQuery 代替 OK
+        // PG 用 CommandComplete 代替 OK，ReadyForQuery 由 CommandHandler 统一管理
         String tag = "";
         if (info != null && !info.isEmpty()) {
             tag = info;
@@ -47,7 +47,6 @@ public class PgResponseWriter implements ResponseWriter {
             tag = "OK";
         }
         sendCommandComplete(ctx, tag);
-        sendReadyForQuery(ctx, PgWire.TXN_IDLE);
     }
 
     @Override
@@ -89,7 +88,7 @@ public class PgResponseWriter implements ResponseWriter {
         }
         String tag = "SELECT " + rowCount;
         sendCommandComplete(ctx, tag);
-        sendReadyForQuery(ctx, PgWire.TXN_IDLE);
+        ctx.flush();
         return rowCount;
     }
 
@@ -105,18 +104,26 @@ public class PgResponseWriter implements ResponseWriter {
 
         for (int i = 1; i <= columnCount; i++) {
             String colName = meta.getColumnLabel(i);
+            if (colName == null || colName.trim().isEmpty()) {
+                colName = meta.getColumnName(i);
+            }
+            if (colName == null || colName.trim().isEmpty()) {
+                colName = "col_" + i;
+            }
+
             int jdbcType = meta.getColumnType(i);
             String typeName = meta.getColumnTypeName(i);
             int pgOid = typeMapper.jdbcToProtocolType(jdbcType, typeName);
+            int typeSize = PgTypeMapper.getTypeSize(pgOid);
+            
             int colLen = meta.getColumnDisplaySize(i);
-            if (colLen <= 0) colLen = -1;
-            int typeModifier = -1;
+            int typeModifier = (colLen > 0) ? (colLen + 4) : -1;
 
             PgWire.cstr(payload, colName);
             payload.writeInt(0); // table OID
             payload.writeShort(0); // column attribute number
             payload.writeInt(pgOid); // data type OID
-            payload.writeShort(colLen > 0 ? colLen : 255); // type size
+            payload.writeShort(typeSize); // type size (定长为字节数，变长为 -1)
             payload.writeInt(typeModifier); // type modifier
             payload.writeShort(0); // format code (0 = text)
         }

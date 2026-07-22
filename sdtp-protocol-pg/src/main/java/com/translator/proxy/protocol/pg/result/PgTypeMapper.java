@@ -91,4 +91,33 @@ public class PgTypeMapper implements TypeMapper {
                 return PgOid.TEXT;
         }
     }
+
+    /**
+     * 获取 PG OID 对应的类型大小（type size）。
+     *
+     * <p>定长类型返回具体字节数（1/2/4/8/16），变长类型统一返回 -1。
+     */
+    public static int getTypeSize(int pgOid) {
+        switch (pgOid) {
+            case PgOid.BOOL:
+            case PgOid.CHAR:
+                return 1;
+            case PgOid.INT2:
+                return 2;
+            case PgOid.INT4:
+            case PgOid.FLOAT4:
+            case PgOid.DATE:
+                return 4;
+            case PgOid.INT8:
+            case PgOid.FLOAT8:
+            case PgOid.TIME:
+            case PgOid.TIMESTAMP:
+            case PgOid.TIMESTAMPTZ:
+                return 8;
+            case PgOid.UUID:
+                return 16;
+            default:
+                return -1;
+        }
+    }
 }

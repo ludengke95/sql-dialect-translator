@@ -70,6 +70,18 @@ public final class PgWire {
     /** NoticeResponse */
     public static final byte MSG_NOTICE_RESPONSE = 'N';
 
+    /** ParseComplete */
+    public static final byte MSG_PARSE_COMPLETE = '1';
+
+    /** BindComplete */
+    public static final byte MSG_BIND_COMPLETE = '2';
+
+    /** NoData */
+    public static final byte MSG_NO_DATA = 'n';
+
+    /** ParameterDescription */
+    public static final byte MSG_PARAMETER_DESCRIPTION = 't';
+
     /** SSL Request 特殊码（协议版本 1234.5679） */
     public static final int SSL_REQUEST_CODE = 80877103;
 

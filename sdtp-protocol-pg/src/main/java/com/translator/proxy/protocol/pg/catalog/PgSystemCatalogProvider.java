@@ -43,14 +43,16 @@ public class PgSystemCatalogProvider implements SystemCatalogProvider {
 
     @Override
     public boolean canHandle(String sql) {
-        if (sql == null) return false;
+        if (sql == null) {
+            return false;
+        }
         String upper = sql.trim().toUpperCase();
-        return upper.startsWith("SHOW ")
-                || upper.startsWith("SELECT CURRENT_SCHEMA")
-                || upper.startsWith("SELECT CURRENT_DATABASE")
-                || upper.startsWith("SELECT VERSION()")
-                || upper.startsWith("SELECT PG_")
-                || upper.startsWith("SET ")
+        return upper.startsWith("SET ")
+                || upper.startsWith("SHOW ")
+                || upper.contains("VERSION()")
+                || upper.contains("CURRENT_SCHEMA")
+                || upper.contains("CURRENT_DATABASE")
+                || upper.contains("PG_GET_KEYWORDS")
                 || isPgDatabaseQuery(sql);
     }
 
@@ -60,11 +62,21 @@ public class PgSystemCatalogProvider implements SystemCatalogProvider {
 
     @Override
     public void handleQuery(ChannelHandlerContext ctx, String sql, FrontendSession session) {
+        if (sql == null || sql.trim().isEmpty()) {
+            sendEmptyResult(ctx, "SELECT");
+            return;
+        }
+
         String upper = sql.trim().toUpperCase();
 
         if (upper.startsWith("SET ")) {
-            // SET 语句：直接返回 OK
-            sendSingleValueResult(ctx, "SET", "");
+            // SET 语句：按照 PG 线协议标准返回 CommandComplete("SET")
+            responseWriter.sendCommandComplete(ctx, "SET");
+            return;
+        }
+
+        if (upper.contains("PG_GET_KEYWORDS")) {
+            sendSingleValueResult(ctx, "string_agg", "select,from,where,insert,update,delete,table,into,values");
             return;
         }
 
@@ -128,7 +140,6 @@ public class PgSystemCatalogProvider implements SystemCatalogProvider {
 
         // CommandComplete
         responseWriter.sendCommandComplete(ctx, "SELECT 1");
-        responseWriter.sendReadyForQuery(ctx, PgWire.TXN_IDLE);
     }
 
     /**
@@ -141,7 +152,6 @@ public class PgSystemCatalogProvider implements SystemCatalogProvider {
         ctx.write(new PgMessage(PgWire.MSG_ROW_DESCRIPTION, rowDesc));
 
         responseWriter.sendCommandComplete(ctx, tag + " 0");
-        responseWriter.sendReadyForQuery(ctx, PgWire.TXN_IDLE);
     }
 
     /**
@@ -170,7 +180,6 @@ public class PgSystemCatalogProvider implements SystemCatalogProvider {
         }
 
         responseWriter.sendCommandComplete(ctx, "SELECT " + names.size());
-        responseWriter.sendReadyForQuery(ctx, PgWire.TXN_IDLE);
     }
 
     @Override
