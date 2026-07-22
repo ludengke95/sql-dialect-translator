@@ -48,6 +48,7 @@ import com.translator.core.config.SqlDialectFactory;
 import com.translator.core.config.TranslationConfig;
 import com.translator.core.metadata.CalciteMetadataSchema;
 import com.translator.core.metadata.MetadataProvider;
+import com.translator.core.postprocessor.PostProcessorRegistry;
 import com.translator.core.rewrite.SqlRewriteEngine;
 
 /**
@@ -172,19 +173,8 @@ public class SqlTranslator {
             }
             long elapsed = (System.nanoTime() - start) / 1_000_000;
             log.debug("SQL 翻译完成 ({}ms): [{}] → [{}]", elapsed, sql, result);
-            // 消除由于 withQuoteAllIdentifiers(true) 导致的函数名被误加双引号问题（例如把 "SUBSTR"( 还原为 SUBSTR( ）
-            result = result.replaceAll("\"([A-Za-z_][A-Za-z0-9_]*)\"\\(", "$1(");
-            // DATE_ADD/SUBDATE 改写后形如 CAST('...' AS TIMESTAMP) + 'N UNIT'，
-            // PostgreSQL 不支持 timestamp 与字符串字面量直接相加，必须把右侧字符串
-            // 包装为 INTERVAL 字面量：CAST('...' AS TIMESTAMP) + INTERVAL 'N UNIT'
-            result = result.replaceAll(
-                    "\\+\\s*'(-?\\d+\\s+(?:DAYS|MONTHS|YEARS|HOURS|MINUTES|SECONDS))'", "+ INTERVAL '$1'");
-
-            // 当目标方言为 MySQL 时，归一化 INTERVAL 'N' DAYS / INTERVAL 'N DAY' 表达式为标准 MySQL 语法 INTERVAL N DAY
-            if (targetDialect == DialectType.MYSQL) {
-                result = result.replaceAll("(?i)\\bINTERVAL\\s+'(-?\\d+)'\\s+(DAY|MONTH|YEAR|HOUR|MINUTE|SECOND)S?\\b", "INTERVAL $1 $2");
-                result = result.replaceAll("(?i)\\bINTERVAL\\s+'(-?\\d+)\\s+(DAY|MONTH|YEAR|HOUR|MINUTE|SECOND)S?'\\b", "INTERVAL $1 $2");
-            }
+            // 目标方言专属 SQL 后处理 (后置语法擦除与归一化)
+            result = PostProcessorRegistry.process(result, sourceDialect, targetDialect);
             return result;
         } catch (SqlTranslationException e) {
             throw e; // 已知翻译或校验异常，不重复包裹
