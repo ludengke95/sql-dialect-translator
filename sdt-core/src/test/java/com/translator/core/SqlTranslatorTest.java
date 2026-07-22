@@ -21,6 +21,21 @@ public class SqlTranslatorTest {
     }
 
     @Test
+    public void testPgDateSubToDateSub() {
+        String pgSql = "SELECT * FROM lineitem WHERE l_shipdate <= date '1998-12-01' - interval '90 day'";
+        String mysql = SqlTranslator.translate(pgSql, DialectType.POSTGRESQL, DialectType.MYSQL);
+        Assert.assertTrue("应包含 DATE_SUB: " + mysql, mysql.toUpperCase().contains("DATE_SUB"));
+    }
+
+    @Test
+    public void testBetweenAsymmetricRemoval() {
+        String pgSql = "SELECT * FROM lineitem WHERE l_shipdate BETWEEN '1995-01-01' AND '1996-12-31'";
+        String mysql = SqlTranslator.translate(pgSql, DialectType.POSTGRESQL, DialectType.MYSQL);
+        Assert.assertFalse("不应包含 ASYMMETRIC: " + mysql, mysql.toUpperCase().contains("ASYMMETRIC"));
+        Assert.assertTrue("应包含 BETWEEN: " + mysql, mysql.toUpperCase().contains("BETWEEN"));
+    }
+
+    @Test
     public void testSelectWithWhere() {
         String sql = "SELECT id, name FROM users WHERE age > 18";
         String result = SqlTranslator.translate(sql, DialectType.POSTGRESQL, DialectType.MYSQL);
