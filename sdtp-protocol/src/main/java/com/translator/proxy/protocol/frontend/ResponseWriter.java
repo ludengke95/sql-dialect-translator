@@ -39,8 +39,9 @@ public interface ResponseWriter {
      * @param errorCode 错误码
      * @param sqlState  SQL 状态码（5 字符）
      * @param message   错误消息
+     * @return 写入操作的 ChannelFuture
      */
-    void writeErr(ChannelHandlerContext ctx, int errorCode, String sqlState, String message);
+    io.netty.channel.ChannelFuture writeErr(ChannelHandlerContext ctx, int errorCode, String sqlState, String message);
 
     /**
      * 写入 ColumnDefinition 包。

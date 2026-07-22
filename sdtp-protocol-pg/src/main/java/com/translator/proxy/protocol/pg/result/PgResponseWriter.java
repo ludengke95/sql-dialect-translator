@@ -51,9 +51,11 @@ public class PgResponseWriter implements ResponseWriter {
     }
 
     @Override
-    public void writeErr(ChannelHandlerContext ctx, int errorCode, String sqlState, String message) {
+    public io.netty.channel.ChannelFuture writeErr(ChannelHandlerContext ctx, int errorCode, String sqlState, String message) {
         sendError(ctx, "ERROR", sqlState, message);
-        sendReadyForQuery(ctx, PgWire.TXN_IDLE);
+        ByteBuf payload = ctx.alloc().buffer(1);
+        payload.writeByte(PgWire.TXN_IDLE);
+        return ctx.writeAndFlush(new PgMessage(PgWire.MSG_READY_FOR_QUERY, payload));
     }
 
     @Override

@@ -38,9 +38,9 @@ public class MySQLResponseWriter implements ResponseWriter {
     }
 
     @Override
-    public void writeErr(ChannelHandlerContext ctx, int errorCode, String sqlState, String message) {
+    public io.netty.channel.ChannelFuture writeErr(ChannelHandlerContext ctx, int errorCode, String sqlState, String message) {
         ByteBuf err = buildErrPacket(ctx.alloc(), errorCode, sqlState, message);
-        ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(err, (byte) 1));
+        return ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(err, (byte) 1));
     }
 
     @Override

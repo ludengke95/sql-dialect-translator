@@ -111,12 +111,18 @@ public final class BufferUtils {
     }
 
     /**
-     * 读取以 NUL (0x00) 结尾的字符串。
+     * 读取以 NUL (0x00) 结尾的字符串。若未找到 NUL 则安全读取至 ByteBuf 末尾。
      */
     public static String readNullTerminatedString(ByteBuf buf) {
+        if (buf == null || buf.readableBytes() == 0) {
+            return "";
+        }
         int len = buf.bytesBefore((byte) 0x00);
         if (len < 0) {
-            throw new IllegalArgumentException("NUL terminator not found in buffer");
+            int remaining = buf.readableBytes();
+            byte[] bytes = new byte[remaining];
+            buf.readBytes(bytes);
+            return new String(bytes, StandardCharsets.UTF_8);
         }
         byte[] bytes = new byte[len];
         buf.readBytes(bytes);

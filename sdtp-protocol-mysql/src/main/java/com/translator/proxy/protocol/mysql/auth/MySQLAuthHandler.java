@@ -239,8 +239,8 @@ public class MySQLAuthHandler extends ChannelInboundHandlerAdapter {
 
     private void writeErrorAndClose(
             ChannelHandlerContext ctx, int errorCode, String sqlState, String message, byte seq) {
-        responseWriter.writeErr(ctx, errorCode, sqlState, message);
-        ctx.close();
+        responseWriter.writeErr(ctx, errorCode, sqlState, message)
+                .addListener(io.netty.channel.ChannelFutureListener.CLOSE);
     }
 
     // ==================== HandshakeResponse41 解析 ====================
@@ -273,10 +273,10 @@ public class MySQLAuthHandler extends ChannelInboundHandlerAdapter {
             resp.authResponse = BufferUtils.readNullTerminatedString(payload).getBytes(StandardCharsets.UTF_8);
         }
 
-        if ((resp.capabilityFlags & CapabilityFlags.CLIENT_CONNECT_WITH_DB) != 0) {
+        if ((resp.capabilityFlags & CapabilityFlags.CLIENT_CONNECT_WITH_DB) != 0 && payload.readableBytes() > 0) {
             resp.database = BufferUtils.readNullTerminatedString(payload);
         }
-        if ((resp.capabilityFlags & CapabilityFlags.CLIENT_PLUGIN_AUTH) != 0) {
+        if ((resp.capabilityFlags & CapabilityFlags.CLIENT_PLUGIN_AUTH) != 0 && payload.readableBytes() > 0) {
             resp.authPluginName = BufferUtils.readNullTerminatedString(payload);
         }
 
