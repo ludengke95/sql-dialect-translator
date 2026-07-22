@@ -179,6 +179,12 @@ public class SqlTranslator {
             // 包装为 INTERVAL 字面量：CAST('...' AS TIMESTAMP) + INTERVAL 'N UNIT'
             result = result.replaceAll(
                     "\\+\\s*'(-?\\d+\\s+(?:DAYS|MONTHS|YEARS|HOURS|MINUTES|SECONDS))'", "+ INTERVAL '$1'");
+
+            // 当目标方言为 MySQL 时，归一化 INTERVAL 'N' DAYS / INTERVAL 'N DAY' 表达式为标准 MySQL 语法 INTERVAL N DAY
+            if (targetDialect == DialectType.MYSQL) {
+                result = result.replaceAll("(?i)\\bINTERVAL\\s+'(-?\\d+)'\\s+(DAY|MONTH|YEAR|HOUR|MINUTE|SECOND)S?\\b", "INTERVAL $1 $2");
+                result = result.replaceAll("(?i)\\bINTERVAL\\s+'(-?\\d+)\\s+(DAY|MONTH|YEAR|HOUR|MINUTE|SECOND)S?'\\b", "INTERVAL $1 $2");
+            }
             return result;
         } catch (SqlTranslationException e) {
             throw e; // 已知翻译或校验异常，不重复包裹
@@ -229,6 +235,9 @@ public class SqlTranslator {
         if (sql == null || sql.isEmpty()) {
             return sql;
         }
+        // 预处理 PostgreSQL 等方言中 INTERVAL 'N UNIT' 为 Calcite 兼容的 INTERVAL 'N' UNIT 格式
+        sql = sql.replaceAll("(?i)\\bINTERVAL\\s+'(-?\\d+)\\s+(DAY|MONTH|YEAR|HOUR|MINUTE|SECOND)S?'", "INTERVAL '$1' $2");
+
         // 去掉 -- 行注释，防止注释内容被 normalizeUnquotedIdentifiers 错误加引号
         String result = stripLineComments(sql);
         switch (dialect) {
@@ -260,7 +269,6 @@ public class SqlTranslator {
         if (!matcher.find()) {
             return sql;
         }
-        String topClause = matcher.group(1); // e.g. "TOP 10 "
         String topNum = matcher.group(2); // e.g. "10"
         // 去掉 "TOP n " 部分
         sql = sql.substring(0, matcher.start(1)) + sql.substring(matcher.end(1));

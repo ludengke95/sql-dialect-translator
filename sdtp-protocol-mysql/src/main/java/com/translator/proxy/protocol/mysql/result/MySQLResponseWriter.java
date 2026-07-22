@@ -229,7 +229,6 @@ public class MySQLResponseWriter implements ResponseWriter {
         String name = meta.getColumnLabel(colIndex);
         String orgName = meta.getColumnName(colIndex);
         int jdbcType = meta.getColumnType(colIndex);
-        String typeName = meta.getColumnTypeName(colIndex);
         int mysqlType = MySQLTypeMapper.jdbcToMysqlStatic(jdbcType);
         int colLen = meta.getColumnDisplaySize(colIndex);
         if (colLen <= 0) {
