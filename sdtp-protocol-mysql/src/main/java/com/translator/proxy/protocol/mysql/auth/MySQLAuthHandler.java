@@ -54,7 +54,10 @@ public class MySQLAuthHandler extends ChannelInboundHandlerAdapter {
     /** 响应写入器 */
     private final MySQLResponseWriter responseWriter;
 
-    public MySQLAuthHandler(String expectedUser, String expectedPassword, EventExecutorGroup bizExecutorGroup,
+    public MySQLAuthHandler(
+            String expectedUser,
+            String expectedPassword,
+            EventExecutorGroup bizExecutorGroup,
             BackendRouter backendRouter) {
         this.expectedUser = expectedUser;
         this.expectedPassword = expectedPassword;
@@ -219,7 +222,9 @@ public class MySQLAuthHandler extends ChannelInboundHandlerAdapter {
 
     private void switchToCommandHandler(ChannelHandlerContext ctx) {
         if (bizExecutorGroup != null) {
-            ctx.pipeline().addAfter(bizExecutorGroup, "authHandler", "commandHandler", new MySQLCommandHandler(backendRouter));
+            ctx.pipeline()
+                    .addAfter(
+                            bizExecutorGroup, "authHandler", "commandHandler", new MySQLCommandHandler(backendRouter));
             ctx.pipeline().remove(this);
         } else {
             ctx.pipeline().replace(this, "commandHandler", new MySQLCommandHandler(backendRouter));

@@ -84,7 +84,7 @@ public class ProxyBootstrap {
         bossGroup = new NioEventLoopGroup(1);
         workerGroup = new NioEventLoopGroup();
 
-        //todo 这个地方取最大值比较好，还是用累计求和比较好
+        // todo 这个地方取最大值比较好，还是用累计求和比较好
         int bizThreads = 4;
         for (ProxyConfig.TargetConfig tcBackend : config.getBackends()) {
             bizThreads = Math.max(bizThreads, tcBackend.getMaxPoolSize());
@@ -151,7 +151,8 @@ public class ProxyBootstrap {
 
                             pipeline.addLast(
                                     "handshakeHandler",
-                                    frontendProtocol.newHandshakeHandler(authConfigAdapter, bizExecutorGroup, backendPoolManager));
+                                    frontendProtocol.newHandshakeHandler(
+                                            authConfigAdapter, bizExecutorGroup, backendPoolManager));
                         }
                     });
 

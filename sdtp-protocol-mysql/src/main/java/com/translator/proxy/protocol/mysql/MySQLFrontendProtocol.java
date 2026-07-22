@@ -1,5 +1,6 @@
 package com.translator.proxy.protocol.mysql;
 
+import com.translator.proxy.core.handler.BackendRouter;
 import com.translator.proxy.protocol.frontend.AuthConfig;
 import com.translator.proxy.protocol.frontend.FrontendProtocol;
 import com.translator.proxy.protocol.frontend.ResponseWriter;
@@ -12,7 +13,6 @@ import com.translator.proxy.protocol.mysql.codec.MySQLPacketEncoder;
 import com.translator.proxy.protocol.mysql.result.MySQLResponseWriter;
 import com.translator.proxy.protocol.mysql.result.MySQLTypeMapper;
 
-import com.translator.proxy.core.handler.BackendRouter;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.EventLoopGroup;
 import io.netty.handler.codec.ByteToMessageDecoder;
@@ -46,7 +46,8 @@ public class MySQLFrontendProtocol implements FrontendProtocol {
     }
 
     @Override
-    public ChannelHandler newHandshakeHandler(AuthConfig authConfig, EventLoopGroup executor, BackendRouter backendRouter) {
+    public ChannelHandler newHandshakeHandler(
+            AuthConfig authConfig, EventLoopGroup executor, BackendRouter backendRouter) {
         return new MySQLHandshakeHandler(authConfig.getUsername(), authConfig.getPassword(), executor, backendRouter);
     }
 

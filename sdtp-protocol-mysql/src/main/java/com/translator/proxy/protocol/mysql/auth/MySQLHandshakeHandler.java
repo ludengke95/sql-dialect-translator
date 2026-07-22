@@ -56,8 +56,8 @@ public class MySQLHandshakeHandler extends ChannelInboundHandlerAdapter {
      *
      * @param backendRouter 后端路由器（由启动层经 SPI 注入）
      */
-    public MySQLHandshakeHandler(String authUser, String authPassword, EventExecutorGroup bizExecutorGroup,
-            BackendRouter backendRouter) {
+    public MySQLHandshakeHandler(
+            String authUser, String authPassword, EventExecutorGroup bizExecutorGroup, BackendRouter backendRouter) {
         this.authUser = authUser;
         this.authPassword = authPassword;
         this.bizExecutorGroup = bizExecutorGroup;
@@ -83,7 +83,11 @@ public class MySQLHandshakeHandler extends ChannelInboundHandlerAdapter {
 
         ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(handshake, (byte) 0));
 
-        ctx.pipeline().replace(this, "authHandler", new MySQLAuthHandler(authUser, authPassword, bizExecutorGroup, backendRouter));
+        ctx.pipeline()
+                .replace(
+                        this,
+                        "authHandler",
+                        new MySQLAuthHandler(authUser, authPassword, bizExecutorGroup, backendRouter));
     }
 
     /**

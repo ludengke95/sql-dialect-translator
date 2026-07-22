@@ -178,8 +178,7 @@ public class SqlTranslator {
             // PostgreSQL 不支持 timestamp 与字符串字面量直接相加，必须把右侧字符串
             // 包装为 INTERVAL 字面量：CAST('...' AS TIMESTAMP) + INTERVAL 'N UNIT'
             result = result.replaceAll(
-                    "\\+\\s*'(-?\\d+\\s+(?:DAYS|MONTHS|YEARS|HOURS|MINUTES|SECONDS))'",
-                    "+ INTERVAL '$1'");
+                    "\\+\\s*'(-?\\d+\\s+(?:DAYS|MONTHS|YEARS|HOURS|MINUTES|SECONDS))'", "+ INTERVAL '$1'");
             return result;
         } catch (SqlTranslationException e) {
             throw e; // 已知翻译或校验异常，不重复包裹

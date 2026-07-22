@@ -1,5 +1,6 @@
 package com.translator.proxy.protocol.pg;
 
+import com.translator.proxy.core.handler.BackendRouter;
 import com.translator.proxy.protocol.frontend.AuthConfig;
 import com.translator.proxy.protocol.frontend.FrontendProtocol;
 import com.translator.proxy.protocol.frontend.ResponseWriter;
@@ -12,7 +13,6 @@ import com.translator.proxy.protocol.pg.codec.PgPacketEncoder;
 import com.translator.proxy.protocol.pg.result.PgResponseWriter;
 import com.translator.proxy.protocol.pg.result.PgTypeMapper;
 
-import com.translator.proxy.core.handler.BackendRouter;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.EventLoopGroup;
 import io.netty.handler.codec.ByteToMessageDecoder;
@@ -49,7 +49,8 @@ public class PostgreSQLFrontendProtocol implements FrontendProtocol {
     }
 
     @Override
-    public ChannelHandler newHandshakeHandler(AuthConfig authConfig, EventLoopGroup executor, BackendRouter backendRouter) {
+    public ChannelHandler newHandshakeHandler(
+            AuthConfig authConfig, EventLoopGroup executor, BackendRouter backendRouter) {
         this.backendRouter = backendRouter;
         return new PgHandshakeHandler(authConfig, executor, backendRouter);
     }

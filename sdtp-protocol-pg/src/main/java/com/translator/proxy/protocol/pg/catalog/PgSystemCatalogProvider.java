@@ -152,7 +152,7 @@ public class PgSystemCatalogProvider implements SystemCatalogProvider {
         ByteBuf rowDesc = ctx.alloc().buffer(64);
         rowDesc.writeShort(1);
         PgWire.cstr(rowDesc, "datname");
-        rowDesc.writeInt(0);  // table OID
+        rowDesc.writeInt(0); // table OID
         rowDesc.writeShort(0); // attr num
         rowDesc.writeInt(PgOid.TEXT); // type OID
         rowDesc.writeShort(-1); // type size

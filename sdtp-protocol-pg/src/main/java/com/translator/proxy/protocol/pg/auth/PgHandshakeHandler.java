@@ -57,7 +57,7 @@ public class PgHandshakeHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
         if (!(msg instanceof PgRawMessage)) {
-            //todo fireChannelRead是做什么的
+            // todo fireChannelRead是做什么的
             ctx.fireChannelRead(msg);
             return;
         }
@@ -169,7 +169,12 @@ public class PgHandshakeHandler extends ChannelInboundHandlerAdapter {
 
         // 切换到命令分发器
         if (bizExecutorGroup != null) {
-            ctx.pipeline().addAfter(bizExecutorGroup, "handshakeHandler", "commandHandler", new PgCommandHandler(backendRouter));
+            ctx.pipeline()
+                    .addAfter(
+                            bizExecutorGroup,
+                            "handshakeHandler",
+                            "commandHandler",
+                            new PgCommandHandler(backendRouter));
             ctx.pipeline().remove(this);
         } else {
             ctx.pipeline().replace(this, "commandHandler", new PgCommandHandler(backendRouter));

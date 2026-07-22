@@ -1,10 +1,10 @@
 package com.translator.proxy.protocol.frontend;
 
+import com.translator.proxy.core.handler.BackendRouter;
+
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.EventLoopGroup;
 import io.netty.handler.codec.ByteToMessageDecoder;
-
-import com.translator.proxy.core.handler.BackendRouter;
 
 /**
  * SPI 主接口 —— 前端协议抽象。

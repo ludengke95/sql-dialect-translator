@@ -57,8 +57,7 @@ public class MySQLSystemCatalogProviderTest {
 
     @Test
     public void testCanHandleShowVariablesLike() {
-        assertTrue("SHOW VARIABLES LIKE 'autocommit' 应被拦截",
-                provider.canHandle("SHOW VARIABLES LIKE 'autocommit'"));
+        assertTrue("SHOW VARIABLES LIKE 'autocommit' 应被拦截", provider.canHandle("SHOW VARIABLES LIKE 'autocommit'"));
     }
 
     @Test
@@ -73,8 +72,7 @@ public class MySQLSystemCatalogProviderTest {
 
     @Test
     public void testCanHandleMultiColumnSystemVariables() {
-        assertTrue("多列系统变量查询应被拦截",
-                provider.canHandle("SELECT @@session.tx_isolation AS a, @@autocommit AS b"));
+        assertTrue("多列系统变量查询应被拦截", provider.canHandle("SELECT @@session.tx_isolation AS a, @@autocommit AS b"));
     }
 
     @Test
@@ -173,8 +171,8 @@ public class MySQLSystemCatalogProviderTest {
     public void testSetSystemVariableGlobalEffect() {
         // 模拟 ProxyBootstrap.applyMaxPacketSize 的全局注入语义
         MySQLSystemCatalogProvider.setSystemVariable("max_allowed_packet", "999");
-        assertEquals("setSystemVariable 后全局变量应生效",
-                "999", provider.getVariables().get("max_allowed_packet"));
+        assertEquals(
+                "setSystemVariable 后全局变量应生效", "999", provider.getVariables().get("max_allowed_packet"));
     }
 
     // ==================== handleQuery（Netty 写入路径，EmbeddedChannel 轻量验证） ====================
