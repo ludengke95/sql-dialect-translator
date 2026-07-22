@@ -291,8 +291,8 @@ def load_csv_to_pg(conn_kwargs, table_name, columns, rows, schema, batch_size=10
     finally:
         conn.close()
 
-def load_data_to_mysql(conn_kwargs, table_name, columns, rows, schema):
-    """使用 mysql.connector executemany 将数据批量导入 MySQL。"""
+def load_data_to_mysql(conn_kwargs, table_name, columns, rows, schema, batch_size=1000):
+    """使用 mysql.connector executemany 将数据分批批量导入 MySQL。"""
     import mysql.connector
     conn = mysql.connector.connect(**conn_kwargs)
     try:
@@ -304,7 +304,9 @@ def load_data_to_mysql(conn_kwargs, table_name, columns, rows, schema):
         columns_sql = ', '.join(columns)
         sql = f"INSERT INTO {table_name} ({columns_sql}) VALUES ({placeholders})"
         
-        cur.executemany(sql, rows)
+        for i in range(0, len(rows), batch_size):
+            batch = rows[i:i + batch_size]
+            cur.executemany(sql, batch)
         conn.commit()
         print(f"  导入 {table_name}: {len(rows)} 行")
     finally:
@@ -379,6 +381,7 @@ def main():
             'user': args.mysql_user,
             'password': args.mysql_password,
             'database': args.mysql_db,
+            'use_pure': True,
         }
         load_func = load_data_to_mysql
         connector = mysql.connector

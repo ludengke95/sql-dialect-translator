@@ -194,7 +194,7 @@ execute_sql() {
                 docker run $DOCKER_BASE_FLAGS \
                     -e PGPASSWORD="$PASSWORD" \
                     "$DOCKER_IMAGE" \
-                    psql -h "$HOST" -p "$PORT" \
+                    psql -h "$HOST" ""-p """$PORT" \
                     -U "$USER" -d "$db" \
                     -c "$sql" 2>&1
             )" || _EXEC_RC=$?
@@ -221,7 +221,7 @@ execute_sql() {
             printf '%s\n' "$sql" > "$tmpfile"
 
             _EXEC_OUTPUT="$(
-                docker run $DOCKER_BASE_FLAGS \
+                wslc run $DOCKER_BASE_FLAGS \
                     -v "$tmpfile:/tmp/q.sql:ro" \
                     "$DOCKER_IMAGE" \
                     -u "jdbc:postgresql://$HOST:$PORT/$db" \
