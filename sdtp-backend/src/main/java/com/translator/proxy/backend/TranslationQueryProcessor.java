@@ -100,25 +100,45 @@ public class TranslationQueryProcessor implements QueryProcessor {
      */
     public TranslationQueryProcessor(
             QueryProcessor delegate, String targetDialectId, TranslationConfig translationConfig, String backendName) {
+        this(delegate, DialectType.MYSQL, DialectType.fromIdentifier(targetDialectId), translationConfig, backendName);
+    }
+
+    /**
+     * 创建翻译处理器（指定源方言与目标方言）。
+     *
+     * @param delegate          实际后端查询处理器
+     * @param sourceDialect     源方言类型
+     * @param targetDialect     目标方言类型
+     * @param translationConfig 翻译配置（关键词/标识符大小写策略）
+     * @param backendName       后端名称（用于指标打点），可为 null
+     */
+    public TranslationQueryProcessor(
+            QueryProcessor delegate,
+            DialectType sourceDialect,
+            DialectType targetDialect,
+            TranslationConfig translationConfig,
+            String backendName) {
         this.delegate = delegate;
-        this.sourceDialect = DialectType.MYSQL; // 默认源方言为 MySQL
-        this.enabled = !this.sourceDialect.getIdentifier().equalsIgnoreCase(targetDialectId);
+        this.sourceDialect = sourceDialect != null ? sourceDialect : DialectType.MYSQL;
+        this.targetDialect = targetDialect != null ? targetDialect : DialectType.MYSQL;
+        this.enabled = this.sourceDialect != this.targetDialect;
         this.translationConfig = translationConfig != null ? translationConfig : TranslationConfig.DEFAULT;
         if (backendName != null) {
             this.backendName = backendName;
         }
 
         if (enabled) {
-            this.targetDialect = DialectType.fromIdentifier(targetDialectId);
             log.info(
                     "SQL translation enabled: {} → {} (config: {}, backend: {})",
                     this.sourceDialect.getIdentifier(),
-                    targetDialect.getIdentifier(),
+                    this.targetDialect.getIdentifier(),
                     this.translationConfig,
                     this.backendName);
         } else {
-            this.targetDialect = this.sourceDialect;
-            log.info("SQL translation disabled (source == target: {}, backend: {})", targetDialectId, this.backendName);
+            log.info(
+                    "SQL translation disabled (source == target: {}, backend: {})",
+                    this.targetDialect.getIdentifier(),
+                    this.backendName);
         }
     }
 

@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.translator.core.DialectType;
 import com.translator.core.config.TranslationConfig;
 import com.translator.proxy.core.handler.BackendRouter;
 import com.translator.proxy.core.handler.QueryProcessor;
@@ -259,11 +260,13 @@ public class BackendPoolManager implements BackendRouter {
 
         TranslationConfig tc = resolveTranslationConfig(be);
 
-        // 包装翻译装饰器
+        // 如果后端 dialect 不是 MYSQL，按 MYSQL -> targetDialect 转换
         if (be.getDialect() != null && !be.getDialect().equalsIgnoreCase("MYSQL")) {
             return new TranslationQueryProcessor(jdbcProcessor, be.getDialect(), tc, be.getName());
         } else {
-            return jdbcProcessor;
+            // 前端是 POSTGRESQL 且后端是 MYSQL 时，开启 POSTGRESQL -> MYSQL 改写翻译
+            return new TranslationQueryProcessor(
+                    jdbcProcessor, DialectType.POSTGRESQL, DialectType.MYSQL, tc, be.getName());
         }
     }
 

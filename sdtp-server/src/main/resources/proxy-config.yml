@@ -6,11 +6,11 @@ proxy:
     user: root
     password: proxy_password
 backends:
-  - name: dgp-dsm
+  - name: tpch
     dialect: MYSQL
-    jdbc-url: jdbc:mysql://10.110.60.187:13345/dgp-dsm?useSSL=false
+    jdbc-url: jdbc:mysql://127.0.0.1:3306/tpch?useSSL=false
     username: root
-    password: Cjchnws
+    password: "123456"
     max-pool-size: 10
     min-idle: 2
 #  - name: tpch
