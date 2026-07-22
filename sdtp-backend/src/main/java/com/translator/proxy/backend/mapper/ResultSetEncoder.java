@@ -130,7 +130,7 @@ public final class ResultSetEncoder {
      */
     public static void encodeEmpty(ChannelHandlerContext ctx, long affectedRows, long lastInsertId) {
         if (responseWriter != null) {
-            responseWriter.writeOk(ctx, affectedRows, lastInsertId, getStatusFlags(ctx), 0, "");
+            responseWriter.writeOk((byte) 1, ctx, affectedRows, lastInsertId, getStatusFlags(ctx), 0, "");
             return;
         }
         // 默认 MySQL 格式（向后兼容）
@@ -156,7 +156,7 @@ public final class ResultSetEncoder {
      */
     public static void writeError(ChannelHandlerContext ctx, int errorCode, String sqlState, String message) {
         if (responseWriter != null) {
-            responseWriter.writeErr(ctx, errorCode, sqlState, message);
+            responseWriter.writeErr((byte) 1, ctx, errorCode, sqlState, message);
             return;
         }
         ByteBuf err = MySQLResponseWriter.buildErrPacket(ctx.alloc(), errorCode, sqlState, message);

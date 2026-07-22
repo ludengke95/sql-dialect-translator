@@ -136,7 +136,7 @@ public class MySQLAuthHandler extends ChannelInboundHandlerAdapter {
                     log.info("Auth success (sha256 fast) for user '{}'", resp.username);
                     applyDatabase(session, resp.database);
                     responseWriter.writeAuthMoreDataFastSuccess(ctx, (byte) 2);
-                    responseWriter.writeOk(ctx, 0, 0, getStatusFlags(session), 0, "");
+                    responseWriter.writeOk((byte) 3, ctx, 0, 0, getStatusFlags(session), 0, "");
                     switchToCommandHandler(ctx);
                     return;
                 }
@@ -171,7 +171,7 @@ public class MySQLAuthHandler extends ChannelInboundHandlerAdapter {
             log.info("Auth success (native) for user '{}'", resp.username);
             ConnectionMetrics.onAuthSuccess("native");
             applyDatabase(session, resp.database);
-            responseWriter.writeOk(ctx, 0, 0, getStatusFlags(session), 0, "");
+            responseWriter.writeOk((byte) 2, ctx, 0, 0, getStatusFlags(session), 0, "");
             switchToCommandHandler(ctx);
 
         } else {
@@ -216,7 +216,7 @@ public class MySQLAuthHandler extends ChannelInboundHandlerAdapter {
         pendingDatabase = null;
         authSwitchScramble = null;
 
-        responseWriter.writeOk(ctx, 0, 0, getStatusFlags(session), 0, "");
+        responseWriter.writeOk((byte) 4, ctx, 0, 0, getStatusFlags(session), 0, "");
         switchToCommandHandler(ctx);
     }
 
@@ -239,7 +239,7 @@ public class MySQLAuthHandler extends ChannelInboundHandlerAdapter {
 
     private void writeErrorAndClose(
             ChannelHandlerContext ctx, int errorCode, String sqlState, String message, byte seq) {
-        responseWriter.writeErr(ctx, errorCode, sqlState, message)
+        responseWriter.writeErr(seq, ctx, errorCode, sqlState, message)
                 .addListener(io.netty.channel.ChannelFutureListener.CLOSE);
     }
 

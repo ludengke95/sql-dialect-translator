@@ -17,14 +17,16 @@ public interface ResponseWriter {
     /**
      * 写入 OK 包。
      *
-     * @param ctx          Netty 上下文
-     * @param affectedRows 受影响行数
-     * @param lastInsertId 最后插入 ID
-     * @param statusFlags  状态标志位
-     * @param warnings     警告数
-     * @param info         附加信息（如 "Rows matched: 1  Changed: 1"）
+     * @param sequenceNumber 协议序列号（MySQL 协议逐包递增，PG 协议忽略）
+     * @param ctx            Netty 上下文
+     * @param affectedRows   受影响行数
+     * @param lastInsertId   最后插入 ID
+     * @param statusFlags    状态标志位
+     * @param warnings       警告数
+     * @param info           附加信息（如 "Rows matched: 1  Changed: 1"）
      */
     void writeOk(
+            byte sequenceNumber,
             ChannelHandlerContext ctx,
             long affectedRows,
             long lastInsertId,
@@ -35,13 +37,14 @@ public interface ResponseWriter {
     /**
      * 写入 ERR 包。
      *
-     * @param ctx       Netty 上下文
-     * @param errorCode 错误码
-     * @param sqlState  SQL 状态码（5 字符）
-     * @param message   错误消息
+     * @param sequenceNumber 协议序列号（MySQL 协议逐包递增，PG 协议忽略）
+     * @param ctx            Netty 上下文
+     * @param errorCode      错误码
+     * @param sqlState       SQL 状态码（5 字符）
+     * @param message        错误消息
      * @return 写入操作的 ChannelFuture
      */
-    io.netty.channel.ChannelFuture writeErr(ChannelHandlerContext ctx, int errorCode, String sqlState, String message);
+    io.netty.channel.ChannelFuture writeErr(byte sequenceNumber, ChannelHandlerContext ctx, int errorCode, String sqlState, String message);
 
     /**
      * 写入 ColumnDefinition 包。

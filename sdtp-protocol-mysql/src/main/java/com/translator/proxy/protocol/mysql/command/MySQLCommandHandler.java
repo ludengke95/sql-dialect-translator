@@ -120,7 +120,7 @@ public class MySQLCommandHandler extends ChannelInboundHandlerAdapter {
         } catch (Exception e) {
             log.error("Error handling command", e);
             CommandMetrics.recordError();
-            responseWriter.writeErr(ctx, 1105, "HY000", "Internal error: " + e.getMessage());
+            responseWriter.writeErr((byte) 1, ctx, 1105, "HY000", "Internal error: " + e.getMessage());
         } finally {
             raw.release();
         }
@@ -140,7 +140,7 @@ public class MySQLCommandHandler extends ChannelInboundHandlerAdapter {
             }
             session.setDatabase(useDb);
             int statusFlags = MySQLAuthHandler.getStatusFlags(session);
-            responseWriter.writeOk(ctx, 0, 0, statusFlags, 0, "");
+            responseWriter.writeOk((byte) 1, ctx, 0, 0, statusFlags, 0, "");
             return;
         }
 
@@ -165,10 +165,10 @@ public class MySQLCommandHandler extends ChannelInboundHandlerAdapter {
                     session.setAutoCommit(targetAutoCommit);
                 }
                 int statusFlags = MySQLAuthHandler.getStatusFlags(session);
-                responseWriter.writeOk(ctx, 0, 0, statusFlags, 0, "");
+                responseWriter.writeOk((byte) 1, ctx, 0, 0, statusFlags, 0, "");
             } catch (Exception e) {
                 log.error("Failed to set autocommit", e);
-                responseWriter.writeErr(ctx, 1105, "HY000", "Failed to set autocommit: " + e.getMessage());
+                responseWriter.writeErr((byte) 1, ctx, 1105, "HY000", "Failed to set autocommit: " + e.getMessage());
             }
             return;
         }
@@ -176,7 +176,7 @@ public class MySQLCommandHandler extends ChannelInboundHandlerAdapter {
         if (BEGIN_PATTERN.matcher(trimmedSql).matches()) {
             session.setInTransaction(true);
             int statusFlags = MySQLAuthHandler.getStatusFlags(session);
-            responseWriter.writeOk(ctx, 0, 0, statusFlags, 0, "");
+            responseWriter.writeOk((byte) 1, ctx, 0, 0, statusFlags, 0, "");
             return;
         }
 
@@ -186,10 +186,10 @@ public class MySQLCommandHandler extends ChannelInboundHandlerAdapter {
                 com.translator.proxy.core.handler.QueryProcessor processor = resolveProcessor(session);
                 processor.commit(ctx, session);
                 int statusFlags = MySQLAuthHandler.getStatusFlags(session);
-                responseWriter.writeOk(ctx, 0, 0, statusFlags, 0, "");
+                responseWriter.writeOk((byte) 1, ctx, 0, 0, statusFlags, 0, "");
             } catch (Exception e) {
                 log.error("Commit failed", e);
-                responseWriter.writeErr(ctx, 1105, "HY000", "Commit failed: " + e.getMessage());
+                responseWriter.writeErr((byte) 1, ctx, 1105, "HY000", "Commit failed: " + e.getMessage());
             }
             return;
         }
@@ -200,10 +200,10 @@ public class MySQLCommandHandler extends ChannelInboundHandlerAdapter {
                 com.translator.proxy.core.handler.QueryProcessor processor = resolveProcessor(session);
                 processor.rollback(ctx, session);
                 int statusFlags = MySQLAuthHandler.getStatusFlags(session);
-                responseWriter.writeOk(ctx, 0, 0, statusFlags, 0, "");
+                responseWriter.writeOk((byte) 1, ctx, 0, 0, statusFlags, 0, "");
             } catch (Exception e) {
                 log.error("Rollback failed", e);
-                responseWriter.writeErr(ctx, 1105, "HY000", "Rollback failed: " + e.getMessage());
+                responseWriter.writeErr((byte) 1, ctx, 1105, "HY000", "Rollback failed: " + e.getMessage());
             }
             return;
         }
@@ -213,7 +213,7 @@ public class MySQLCommandHandler extends ChannelInboundHandlerAdapter {
             log.debug("Handling SET statement locally: {}", sql);
             CommandMetrics.recordSystemVarInterception();
             int statusFlags = MySQLAuthHandler.getStatusFlags(session);
-            responseWriter.writeOk(ctx, 0, 0, statusFlags, 0, "");
+            responseWriter.writeOk((byte) 1, ctx, 0, 0, statusFlags, 0, "");
             return;
         }
 
@@ -313,7 +313,7 @@ public class MySQLCommandHandler extends ChannelInboundHandlerAdapter {
         if (session != null) {
             statusFlags = MySQLAuthHandler.getStatusFlags(session);
         }
-        responseWriter.writeOk(ctx, 0, 0, statusFlags, 0, "");
+        responseWriter.writeOk((byte) 1, ctx, 0, 0, statusFlags, 0, "");
     }
 
     private void handleQuit(ChannelHandlerContext ctx) {
@@ -331,7 +331,7 @@ public class MySQLCommandHandler extends ChannelInboundHandlerAdapter {
         }
         session.setDatabase(dbName);
         int statusFlags = MySQLAuthHandler.getStatusFlags(session);
-        responseWriter.writeOk(ctx, 0, 0, statusFlags, 0, "");
+        responseWriter.writeOk((byte) 1, ctx, 0, 0, statusFlags, 0, "");
     }
 
     private void rollbackActiveTransaction(ChannelHandlerContext ctx, FrontendSession session) {
@@ -350,11 +350,11 @@ public class MySQLCommandHandler extends ChannelInboundHandlerAdapter {
     // ==================== COM_FIELD_LIST / Unsupported ====================
 
     private void handleFieldList(ChannelHandlerContext ctx, ByteBuf payload) {
-        responseWriter.writeErr(ctx, 1105, "HY000", "COM_FIELD_LIST not supported");
+        responseWriter.writeErr((byte) 1, ctx, 1105, "HY000", "COM_FIELD_LIST not supported");
     }
 
     private void handleUnsupported(ChannelHandlerContext ctx, String cmdName) {
-        responseWriter.writeErr(ctx, 1105, "HY000", "Command not supported: " + cmdName);
+        responseWriter.writeErr((byte) 1, ctx, 1105, "HY000", "Command not supported: " + cmdName);
     }
 
     @Override

@@ -27,6 +27,7 @@ public class MySQLResponseWriter implements ResponseWriter {
 
     @Override
     public void writeOk(
+            byte sequenceNumber,
             ChannelHandlerContext ctx,
             long affectedRows,
             long lastInsertId,
@@ -34,13 +35,13 @@ public class MySQLResponseWriter implements ResponseWriter {
             int warnings,
             String info) {
         ByteBuf ok = buildOkPacket(ctx.alloc(), affectedRows, lastInsertId, statusFlags, warnings, info);
-        ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(ok, (byte) 1));
+        ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(ok, sequenceNumber));
     }
 
     @Override
-    public io.netty.channel.ChannelFuture writeErr(ChannelHandlerContext ctx, int errorCode, String sqlState, String message) {
+    public io.netty.channel.ChannelFuture writeErr(byte sequenceNumber, ChannelHandlerContext ctx, int errorCode, String sqlState, String message) {
         ByteBuf err = buildErrPacket(ctx.alloc(), errorCode, sqlState, message);
-        return ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(err, (byte) 1));
+        return ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(err, sequenceNumber));
     }
 
     @Override

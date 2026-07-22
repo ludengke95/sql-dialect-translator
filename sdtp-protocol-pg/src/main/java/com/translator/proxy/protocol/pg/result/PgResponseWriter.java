@@ -31,6 +31,7 @@ public class PgResponseWriter implements ResponseWriter {
 
     @Override
     public void writeOk(
+            byte sequenceNumber,
             ChannelHandlerContext ctx,
             long affectedRows,
             long lastInsertId,
@@ -38,6 +39,7 @@ public class PgResponseWriter implements ResponseWriter {
             int warnings,
             String info) {
         // PG 用 CommandComplete 代替 OK，ReadyForQuery 由 CommandHandler 统一管理
+        // sequenceNumber 在 PG 协议中无对应语义，忽略
         String tag = "";
         if (info != null && !info.isEmpty()) {
             tag = info;
@@ -50,7 +52,8 @@ public class PgResponseWriter implements ResponseWriter {
     }
 
     @Override
-    public io.netty.channel.ChannelFuture writeErr(ChannelHandlerContext ctx, int errorCode, String sqlState, String message) {
+    public io.netty.channel.ChannelFuture writeErr(byte sequenceNumber, ChannelHandlerContext ctx, int errorCode, String sqlState, String message) {
+        // sequenceNumber 在 PG 协议中无对应语义，忽略
         sendError(ctx, "ERROR", sqlState, message);
         ByteBuf payload = ctx.alloc().buffer(1);
         payload.writeByte(PgWire.TXN_IDLE);
