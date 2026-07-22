@@ -1,6 +1,7 @@
 package com.translator.proxy.backend;
 
 import java.sql.*;
+import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -103,7 +104,6 @@ public class JdbcBackendQueryProcessor implements QueryProcessor {
                 conn = dataSource.getConnection();
                 isNewConnection = true;
             }
-            log.debug("Executing SQL [isTx={}, isNew={}]: {}", isTx, isNewConnection, formatSqlForLog(sql));
             try (Statement stmt = createStatement(conn)) {
                 boolean isResultSet = stmt.execute(sql);
                 if (isResultSet) {
@@ -111,7 +111,6 @@ public class JdbcBackendQueryProcessor implements QueryProcessor {
                         ResultSetEncoder.encodeAndWrite(ctx, rs, new ResultSetEncoder.SeqGenerator(), backendName);
                     }
                 } else {
-                    // UPDATE/INSERT/DELETE 等
                     int updateCount = stmt.getUpdateCount();
                     ResultSetEncoder.encodeEmpty(ctx, Math.max(updateCount, 0), 0);
                     BackendMetrics.observeAffectedRows(backendName, Math.max(updateCount, 0));

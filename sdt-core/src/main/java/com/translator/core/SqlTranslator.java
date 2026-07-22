@@ -122,6 +122,21 @@ public class SqlTranslator {
             log.debug("源方言和目标方言相同，无需转换: {}", sql);
             return sql;
         }
+        // 去除末尾空白与尾随分号 ';'（Calcite AST parseStmt 不接受尾随分号）
+        String cleanSql = sql.trim();
+        while (cleanSql.endsWith(";")) {
+            cleanSql = cleanSql.substring(0, cleanSql.length() - 1).trim();
+        }
+        if (cleanSql.isEmpty()) {
+            return sql;
+        }
+        return translateSingle(cleanSql);
+    }
+
+    /**
+     * 翻译单条 SQL 语句（不含多语句拆分）。解析失败时抛出 {@link SqlTranslationException}。
+     */
+    private String translateSingle(String sql) {
         long start = System.nanoTime();
         try {
             // 1. 解析 SQL → AST (SqlNode)
@@ -152,13 +167,19 @@ public class SqlTranslator {
                         .getSql();
             } else {
                 result = rewritten
-                        .toSqlString(c -> c.withDialect(targetSqlDialect).withQuoteAllIdentifiers(true))
+                        .toSqlString(c -> c.withDialect(targetSqlDialect).withQuoteAllIdentifiers(false))
                         .getSql();
             }
             long elapsed = (System.nanoTime() - start) / 1_000_000;
             log.debug("SQL 翻译完成 ({}ms): [{}] → [{}]", elapsed, sql, result);
             // 消除由于 withQuoteAllIdentifiers(true) 导致的函数名被误加双引号问题（例如把 "SUBSTR"( 还原为 SUBSTR( ）
             result = result.replaceAll("\"([A-Za-z_][A-Za-z0-9_]*)\"\\(", "$1(");
+            // DATE_ADD/SUBDATE 改写后形如 CAST('...' AS TIMESTAMP) + 'N UNIT'，
+            // PostgreSQL 不支持 timestamp 与字符串字面量直接相加，必须把右侧字符串
+            // 包装为 INTERVAL 字面量：CAST('...' AS TIMESTAMP) + INTERVAL 'N UNIT'
+            result = result.replaceAll(
+                    "\\+\\s*'(-?\\d+\\s+(?:DAYS|MONTHS|YEARS|HOURS|MINUTES|SECONDS))'",
+                    "+ INTERVAL '$1'");
             return result;
         } catch (SqlTranslationException e) {
             throw e; // 已知翻译或校验异常，不重复包裹

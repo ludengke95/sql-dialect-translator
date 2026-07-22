@@ -1,8 +1,10 @@
 # =============================================================================
-# SDTP 集成测试 — 可复用工作流
+# SDTP 多协议多后端集成测试 — 可复用工作流
 #
 # 被 sdtp-integration-test.yml 调用。
-# 每个客户端模式复用同一个 job 定义，通过 inputs 参数化差异。
+# 统一支持:
+#   - 前端 MySQL -> 后端 PostgreSQL
+#   - 前端 PostgreSQL -> 后端 MySQL
 # =============================================================================
 
 name: SDTP Integration Test Job
@@ -11,23 +13,38 @@ on:
   workflow_call:
     inputs:
       test_mode:
-        description: '测试模式 (mysql-client-5/8, mysql-jdbc-5/8, python-mysql)'
+        description: '测试模式 (mysql-client-5/8, mysql-jdbc-5/8, python-mysql, pg-client, pg-jdbc, python-pg)'
         type: string
         required: true
-      pg_user:
-        description: 'PostgreSQL 用户'
+      frontend_protocol:
+        description: '前端协议 (MYSQL / POSTGRESQL)'
+        type: string
+        required: false
+        default: 'MYSQL'
+      backend_type:
+        description: '后端数据库类型 (postgres / mysql)'
+        type: string
+        required: false
+        default: 'postgres'
+      backend_dialect:
+        description: 'SDTP 后端方言标识 (POSTGRESQL / MYSQL)'
+        type: string
+        required: false
+        default: 'POSTGRESQL'
+      backend_user:
+        description: '后端数据库用户'
         type: string
         required: true
-      pg_password:
-        description: 'PostgreSQL 密码'
+      backend_password:
+        description: '后端数据库密码'
         type: string
         required: true
-      pg_db:
-        description: 'PostgreSQL 数据库名'
+      backend_db:
+        description: '后端数据库名'
         type: string
         required: true
-      pg_port:
-        description: 'PostgreSQL 端口'
+      backend_port:
+        description: '后端数据库端口'
         type: string
         required: true
         default: '5432'
@@ -40,17 +57,17 @@ on:
         type: string
         required: true
       sdtp_port:
-        description: 'SDTP 代理端口'
+        description: 'SDTP 代理监听端口'
         type: string
         required: true
         default: '3306'
       extra_docker_image_artifact:
-        description: '额外 Docker 镜像 artifact 名称（jdbc/python 模式需要）'
+        description: '额外 Docker 镜像 artifact 名称'
         type: string
         required: false
         default: ''
       extra_docker_image_file:
-        description: '额外 Docker 镜像 tar.gz 文件名（与 artifact 配套）'
+        description: '额外 Docker 镜像 tar.gz 文件名'
         type: string
         required: false
         default: ''
@@ -68,22 +85,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
-    # services 中不能用 ${{ env.XXX }}，但可以用 ${{ inputs.XXX }}
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_USER: ${{ inputs.pg_user }}
-          POSTGRES_PASSWORD: ${{ inputs.pg_password }}
-          POSTGRES_DB: ${{ inputs.pg_db }}
-        ports:
-          - '${{ inputs.pg_port }}:5432'
-        options: >-
-          --health-cmd "pg_isready -U ${{ inputs.pg_user }} -d ${{ inputs.pg_db }}"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
     steps:
       # ====================================================================
       # 1. 检出代码
@@ -92,7 +93,7 @@ jobs:
         uses: actions/checkout@v4
 
       # ====================================================================
-      # 2. 下载 SDTP Docker 镜像（所有模式都需要）
+      # 2. 下载镜像 Artifact
       # ====================================================================
       - name: Download SDTP Docker image
         uses: actions/download-artifact@v4
@@ -100,9 +101,6 @@ jobs:
           name: sdtp-docker-image
           path: /tmp/
 
-      # ====================================================================
-      # 3. 下载额外 Docker 镜像（仅 jdbc / python 模式）
-      # ====================================================================
       - name: Download extra Docker image
         if: inputs.extra_docker_image_artifact != ''
         uses: actions/download-artifact@v4
@@ -111,7 +109,7 @@ jobs:
           path: /tmp/
 
       # ====================================================================
-      # 4. 加载 Docker 镜像
+      # 3. 加载 Docker 镜像
       # ====================================================================
       - name: Load Docker images
         run: |
@@ -121,29 +119,71 @@ jobs:
           fi
 
       # ====================================================================
-      # 5. 创建 SDTP 配置并启动
+      # 4. 启动后端数据库容器
+      # ====================================================================
+      - name: Start Backend Database (${{ inputs.backend_type }})
+        run: |
+          if [[ "${{ inputs.backend_type }}" == "postgres" ]]; then
+            docker run -d --name backend-db \
+              -e POSTGRES_USER=${{ inputs.backend_user }} \
+              -e POSTGRES_PASSWORD=${{ inputs.backend_password }} \
+              -e POSTGRES_DB=${{ inputs.backend_db }} \
+              -p ${{ inputs.backend_port }}:5432 \
+              postgres:15-alpine
+
+            echo "等待 PostgreSQL 就绪..."
+            for i in $(seq 1 30); do
+              if docker exec backend-db pg_isready -U ${{ inputs.backend_user }} -d ${{ inputs.backend_db }} > /dev/null 2>&1; then
+                echo "PostgreSQL 就绪 (尝试 $i)"
+                break
+              fi
+              sleep 2
+            done
+          elif [[ "${{ inputs.backend_type }}" == "mysql" ]]; then
+            docker run -d --name backend-db \
+              -e MYSQL_ROOT_PASSWORD=${{ inputs.backend_password }} \
+              -e MYSQL_DATABASE=${{ inputs.backend_db }} \
+              -p ${{ inputs.backend_port }}:3306 \
+              mysql:8.0
+
+            echo "等待 MySQL 就绪..."
+            for i in $(seq 1 30); do
+              if docker exec backend-db mysqladmin ping -h 127.0.0.1 -u root -p${{ inputs.backend_password }} > /dev/null 2>&1; then
+                echo "MySQL 就绪 (尝试 $i)"
+                break
+              fi
+              sleep 2
+            done
+
+            docker exec backend-db mysql -u root -p${{ inputs.backend_password }} \
+              -e "CREATE DATABASE IF NOT EXISTS tpch; CREATE DATABASE IF NOT EXISTS tpcc;"
+          fi
+
+      # ====================================================================
+      # 5. 创建 SDTP 配置并启动代理
       # ====================================================================
       - name: Create SDTP config and start
         run: |
           cat > /tmp/sdtp-config.yml << 'YAML'
           proxy:
             port: ${{ inputs.sdtp_port }}
+            frontend-protocol: ${{ inputs.frontend_protocol }}
             auth:
               user: ${{ inputs.sdtp_user }}
               password: ${{ inputs.sdtp_password }}
           backends:
             - name: tpch
-              dialect: POSTGRESQL
-              jdbc-url: jdbc:postgresql://host.docker.internal:${{ inputs.pg_port }}/${{ inputs.pg_db }}?currentSchema=tpch
-              username: ${{ inputs.pg_user }}
-              password: ${{ inputs.pg_password }}
+              dialect: ${{ inputs.backend_dialect }}
+              jdbc-url: ${{ inputs.backend_type == 'postgres' && format('jdbc:postgresql://host.docker.internal:{0}/{1}?currentSchema=tpch', inputs.backend_port, inputs.backend_db) || format('jdbc:mysql://host.docker.internal:{0}/tpch?allowMultiQueries=true', inputs.backend_port) }}
+              username: ${{ inputs.backend_user }}
+              password: ${{ inputs.backend_password }}
               max-pool-size: 10
               min-idle: 2
             - name: tpcc
-              dialect: POSTGRESQL
-              jdbc-url: jdbc:postgresql://host.docker.internal:${{ inputs.pg_port }}/${{ inputs.pg_db }}?currentSchema=tpcc
-              username: ${{ inputs.pg_user }}
-              password: ${{ inputs.pg_password }}
+              dialect: ${{ inputs.backend_dialect }}
+              jdbc-url: ${{ inputs.backend_type == 'postgres' && format('jdbc:postgresql://host.docker.internal:{0}/{1}?currentSchema=tpcc', inputs.backend_port, inputs.backend_db) || format('jdbc:mysql://host.docker.internal:{0}/tpcc?allowMultiQueries=true', inputs.backend_port) }}
+              username: ${{ inputs.backend_user }}
+              password: ${{ inputs.backend_password }}
               max-pool-size: 10
               min-idle: 2
           translation:
@@ -153,53 +193,74 @@ jobs:
 
           docker run -d --name sdtp \
             --add-host host.docker.internal:host-gateway \
-            -p ${{ inputs.sdtp_port }}:3306 \
+            -p ${{ inputs.sdtp_port }}:${{ inputs.sdtp_port }} \
             -v /tmp/sdtp-config.yml:/opt/sdtp/config/proxy-config.yml \
             sdtp:latest
 
-          # 等待 SDTP 就绪
-          echo "等待 SDTP 启动..."
+          echo "等待 SDTP 代理启动..."
           for i in $(seq 1 30); do
             if docker logs sdtp 2>&1 | grep -qi "started\|listening"; then
               echo "SDTP 就绪 (尝试 $i)"
               break
             fi
-            sleep 3
+            sleep 2
           done
           docker logs sdtp --tail 20
 
+          echo "等待 SDTP 对外端口可连接..."
+          for i in $(seq 1 30); do
+            if timeout 2 bash -c "cat < /dev/null > /dev/tcp/127.0.0.1/${{ inputs.sdtp_port }}" 2>/dev/null; then
+              echo "  ✅ port ${{ inputs.sdtp_port }} ready (attempt $i)"
+              break
+            fi
+            sleep 2
+          done
+
       # ====================================================================
-      # 6. 准备 Python 环境（数据生成）
+      # 6. Python 环境与初始化测试数据
       # ====================================================================
-      - name: Set up Python (数据生成)
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Install data-gen dependencies
-        run: pip install psycopg2-binary
+      - name: Install DB drivers for data-gen
+        run: pip install psycopg2-binary mysql-connector-python
 
-      # ====================================================================
-      # 7. 创建测试表并加载数据
-      # ====================================================================
-      - name: Create TPC-H tables and load data
+      - name: Create tables and load data (PostgreSQL backend)
+        if: inputs.backend_type == 'postgres'
         run: |
-          PGPASSWORD=${{ inputs.pg_password }} psql -h localhost -U ${{ inputs.pg_user }} -d ${{ inputs.pg_db }} -f benchmark/tpch/schema_pg.sql
-          python benchmark/tpch/data_gen.py \
-            --pg-host localhost --pg-port ${{ inputs.pg_port }} \
-            --pg-user ${{ inputs.pg_user }} --pg-password ${{ inputs.pg_password }} \
-            --pg-db ${{ inputs.pg_db }} --scale 0.01 --schema tpch
+          PGPASSWORD=${{ inputs.backend_password }} psql -h localhost -p ${{ inputs.backend_port }} -U ${{ inputs.backend_user }} -d ${{ inputs.backend_db }} -f benchmark/mysql-pg/tpch/schema_pg.sql
+          python benchmark/mysql-pg/tpch/data_gen.py \
+            --pg-host localhost --pg-port ${{ inputs.backend_port }} \
+            --pg-user ${{ inputs.backend_user }} --pg-password ${{ inputs.backend_password }} \
+            --pg-db ${{ inputs.backend_db }} --scale 0.01 --schema tpch
 
-      - name: Create TPC-C tables and load data
+          PGPASSWORD=${{ inputs.backend_password }} psql -h localhost -p ${{ inputs.backend_port }} -U ${{ inputs.backend_user }} -d ${{ inputs.backend_db }} -f benchmark/mysql-pg/tpcc/schema_pg.sql
+          python benchmark/mysql-pg/tpcc/data_gen.py \
+            --pg-host localhost --pg-port ${{ inputs.backend_port }} \
+            --pg-user ${{ inputs.backend_user }} --pg-password ${{ inputs.backend_password }} \
+            --pg-db ${{ inputs.backend_db }} --warehouses 1 --schema tpcc
+
+      - name: Create tables and load data (MySQL backend)
+        if: inputs.backend_type == 'mysql'
         run: |
-          PGPASSWORD=${{ inputs.pg_password }} psql -h localhost -U ${{ inputs.pg_user }} -d ${{ inputs.pg_db }} -f benchmark/tpcc/schema_pg.sql
-          python benchmark/tpcc/data_gen.py \
-            --pg-host localhost --pg-port ${{ inputs.pg_port }} \
-            --pg-user ${{ inputs.pg_user }} --pg-password ${{ inputs.pg_password }} \
-            --pg-db ${{ inputs.pg_db }} --warehouses 1 --schema tpcc
+          docker exec -i backend-db mysql -u ${{ inputs.backend_user }} -p${{ inputs.backend_password }} ${{ inputs.backend_db }} < benchmark/pg-mysql/tpch/schema_mysql.sql
+          python benchmark/pg-mysql/tpch/data_gen.py \
+            --db-type mysql \
+            --mysql-host 127.0.0.1 --mysql-port ${{ inputs.backend_port }} \
+            --mysql-user ${{ inputs.backend_user }} --mysql-password ${{ inputs.backend_password }} \
+            --mysql-db ${{ inputs.backend_db }} --scale 0.01 --schema tpch
+
+          docker exec -i backend-db mysql -u ${{ inputs.backend_user }} -p${{ inputs.backend_password }} ${{ inputs.backend_db }} < benchmark/pg-mysql/tpcc/schema_mysql.sql
+          python benchmark/pg-mysql/tpcc/data_gen.py \
+            --db-type mysql \
+            --mysql-host 127.0.0.1 --mysql-port ${{ inputs.backend_port }} \
+            --mysql-user ${{ inputs.backend_user }} --mysql-password ${{ inputs.backend_password }} \
+            --mysql-db ${{ inputs.backend_db }} --warehouses 1 --schema tpcc
 
       # ====================================================================
-      # 8. 执行集成测试
+      # 7. 执行集成测试
       # ====================================================================
       - name: Run integration test (${{ inputs.test_mode }})
         run: |
@@ -209,18 +270,21 @@ jobs:
             --port ${{ inputs.sdtp_port }} \
             --user ${{ inputs.sdtp_user }} \
             --password ${{ inputs.sdtp_password }} \
-            --database ${{ inputs.pg_db }} \
+            --database ${{ inputs.backend_db }} \
+            --tpch-database tpch \
+            --tpcc-database tpcc \
             --benchmark all \
             --output-dir benchmark/reports
 
       # ====================================================================
-      # 9. 收集 SDTP 日志 & 上传报告
+      # 8. 收集日志 & 上传报告
       # ====================================================================
-      - name: Collect SDTP logs
+      - name: Collect SDTP logs & diagnostics
         if: always()
         run: |
           mkdir -p /tmp/sdtp-logs
           docker logs sdtp > /tmp/sdtp-logs/sdtp.log 2>&1 || true
+          docker logs backend-db > /tmp/sdtp-logs/backend-db.log 2>&1 || true
 
       - name: Upload test reports
         if: always()
@@ -232,7 +296,7 @@ jobs:
             /tmp/sdtp-logs/
 
       # ====================================================================
-      # 10. 打印摘要
+      # 9. 打印摘要
       # ====================================================================
       - name: Print summary
         if: always()
