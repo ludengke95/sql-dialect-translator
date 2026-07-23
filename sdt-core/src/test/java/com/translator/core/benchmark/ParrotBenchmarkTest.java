@@ -5,6 +5,7 @@ import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 /**
  * PARROT Benchmark 单元测试套件
@@ -23,8 +24,8 @@ public class ParrotBenchmarkTest {
         ParrotBenchmarkRunner.BenchmarkReport report = runner.runBenchmark(testCases);
 
         // 3. 断言及输出评测报告
-        System.out.println("=== Sample Dataset Benchmark Report ===");
-        System.out.println(report.toMarkdownReport());
+        System.out.println("=== Sample Dataset Benchmark Summary Report ===");
+        System.out.println(report.toSummaryReport());
 
         Assert.assertTrue("PARROT 转换成功率应在 50% 以上", report.getSuccessRate() >= 50.0);
         Assert.assertTrue("平均转换延迟应小于 50ms (50000μs)", report.getAverageLatencyUs() < 50000.0);
@@ -44,6 +45,16 @@ public class ParrotBenchmarkTest {
         // 3. 断言及输出评测报告
         System.out.println("=== Full Dataset Benchmark Report ===");
         System.out.println(report.toMarkdownReport());
+
+        // 验证分组统计与汇总报告
+        String summary = report.toSummaryReport();
+        Assert.assertTrue("Summary 报告应包含分组统计标题", summary.contains("方言方向分组统计"));
+        Assert.assertTrue("Summary 报告应包含全量汇总行", summary.contains("全量汇总 (TOTAL)"));
+        Assert.assertFalse("Summary 报告不应包含逐条用例明细表", summary.contains("## 用例明细"));
+
+        Map<String, ParrotBenchmarkRunner.DirectionStats> statsMap = report.getDirectionStatsMap();
+        Assert.assertFalse("分组统计信息不能为空", statsMap.isEmpty());
+        Assert.assertTrue("应包含 POSTGRESQL -> MYSQL 分组", statsMap.containsKey("POSTGRESQL -> MYSQL"));
 
         Assert.assertTrue("全量 PARROT 转换成功率应在 50% 以上", report.getSuccessRate() >= 50.0);
         Assert.assertTrue("全量平均转换延迟应小于 50ms (50000μs)", report.getAverageLatencyUs() < 50000.0);
@@ -126,8 +137,8 @@ public class ParrotBenchmarkTest {
         ParrotBenchmarkRunner runner = new ParrotBenchmarkRunner();
         ParrotBenchmarkRunner.BenchmarkReport report = runner.runBenchmark(cases);
 
-        System.out.println("=== Native Format E2E Report ===");
-        System.out.println(report.toMarkdownReport());
+        System.out.println("=== Native Format E2E Summary Report ===");
+        System.out.println(report.toSummaryReport());
 
         Assert.assertEquals("总用例数应为 2", 2, report.getTotalCases());
         Assert.assertTrue("平均延迟应在合理范围内", report.getAverageLatencyUs() < 100000.0);

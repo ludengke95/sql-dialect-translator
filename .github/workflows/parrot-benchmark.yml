@@ -78,14 +78,14 @@ jobs:
           echo "Dataset ready. File size: $(wc -c < benchmark/parrot-data/parrot_dataset.json) bytes"
 
       # ====================================================================
-      # 6. 运行 SDT 批量离线翻译并导出预测结果
+      # 6. 运行 SDT 批量离线翻译并导出预测结果与分类统计
       # ====================================================================
       - name: Run SDT Translation & Export Predictions
         run: |
           mvn exec:java \
             -Dexec.mainClass="com.translator.core.benchmark.ParrotBenchmarkRunner" \
             -Dexec.classpathScope=test \
-            -Dexec.args="benchmark/parrot-data/parrot_dataset.json benchmark/parrot-data/sdt_predictions.json" \
+            -Dexec.args="benchmark/parrot-data/parrot_dataset.json benchmark/parrot-data/sdt_predictions.json benchmark/parrot-data/summary_output.log" \
             -pl sdt-core | tee benchmark/parrot-data/runner_output.log
 
       # ====================================================================
@@ -102,16 +102,37 @@ jobs:
               pip install -r requirements.txt || true
             fi
             echo "Running PARROT official evaluation module..."
-            python -m validator.evaluate \
-              --dataset ../parrot-data/parrot_dataset.json \
-              --predictions ../parrot-data/sdt_predictions.json \
-              | tee ../parrot-data/official_eval.log || true
+            {
+              echo "=== PARROT Evaluator Diagnostic Log ==="
+              echo "Working directory: $(pwd)"
+              echo "Directory contents:"
+              ls -la
+              if [ -d "validator" ]; then
+                echo "validator/ directory contents:"
+                ls -la validator/
+              fi
+              echo "========================================="
+              
+              if [ -f "validator/evaluate.py" ]; then
+                python validator/evaluate.py \
+                  --dataset ../parrot-data/parrot_dataset.json \
+                  --predictions ../parrot-data/sdt_predictions.json
+              elif [ -f "evaluate.py" ]; then
+                python evaluate.py \
+                  --dataset ../parrot-data/parrot_dataset.json \
+                  --predictions ../parrot-data/sdt_predictions.json
+              else
+                python -m validator.evaluate \
+                  --dataset ../parrot-data/parrot_dataset.json \
+                  --predictions ../parrot-data/sdt_predictions.json || true
+              fi
+            } 2>&1 | tee ../parrot-data/official_eval.log || true
           else
-            echo "⚠️ 克隆 PARROT 官方评估仓库失败，跳过官方评估打分步骤"
+            echo "⚠️ 克隆 PARROT 官方评估仓库失败，跳过官方评估打分步骤" | tee benchmark/parrot-data/official_eval.log
           fi
 
       # ====================================================================
-      # 8. 生成 GitHub Action Step Summary 统计简报
+      # 8. 生成 GitHub Action Step Summary 统计简报 (仅含按方向分组与汇总统计)
       # ====================================================================
       - name: Generate Summary Report
         if: always()
@@ -119,8 +140,10 @@ jobs:
           echo "## 🦜 SDT — PARROT Benchmark 自动评测报告" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          if [ -f benchmark/parrot-data/runner_output.log ]; then
-            echo "### ⚡ SDT 引擎性能与转换统计" >> $GITHUB_STEP_SUMMARY
+          if [ -f benchmark/parrot-data/summary_output.log ]; then
+            cat benchmark/parrot-data/summary_output.log >> $GITHUB_STEP_SUMMARY
+          elif [ -f benchmark/parrot-data/runner_output.log ]; then
+            echo "### ⚡ SDT 引擎转换统计" >> $GITHUB_STEP_SUMMARY
             sed -n '/# 🦜 SDT - PARROT Benchmark/,$p' benchmark/parrot-data/runner_output.log >> $GITHUB_STEP_SUMMARY || true
           else
             echo "❌ 未找到 SDT 转换运行日志" >> $GITHUB_STEP_SUMMARY
@@ -135,7 +158,7 @@ jobs:
           fi
 
       # ====================================================================
-      # 9. 归档 Artifacts 报告与预测文件
+      # 9. 归档 Artifacts 报告与预测文件 (包含全量用例明细与错误日志)
       # ====================================================================
       - name: Upload Benchmark Artifacts
         if: always()
@@ -144,5 +167,6 @@ jobs:
           name: parrot-benchmark-report
           path: |
             benchmark/parrot-data/sdt_predictions.json
+            benchmark/parrot-data/summary_output.log
             benchmark/parrot-data/runner_output.log
             benchmark/parrot-data/official_eval.log
