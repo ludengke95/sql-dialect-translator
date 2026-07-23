@@ -234,6 +234,7 @@ public class SqlTranslator {
             case MYSQL:
                 // 将 `identifier` 转换为 "identifier"
                 result = result.replace('`', '"');
+                result = normalizeMySqlSyntax(result);
                 break;
             case SQLSERVER:
                 // 将 [identifier] 转换为 "identifier"
@@ -265,6 +266,19 @@ public class SqlTranslator {
         // LIMIT n 放在末尾（Calcite parser 会正确处理 ORDER BY + LIMIT 的顺序）
         sql = sql.trim() + " LIMIT " + topNum;
         return sql;
+    }
+    /**
+     * 规整 MySQL 特有语法表达。
+     * 1. GROUP_CONCAT(expr SEPARATOR ',') -> GROUP_CONCAT(expr, ',')
+     * 2. LIMIT offset, count -> LIMIT count OFFSET offset
+     */
+    private static String normalizeMySqlSyntax(String sql) {
+        if (sql == null || sql.isEmpty()) {
+            return sql;
+        }
+        String result = sql.replaceAll("(?i)\\bGROUP_CONCAT\\s*\\(\\s*(.+?)\\s+SEPARATOR\\s+([^)]+)\\)", "GROUP_CONCAT($1, $2)");
+        result = result.replaceAll("(?i)\\bLIMIT\\s+(\\d+)\\s*,\\s*(\\d+)", "LIMIT $2 OFFSET $1");
+        return result;
     }
     /**
      * 去掉 SQL 中的 -- 行注释。
@@ -751,6 +765,90 @@ public class SqlTranslator {
                                 ReturnTypes.ARG0,
                                 null,
                                 OperandTypes.family(SqlTypeFamily.ANY, SqlTypeFamily.ANY),
+                                SqlFunctionCategory.SYSTEM),
+                        new SqlFunction(
+                                "DATE_FORMAT",
+                                SqlKind.OTHER_FUNCTION,
+                                ReturnTypes.ARG0,
+                                null,
+                                OperandTypes.VARIADIC,
+                                SqlFunctionCategory.SYSTEM),
+                        new SqlFunction(
+                                "STR_TO_DATE",
+                                SqlKind.OTHER_FUNCTION,
+                                ReturnTypes.ARG0,
+                                null,
+                                OperandTypes.VARIADIC,
+                                SqlFunctionCategory.SYSTEM),
+                        new SqlFunction(
+                                "SUBSTRING_INDEX",
+                                SqlKind.OTHER_FUNCTION,
+                                ReturnTypes.ARG0,
+                                null,
+                                OperandTypes.VARIADIC,
+                                SqlFunctionCategory.SYSTEM),
+                        new SqlFunction(
+                                "GROUP_CONCAT",
+                                SqlKind.OTHER_FUNCTION,
+                                ReturnTypes.ARG0,
+                                null,
+                                OperandTypes.VARIADIC,
+                                SqlFunctionCategory.SYSTEM),
+                        new SqlFunction(
+                                "JSON_EXTRACT",
+                                SqlKind.OTHER_FUNCTION,
+                                ReturnTypes.ARG0,
+                                null,
+                                OperandTypes.VARIADIC,
+                                SqlFunctionCategory.SYSTEM),
+                        new SqlFunction(
+                                "JSON_UNQUOTE",
+                                SqlKind.OTHER_FUNCTION,
+                                ReturnTypes.ARG0,
+                                null,
+                                OperandTypes.VARIADIC,
+                                SqlFunctionCategory.SYSTEM),
+                        new SqlFunction(
+                                "JSON_OBJECTAGG",
+                                SqlKind.OTHER_FUNCTION,
+                                ReturnTypes.ARG0,
+                                null,
+                                OperandTypes.VARIADIC,
+                                SqlFunctionCategory.SYSTEM),
+                        new SqlFunction(
+                                "JSON_AGG",
+                                SqlKind.OTHER_FUNCTION,
+                                ReturnTypes.ARG0,
+                                null,
+                                OperandTypes.VARIADIC,
+                                SqlFunctionCategory.SYSTEM),
+                        new SqlFunction(
+                                "JSON_BUILD_OBJECT",
+                                SqlKind.OTHER_FUNCTION,
+                                ReturnTypes.ARG0,
+                                null,
+                                OperandTypes.VARIADIC,
+                                SqlFunctionCategory.SYSTEM),
+                        new SqlFunction(
+                                "FIELD",
+                                SqlKind.OTHER_FUNCTION,
+                                ReturnTypes.INTEGER,
+                                null,
+                                OperandTypes.VARIADIC,
+                                SqlFunctionCategory.SYSTEM),
+                        new SqlFunction(
+                                "INSTR",
+                                SqlKind.OTHER_FUNCTION,
+                                ReturnTypes.INTEGER,
+                                null,
+                                OperandTypes.VARIADIC,
+                                SqlFunctionCategory.SYSTEM),
+                        new SqlFunction(
+                                "TIMESTAMPDIFF",
+                                SqlKind.OTHER_FUNCTION,
+                                ReturnTypes.INTEGER,
+                                null,
+                                OperandTypes.VARIADIC,
                                 SqlFunctionCategory.SYSTEM));
 
                 @Override
