@@ -77,11 +77,11 @@ public class ParrotBenchmarkTest {
         List<String> lines = Files.readAllLines(tempCsv.toPath());
         Assert.assertFalse("CSV 文件行不能为空", lines.isEmpty());
 
-        // 第一行应当为 BOM + 表头 id,sourceDialect,targetDialect,sourceSql,translatedSql,success
+        // 第一行应当为 BOM + 表头 id,sourceDialect,targetDialect,sourceSql,translatedSql,success,syntaxPass
         String header = lines.get(0);
         Assert.assertTrue("表头必须包含源方言与目标方言", header.contains("sourceDialect") && header.contains("targetDialect"));
         Assert.assertTrue("表头必须包含源 SQL 与转换后 SQL", header.contains("sourceSql") && header.contains("translatedSql"));
-        Assert.assertTrue("表头必须包含翻译成功状态", header.contains("success"));
+        Assert.assertTrue("表头必须包含翻译成功状态与 ANTLR 语法通过状态", header.contains("success") && header.contains("syntaxPass"));
 
         // 校验行数（表头 + 用例数）
         Assert.assertTrue("CSV 行数应当大于表头行", lines.size() > 1);

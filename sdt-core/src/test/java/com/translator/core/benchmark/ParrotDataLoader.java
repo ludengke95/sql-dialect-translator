@@ -256,7 +256,7 @@ public class ParrotDataLoader {
 
     /**
      * 导出评测明细结果为 CSV 格式文件。
-     * 包含字段：id, sourceDialect, targetDialect, sourceSql, translatedSql, success
+     * 包含字段：id, sourceDialect, targetDialect, sourceSql, translatedSql, success, syntaxPass
      * 使用 UTF-8 BOM 编码确保电子表格软件打开时不乱码。
      *
      * @param report        评测报告
@@ -268,8 +268,8 @@ public class ParrotDataLoader {
         StringBuilder sb = new StringBuilder();
         // 写入 UTF-8 BOM
         sb.append('\uFEFF');
-        // 表头
-        sb.append("id,sourceDialect,targetDialect,sourceSql,translatedSql,success\n");
+        // 表头（包含 syntaxPass 列）
+        sb.append("id,sourceDialect,targetDialect,sourceSql,translatedSql,success,syntaxPass\n");
 
         for (ParrotResult r : report.getResults()) {
             ParrotTestCase tc = r.getTestCase();
@@ -278,7 +278,8 @@ public class ParrotDataLoader {
             sb.append(escapeCsv(tc.getTargetDialect())).append(",");
             sb.append(escapeCsv(tc.getSourceSql())).append(",");
             sb.append(escapeCsv(r.getTranslatedSql() != null ? r.getTranslatedSql() : "")).append(",");
-            sb.append(r.isTranslationSuccess()).append("\n");
+            sb.append(r.isTranslationSuccess()).append(",");
+            sb.append(r.isTranslationSuccess()).append("\n"); // 默认与 success 占位一致，Python Evaluator 打分后精细更新
         }
 
         File outFile = new File(csvOutputPath);

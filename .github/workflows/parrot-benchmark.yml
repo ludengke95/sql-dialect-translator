@@ -107,11 +107,12 @@ jobs:
           python benchmark/official_evaluator.py \
             --dataset benchmark/parrot-data/parrot_dataset.json \
             --predictions benchmark/parrot-data/sdt_predictions.json \
+            --csv benchmark/parrot-data/sdt_predictions.csv \
             --evaluator-dir benchmark/parrot-evaluator \
             2>&1 | tee benchmark/parrot-data/official_eval.log || true
 
       # ====================================================================
-      # 8. 生成 GitHub Action Step Summary 统计简报
+      # 8. 生成 GitHub Action Step Summary 统计简报 (原生 Markdown 渲染)
       # ====================================================================
       - name: Generate Summary Report
         if: always()
@@ -130,14 +131,11 @@ jobs:
 
           if [ -f benchmark/parrot-data/official_eval.log ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### 🏆 PARROT 官方 ANTLR 语法打分结果" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
             cat benchmark/parrot-data/official_eval.log >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           fi
 
       # ====================================================================
-      # 9. 归档 Artifacts 报告与预测文件 (包含 sdt_predictions.csv)
+      # 9. 归档 Artifacts 报告与预测文件 (包含含 syntaxPass 列的 sdt_predictions.csv)
       # ====================================================================
       - name: Upload Benchmark Artifacts
         if: always()
