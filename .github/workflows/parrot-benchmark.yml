@@ -11,6 +11,7 @@ on:
         description: 'PARROT Dataset JSON URL'
         required: false
         default: 'https://huggingface.co/datasets/weizhoudb/PARROT/resolve/main/parrot_diverse.json'
+        type: string
   push:
     branches:
       - main
