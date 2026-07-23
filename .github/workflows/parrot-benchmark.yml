@@ -86,21 +86,58 @@ jobs:
             -pl sdt-core | tee benchmark/parrot-data/runner_output.log
 
       # ====================================================================
-      # 7. 生成 GitHub Action Step Summary 统计简报
+      # 7. 克隆 PARROT 官方评估工具并执行官方评估打分 (Official Evaluator)
+      # ====================================================================
+      - name: Clone PARROT Evaluator & Run Official Evaluation
+        run: |
+          echo "Cloning official PARROT benchmark repository..."
+          git clone --depth 1 https://github.com/weAIDB/PARROT.git benchmark/parrot-evaluator || true
+          
+          if [ -d "benchmark/parrot-evaluator" ]; then
+            cd benchmark/parrot-evaluator
+            if [ -f "requirements.txt" ]; then
+              pip install -r requirements.txt || true
+            fi
+            echo "Running PARROT official evaluation script..."
+            if [ -f "evaluate.py" ]; then
+              python evaluate.py \
+                --dataset ../parrot-data/parrot_dataset.json \
+                --predictions ../parrot-data/sdt_predictions.json \
+                | tee ../parrot-data/official_eval.log || true
+            else
+              echo "evaluate.py not found in repo, logging directory contents:"
+              ls -la
+            fi
+          else
+            echo "⚠️ 克隆 PARROT 官方评估仓库失败，跳过官方评估打分步骤"
+          fi
+
+      # ====================================================================
+      # 8. 生成 GitHub Action Step Summary 统计简报
       # ====================================================================
       - name: Generate Summary Report
         if: always()
         run: |
           echo "## 🦜 SDT — PARROT Benchmark 自动评测报告" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          
           if [ -f benchmark/parrot-data/runner_output.log ]; then
+            echo "### ⚡ SDT 引擎性能与转换统计" >> $GITHUB_STEP_SUMMARY
             sed -n '/# 🦜 SDT - PARROT Benchmark/,$p' benchmark/parrot-data/runner_output.log >> $GITHUB_STEP_SUMMARY || true
           else
-            echo "❌ 未找到运行日志" >> $GITHUB_STEP_SUMMARY
+            echo "❌ 未找到 SDT 转换运行日志" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -f benchmark/parrot-data/official_eval.log ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 🏆 PARROT 官方打分结果" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            cat benchmark/parrot-data/official_eval.log >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           fi
 
       # ====================================================================
-      # 8. 归档 Artifacts 报告与预测文件
+      # 9. 归档 Artifacts 报告与预测文件
       # ====================================================================
       - name: Upload Benchmark Artifacts
         if: always()
@@ -110,3 +147,4 @@ jobs:
           path: |
             benchmark/parrot-data/sdt_predictions.json
             benchmark/parrot-data/runner_output.log
+            benchmark/parrot-data/official_eval.log
