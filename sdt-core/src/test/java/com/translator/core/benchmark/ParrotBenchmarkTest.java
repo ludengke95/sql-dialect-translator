@@ -3,6 +3,8 @@ package com.translator.core.benchmark;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.File;
+import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +60,31 @@ public class ParrotBenchmarkTest {
 
         Assert.assertTrue("全量 PARROT 转换成功率应在 50% 以上", report.getSuccessRate() >= 50.0);
         Assert.assertTrue("全量平均转换延迟应小于 50ms (50000μs)", report.getAverageLatencyUs() < 50000.0);
+    }
+
+    @Test
+    public void testExportToCsvFile() throws Exception {
+        List<ParrotTestCase> testCases = ParrotDataLoader.loadFromResource("parrot/parrot_sample_cases.json");
+        ParrotBenchmarkRunner runner = new ParrotBenchmarkRunner();
+        ParrotBenchmarkRunner.BenchmarkReport report = runner.runBenchmark(testCases);
+
+        File tempCsv = File.createTempFile("parrot_test_output", ".csv");
+        tempCsv.deleteOnExit();
+
+        ParrotDataLoader.exportToCsvFile(report, tempCsv.getAbsolutePath());
+        Assert.assertTrue("导出的 CSV 文件必须存在且非空", tempCsv.exists() && tempCsv.length() > 0);
+
+        List<String> lines = Files.readAllLines(tempCsv.toPath());
+        Assert.assertFalse("CSV 文件行不能为空", lines.isEmpty());
+
+        // 第一行应当为 BOM + 表头 id,sourceDialect,targetDialect,sourceSql,translatedSql,success
+        String header = lines.get(0);
+        Assert.assertTrue("表头必须包含源方言与目标方言", header.contains("sourceDialect") && header.contains("targetDialect"));
+        Assert.assertTrue("表头必须包含源 SQL 与转换后 SQL", header.contains("sourceSql") && header.contains("translatedSql"));
+        Assert.assertTrue("表头必须包含翻译成功状态", header.contains("success"));
+
+        // 校验行数（表头 + 用例数）
+        Assert.assertTrue("CSV 行数应当大于表头行", lines.size() > 1);
     }
 
     @Test

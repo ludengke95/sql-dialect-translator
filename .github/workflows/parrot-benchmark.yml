@@ -78,7 +78,7 @@ jobs:
           echo "Dataset ready. File size: $(wc -c < benchmark/parrot-data/parrot_dataset.json) bytes"
 
       # ====================================================================
-      # 6. 运行 SDT 批量离线翻译并导出预测结果与分类统计
+      # 6. 运行 SDT 批量离线翻译并导出预测结果 (JSON & CSV) 与分类统计
       # ====================================================================
       - name: Run SDT Translation & Export Predictions
         run: |
@@ -137,7 +137,7 @@ jobs:
           fi
 
       # ====================================================================
-      # 9. 归档 Artifacts 报告与预测文件
+      # 9. 归档 Artifacts 报告与预测文件 (包含 sdt_predictions.csv)
       # ====================================================================
       - name: Upload Benchmark Artifacts
         if: always()
@@ -146,6 +146,7 @@ jobs:
           name: parrot-benchmark-report
           path: |
             benchmark/parrot-data/sdt_predictions.json
+            benchmark/parrot-data/sdt_predictions.csv
             benchmark/parrot-data/summary_output.log
             benchmark/parrot-data/runner_output.log
             benchmark/parrot-data/official_eval.log

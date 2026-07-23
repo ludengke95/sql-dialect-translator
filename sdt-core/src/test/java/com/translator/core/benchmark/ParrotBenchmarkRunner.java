@@ -36,6 +36,7 @@ public class ParrotBenchmarkRunner {
         String inputPath = args[0];
         String outputPath = args[1];
         String summaryPath = args.length >= 3 ? args[2] : getSummaryPath(outputPath);
+        String csvPath = getCsvPath(outputPath);
 
         try {
             System.out.println("Loading test cases from: " + inputPath);
@@ -52,8 +53,12 @@ public class ParrotBenchmarkRunner {
             writeStringToFile(report.toSummaryReport(), summaryPath);
             System.out.println("Summary report written to: " + summaryPath);
 
-            System.out.println("Exporting results to: " + outputPath);
+            System.out.println("Exporting JSON results to: " + outputPath);
             ParrotDataLoader.exportToJsonFile(report, outputPath);
+
+            System.out.println("Exporting CSV results to: " + csvPath);
+            ParrotDataLoader.exportToCsvFile(report, csvPath);
+
             System.out.println("Export completed successfully!");
         } catch (Exception e) {
             log.error("Failed to run benchmark", e);
@@ -68,6 +73,13 @@ public class ParrotBenchmarkRunner {
             return new File(parent, "summary_output.log").getAbsolutePath();
         }
         return "summary_output.log";
+    }
+
+    private static String getCsvPath(String outputPath) {
+        if (outputPath.endsWith(".json")) {
+            return outputPath.substring(0, outputPath.length() - 5) + ".csv";
+        }
+        return outputPath + ".csv";
     }
 
     private static void writeStringToFile(String content, String filePath) throws Exception {

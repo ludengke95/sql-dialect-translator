@@ -208,6 +208,42 @@ public class ParrotDataLoader {
         }
     }
 
+    /**
+     * 导出评测明细结果为 CSV 格式文件。
+     * 包含字段：id, sourceDialect, targetDialect, sourceSql, translatedSql, success
+     * 使用 UTF-8 BOM 编码确保电子表格软件打开时不乱码。
+     *
+     * @param report        评测报告
+     * @param csvOutputPath CSV 输出文件路径
+     * @throws Exception IO 异常
+     */
+    public static void exportToCsvFile(ParrotBenchmarkRunner.BenchmarkReport report, String csvOutputPath)
+            throws Exception {
+        StringBuilder sb = new StringBuilder();
+        // 写入 UTF-8 BOM
+        sb.append('\uFEFF');
+        // 表头
+        sb.append("id,sourceDialect,targetDialect,sourceSql,translatedSql,success\n");
+
+        for (ParrotResult r : report.getResults()) {
+            ParrotTestCase tc = r.getTestCase();
+            sb.append(escapeCsv(tc.getId())).append(",");
+            sb.append(escapeCsv(tc.getSourceDialect())).append(",");
+            sb.append(escapeCsv(tc.getTargetDialect())).append(",");
+            sb.append(escapeCsv(tc.getSourceSql())).append(",");
+            sb.append(escapeCsv(r.getTranslatedSql() != null ? r.getTranslatedSql() : "")).append(",");
+            sb.append(r.isTranslationSuccess()).append("\n");
+        }
+
+        File outFile = new File(csvOutputPath);
+        if (outFile.getParentFile() != null) {
+            outFile.getParentFile().mkdirs();
+        }
+        try (FileOutputStream fos = new FileOutputStream(outFile)) {
+            fos.write(sb.toString().getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
     // =========================================================================
     // 内部工具方法
     // =========================================================================
@@ -242,5 +278,15 @@ public class ParrotDataLoader {
                 .replace("\\n", "\n")
                 .replace("\\r", "\r")
                 .replace("\\t", "\t");
+    }
+
+    /**
+     * CSV 字段标准双引号包裹与内部双引号转义
+     */
+    private static String escapeCsv(String input) {
+        if (input == null) {
+            return "\"\"";
+        }
+        return "\"" + input.replace("\"", "\"\"") + "\"";
     }
 }
