@@ -17,6 +17,9 @@
 
 name: SDTP Integration Test
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: ['**']
