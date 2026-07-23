@@ -8,10 +8,12 @@ on:
   workflow_dispatch:
     inputs:
       dataset_url:
-        description: 'PARROT 数据集 JSON 链接'
-        type: string
+        description: 'PARROT Dataset JSON URL'
         required: false
         default: 'https://huggingface.co/datasets/weizhoudb/PARROT/resolve/main/parrot_diverse.json'
+  push:
+    branches:
+      - main
   pull_request:
     paths:
       - 'sdt-core/**'
