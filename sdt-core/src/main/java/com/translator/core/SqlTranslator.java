@@ -48,6 +48,7 @@ import com.translator.core.config.SqlDialectFactory;
 import com.translator.core.config.TranslationConfig;
 import com.translator.core.metadata.CalciteMetadataSchema;
 import com.translator.core.metadata.MetadataProvider;
+import com.translator.core.postprocessor.PostProcessorRegistry;
 import com.translator.core.rewrite.SqlRewriteEngine;
 
 /**
@@ -122,6 +123,21 @@ public class SqlTranslator {
             log.debug("源方言和目标方言相同，无需转换: {}", sql);
             return sql;
         }
+        // 去除末尾空白与尾随分号 ';'（Calcite AST parseStmt 不接受尾随分号）
+        String cleanSql = sql.trim();
+        while (cleanSql.endsWith(";")) {
+            cleanSql = cleanSql.substring(0, cleanSql.length() - 1).trim();
+        }
+        if (cleanSql.isEmpty()) {
+            return sql;
+        }
+        return translateSingle(cleanSql);
+    }
+
+    /**
+     * 翻译单条 SQL 语句（不含多语句拆分）。解析失败时抛出 {@link SqlTranslationException}。
+     */
+    private String translateSingle(String sql) {
         long start = System.nanoTime();
         try {
             // 1. 解析 SQL → AST (SqlNode)
@@ -152,13 +168,13 @@ public class SqlTranslator {
                         .getSql();
             } else {
                 result = rewritten
-                        .toSqlString(c -> c.withDialect(targetSqlDialect).withQuoteAllIdentifiers(true))
+                        .toSqlString(c -> c.withDialect(targetSqlDialect).withQuoteAllIdentifiers(false))
                         .getSql();
             }
             long elapsed = (System.nanoTime() - start) / 1_000_000;
             log.debug("SQL 翻译完成 ({}ms): [{}] → [{}]", elapsed, sql, result);
-            // 消除由于 withQuoteAllIdentifiers(true) 导致的函数名被误加双引号问题（例如把 "SUBSTR"( 还原为 SUBSTR( ）
-            result = result.replaceAll("\"([A-Za-z_][A-Za-z0-9_]*)\"\\(", "$1(");
+            // 目标方言专属 SQL 后处理 (后置语法擦除与归一化)
+            result = PostProcessorRegistry.process(result, sourceDialect, targetDialect);
             return result;
         } catch (SqlTranslationException e) {
             throw e; // 已知翻译或校验异常，不重复包裹
@@ -209,6 +225,9 @@ public class SqlTranslator {
         if (sql == null || sql.isEmpty()) {
             return sql;
         }
+        // 预处理 PostgreSQL 等方言中 INTERVAL 'N UNIT' 为 Calcite 兼容的 INTERVAL 'N' UNIT 格式
+        sql = sql.replaceAll("(?i)\\bINTERVAL\\s+'(-?\\d+)\\s+(DAY|MONTH|YEAR|HOUR|MINUTE|SECOND)S?'", "INTERVAL '$1' $2");
+
         // 去掉 -- 行注释，防止注释内容被 normalizeUnquotedIdentifiers 错误加引号
         String result = stripLineComments(sql);
         switch (dialect) {
@@ -240,7 +259,6 @@ public class SqlTranslator {
         if (!matcher.find()) {
             return sql;
         }
-        String topClause = matcher.group(1); // e.g. "TOP 10 "
         String topNum = matcher.group(2); // e.g. "10"
         // 去掉 "TOP n " 部分
         sql = sql.substring(0, matcher.start(1)) + sql.substring(matcher.end(1));

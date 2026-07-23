@@ -12,13 +12,12 @@
     <dependencies>
         <dependency>
             <groupId>com.draven.sql.translator</groupId>
-            <artifactId>sdtp-protocol</artifactId>
+            <artifactId>sdtp-metrics</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.draven.sql.translator</groupId>
-            <artifactId>sdtp-metrics</artifactId>
-            <version>${project.version}</version>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-all</artifactId>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>

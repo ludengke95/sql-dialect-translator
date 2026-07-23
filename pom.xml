@@ -12,10 +12,12 @@
         <module>sdt-core</module>
         <module>sdt-jdbc</module>
         <module>sdtp-protocol</module>
+        <module>sdtp-protocol-mysql</module>
         <module>sdtp-core</module>
         <module>sdtp-backend</module>
         <module>sdtp-server</module>
         <module>sdtp-metrics</module>
+        <module>sdtp-protocol-pg</module>
         <module>demo/sdt-spring-boot-jdbc-demo</module>
         <module>demo/sdtp-spring-boot-demo</module>
         <module>demo/sdtp-business-simulator</module>
@@ -181,6 +183,26 @@
                         <phase>verify</phase>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <groupId>com.github.spotbugs</groupId>
+                <artifactId>spotbugs-maven-plugin</artifactId>
+                <version>4.7.3.5</version>
+                <configuration>
+                    <effort>Max</effort>
+                    <threshold>Medium</threshold>
+                    <failOnError>false</failOnError>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-pmd-plugin</artifactId>
+                <version>3.21.0</version>
+                <configuration>
+                    <targetJdk>1.8</targetJdk>
+                    <printFailingErrors>true</printFailingErrors>
+                    <failOnViolation>false</failOnViolation>
+                </configuration>
             </plugin>
         </plugins>
     </build>

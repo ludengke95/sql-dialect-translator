@@ -17,6 +17,12 @@
         </dependency>
         <dependency>
             <groupId>com.draven.sql.translator</groupId>
+            <artifactId>sdtp-protocol-pg</artifactId>
+            <version>${project.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.draven.sql.translator</groupId>
             <artifactId>sdtp-metrics</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -114,7 +120,8 @@
                         <configuration>
                             <outputDirectory>${project.build.directory}/jdbc</outputDirectory>
                             <includeScope>runtime</includeScope>
-                            <includeGroupIds>org.postgresql</includeGroupIds>
+                            <!-- mysql-connector-j 在解析时被 relocate 为 com.mysql 组，必须显式包含，否则不会被打包进 jdbc/ 导致运行时 No suitable driver -->
+                            <includeGroupIds>org.postgresql,com.mysql</includeGroupIds>
                         </configuration>
                     </execution>
                 </executions>

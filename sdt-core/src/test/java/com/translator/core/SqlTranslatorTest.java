@@ -21,6 +21,21 @@ public class SqlTranslatorTest {
     }
 
     @Test
+    public void testPgDateSubToDateSub() {
+        String pgSql = "SELECT * FROM lineitem WHERE l_shipdate <= date '1998-12-01' - interval '90 day'";
+        String mysql = SqlTranslator.translate(pgSql, DialectType.POSTGRESQL, DialectType.MYSQL);
+        Assert.assertTrue("应包含 DATE_SUB: " + mysql, mysql.toUpperCase().contains("DATE_SUB"));
+    }
+
+    @Test
+    public void testBetweenAsymmetricRemoval() {
+        String pgSql = "SELECT * FROM lineitem WHERE l_shipdate BETWEEN '1995-01-01' AND '1996-12-31'";
+        String mysql = SqlTranslator.translate(pgSql, DialectType.POSTGRESQL, DialectType.MYSQL);
+        Assert.assertFalse("不应包含 ASYMMETRIC: " + mysql, mysql.toUpperCase().contains("ASYMMETRIC"));
+        Assert.assertTrue("应包含 BETWEEN: " + mysql, mysql.toUpperCase().contains("BETWEEN"));
+    }
+
+    @Test
     public void testSelectWithWhere() {
         String sql = "SELECT id, name FROM users WHERE age > 18";
         String result = SqlTranslator.translate(sql, DialectType.POSTGRESQL, DialectType.MYSQL);
@@ -633,5 +648,33 @@ public class SqlTranslatorTest {
         String pgResult = SqlTranslator.translate(mysqlSql, DialectType.MYSQL, DialectType.POSTGRESQL);
         Assert.assertFalse("函数名不应带有双引号: " + pgResult, pgResult.contains("\"SUBSTR\""));
         Assert.assertTrue("函数名应为未加引号形式: " + pgResult, pgResult.toUpperCase().contains("SUBSTR("));
+    }
+
+    @Test
+    public void testPgIntervalToMysql() {
+        String pgSql = "SELECT DATE '1998-12-01' - INTERVAL '90 DAY'";
+        String mysqlResult = SqlTranslator.translate(pgSql, DialectType.POSTGRESQL, DialectType.MYSQL);
+        Assert.assertTrue("应归一化为 INTERVAL 90 DAY 语法: " + mysqlResult, mysqlResult.toUpperCase().contains("INTERVAL 90 DAY"));
+    }
+
+    @Test
+    public void testAllPgTpchIntervalQueriesToMysql() {
+        String[] pgQueries = new String[] {
+            "SELECT l_returnflag FROM lineitem WHERE l_shipdate <= DATE '1998-12-01' - INTERVAL '90 DAY'",
+            "SELECT o_orderpriority FROM orders WHERE o_orderdate >= DATE '1993-07-01' AND o_orderdate < DATE '1993-07-01' + INTERVAL '3 MONTH'",
+            "SELECT n_name FROM customer WHERE o_orderdate >= DATE '1994-01-01' AND o_orderdate < DATE '1994-01-01' + INTERVAL '1 YEAR'",
+            "SELECT SUM(l_extendedprice * l_discount) FROM lineitem WHERE l_shipdate >= DATE '1994-01-01' AND l_shipdate < DATE '1994-01-01' + INTERVAL '1 YEAR'",
+            "SELECT c_custkey FROM customer WHERE o_orderdate >= DATE '1993-10-01' AND o_orderdate < DATE '1993-10-01' + INTERVAL '3 MONTH'",
+            "SELECT l_shipmode FROM orders WHERE l_receiptdate >= DATE '1994-01-01' AND l_receiptdate < DATE '1994-01-01' + INTERVAL '1 YEAR'",
+            "SELECT 1 FROM lineitem WHERE l_shipdate >= DATE '1995-09-01' AND l_shipdate < DATE '1995-09-01' + INTERVAL '1 MONTH'",
+            "SELECT 1 FROM supplier WHERE l_shipdate >= DATE '1996-01-01' AND l_shipdate < DATE '1996-01-01' + INTERVAL '3 MONTH'",
+            "SELECT s_name FROM supplier WHERE l_shipdate >= DATE '1994-01-01' AND l_shipdate < DATE '1994-01-01' + INTERVAL '1 YEAR'"
+        };
+
+        for (int i = 0; i < pgQueries.length; i++) {
+            String res = SqlTranslator.translate(pgQueries[i], DialectType.POSTGRESQL, DialectType.MYSQL);
+            Assert.assertNotNull("翻译结果不应为空", res);
+            Assert.assertFalse("不应包含 PG 特有的单引号包覆 Interval 单位: " + res, res.toUpperCase().contains("INTERVAL '"));
+        }
     }
 }

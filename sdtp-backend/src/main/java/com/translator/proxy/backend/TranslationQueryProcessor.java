@@ -11,7 +11,7 @@ import com.translator.core.SqlTranslationException;
 import com.translator.core.SqlTranslator;
 import com.translator.core.config.TranslationConfig;
 import com.translator.metrics.TranslationMetrics;
-import com.translator.proxy.core.handler.CommandHandler;
+import com.translator.proxy.core.handler.QueryProcessor;
 import com.translator.proxy.core.handler.SessionAttribute;
 import com.translator.proxy.core.handler.SqlTranslationContext;
 import com.translator.proxy.core.session.FrontendSession;
@@ -21,7 +21,7 @@ import io.netty.channel.ChannelHandlerContext;
 /**
  * SQL 翻译装饰器 —— 在执行前将源 SQL（MySQL 方言）翻译为目标方言 SQL。
  *
- * <p>包装一个 {@link CommandHandler.QueryProcessor}，在执行前调用 Calcite 翻译引擎。
+ * <p>包装一个 {@link QueryProcessor}，在执行前调用 Calcite 翻译引擎。
  * 翻译失败时自动降级为原始 SQL 直接执行。
  *
  * <p>跳过翻译（直通模式）：在 SQL 开头加注释标记即可绕过翻译引擎：
@@ -42,7 +42,7 @@ import io.netty.channel.ChannelHandlerContext;
  *                    (翻译 SQL / 直通)           (执行 SQL)
  * </pre>
  */
-public class TranslationQueryProcessor implements CommandHandler.QueryProcessor {
+public class TranslationQueryProcessor implements QueryProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(TranslationQueryProcessor.class);
 
@@ -55,10 +55,10 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
             "^\\s*/\\*\\s*(?:sdtp:)?direct\\s*\\*/\\s*\\n?(.*)", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
     /** 被包装的实际后端处理器 */
-    private final CommandHandler.QueryProcessor delegate;
+    private final QueryProcessor delegate;
 
-    /** 源方言（始终为 MySQL——Proxy 对外伪装成 MySQL） */
-    private static final DialectType SOURCE_DIALECT = DialectType.MYSQL;
+    /** 源方言（默认为 MySQL，可通过 setter 修改） */
+    private DialectType sourceDialect;
 
     /** 目标方言 */
     private final DialectType targetDialect;
@@ -78,7 +78,7 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
      * @param delegate        实际后端查询处理器
      * @param targetDialectId 目标方言标识符（如 "postgresql"）
      */
-    public TranslationQueryProcessor(CommandHandler.QueryProcessor delegate, String targetDialectId) {
+    public TranslationQueryProcessor(QueryProcessor delegate, String targetDialectId) {
         this(delegate, targetDialectId, TranslationConfig.DEFAULT, null);
     }
 
@@ -86,7 +86,7 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
      * 创建翻译处理器（带自定义大小写配置，不指定后端名）。
      */
     public TranslationQueryProcessor(
-            CommandHandler.QueryProcessor delegate, String targetDialectId, TranslationConfig translationConfig) {
+            QueryProcessor delegate, String targetDialectId, TranslationConfig translationConfig) {
         this(delegate, targetDialectId, translationConfig, null);
     }
 
@@ -99,28 +99,46 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
      * @param backendName       后端名称（用于指标打点），可为 null
      */
     public TranslationQueryProcessor(
-            CommandHandler.QueryProcessor delegate,
-            String targetDialectId,
+            QueryProcessor delegate, String targetDialectId, TranslationConfig translationConfig, String backendName) {
+        this(delegate, DialectType.MYSQL, DialectType.fromIdentifier(targetDialectId), translationConfig, backendName);
+    }
+
+    /**
+     * 创建翻译处理器（指定源方言与目标方言）。
+     *
+     * @param delegate          实际后端查询处理器
+     * @param sourceDialect     源方言类型
+     * @param targetDialect     目标方言类型
+     * @param translationConfig 翻译配置（关键词/标识符大小写策略）
+     * @param backendName       后端名称（用于指标打点），可为 null
+     */
+    public TranslationQueryProcessor(
+            QueryProcessor delegate,
+            DialectType sourceDialect,
+            DialectType targetDialect,
             TranslationConfig translationConfig,
             String backendName) {
         this.delegate = delegate;
-        this.enabled = !SOURCE_DIALECT.getIdentifier().equalsIgnoreCase(targetDialectId);
+        this.sourceDialect = sourceDialect != null ? sourceDialect : DialectType.MYSQL;
+        this.targetDialect = targetDialect != null ? targetDialect : DialectType.MYSQL;
+        this.enabled = this.sourceDialect != this.targetDialect;
         this.translationConfig = translationConfig != null ? translationConfig : TranslationConfig.DEFAULT;
         if (backendName != null) {
             this.backendName = backendName;
         }
 
         if (enabled) {
-            this.targetDialect = DialectType.fromIdentifier(targetDialectId);
             log.info(
                     "SQL translation enabled: {} → {} (config: {}, backend: {})",
-                    SOURCE_DIALECT.getIdentifier(),
-                    targetDialect.getIdentifier(),
+                    this.sourceDialect.getIdentifier(),
+                    this.targetDialect.getIdentifier(),
                     this.translationConfig,
                     this.backendName);
         } else {
-            this.targetDialect = SOURCE_DIALECT;
-            log.info("SQL translation disabled (source == target: {}, backend: {})", targetDialectId, this.backendName);
+            log.info(
+                    "SQL translation disabled (source == target: {}, backend: {})",
+                    this.targetDialect.getIdentifier(),
+                    this.backendName);
         }
     }
 
@@ -213,9 +231,20 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
     }
 
     /**
+     * 设置源方言类型（默认为 MYSQL）。
+     *
+     * @param sourceDialect 源方言类型
+     */
+    public void setSourceDialect(DialectType sourceDialect) {
+        if (sourceDialect != null) {
+            this.sourceDialect = sourceDialect;
+        }
+    }
+
+    /**
      * 获取被包装的底层处理器。
      */
-    public CommandHandler.QueryProcessor getDelegate() {
+    public QueryProcessor getDelegate() {
         return delegate;
     }
 
@@ -249,7 +278,7 @@ public class TranslationQueryProcessor implements CommandHandler.QueryProcessor 
         }
 
         try {
-            SqlTranslator translator = new SqlTranslator(SOURCE_DIALECT, targetDialect, translationConfig);
+            SqlTranslator translator = new SqlTranslator(this.sourceDialect, targetDialect, translationConfig);
             return translator.translate(sql);
         } catch (SqlTranslationException e) {
             // 翻译失败，记录日志并降级

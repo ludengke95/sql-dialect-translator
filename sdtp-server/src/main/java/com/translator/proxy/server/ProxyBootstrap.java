@@ -10,30 +10,31 @@ import com.translator.core.config.TranslationConfig;
 import com.translator.metrics.MetricsConfig;
 import com.translator.proxy.backend.BackendEntry;
 import com.translator.proxy.backend.BackendPoolManager;
+import com.translator.proxy.backend.mapper.ResultSetEncoder;
 import com.translator.proxy.core.handler.BackendRouter;
-import com.translator.proxy.core.handler.CommandHandler;
-import com.translator.proxy.core.handler.HandshakeHandler;
 import com.translator.proxy.core.handler.NettyMetricsHandler;
 import com.translator.proxy.metrics.MetricsModule;
-import com.translator.proxy.protocol.codec.MySQLPacketDecoder;
-import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
+import com.translator.proxy.protocol.frontend.AuthConfig;
+import com.translator.proxy.protocol.frontend.FrontendProtocol;
+import com.translator.proxy.protocol.frontend.FrontendProtocols;
 import com.translator.proxy.server.config.ConfigLoader;
 import com.translator.proxy.server.config.ConfigWatcher;
 import com.translator.proxy.server.config.ProxyConfig;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
+import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.timeout.IdleStateHandler;
-import io.netty.util.concurrent.DefaultEventExecutorGroup;
 
 /**
- * MySQL Proxy 启动引导类（多后端版）。
+ * SDT Proxy 启动引导类（SPI 多协议版）。
  *
- * <p>启动时初始化 {@link BackendPoolManager} 管理多个后端连接池，
- * 将 {@link BackendRouter} 注入 {@link CommandHandler} 实现按数据库名路由。
+ * <p>启动时通过 {@link FrontendProtocols} SPI 加载前端协议，
+ * 初始化 {@link BackendPoolManager} 管理多个后端连接池，
+ * 将 {@link BackendRouter} 注入命令处理器实现按数据库名路由。
  *
  * <p>启动后通过 {@link ConfigWatcher} 监听配置文件变更，
  * 实现 backends 列表的热更新。
@@ -45,42 +46,50 @@ public class ProxyBootstrap {
     private final ProxyConfig config;
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
-    private DefaultEventExecutorGroup bizExecutorGroup;
-    /**
-     * 多后端管理器
-     */
+    private DefaultEventLoopGroup bizExecutorGroup;
     private BackendPoolManager backendPoolManager;
-
-    /**
-     * 指标模块
-     * 用于收集和暴露 Proxy 运行时指标，如连接数、查询量等。
-     */
     private MetricsModule metricsModule;
-    /**
-     * 配置文件监听器
-     */
     private ConfigWatcher configWatcher;
+
+    /** 通过 SPI 加载的前端协议实例 */
+    private FrontendProtocol frontendProtocol;
 
     public ProxyBootstrap(ProxyConfig config) {
         this.config = config;
     }
 
     public void start() throws InterruptedException {
-        // 同步系统变量中的 max_allowed_packet，使客户端驱动在连接建立时能获取到正确的限制
-        com.translator.proxy.core.intercept.SystemVariableInterceptor.setSystemVariable(
-                "max_allowed_packet", String.valueOf(config.getMaxAllowedPacket()));
+        // 1. 通过 SPI 加载前端协议
+        String protocolId = config.getFrontendProtocol();
+        if (protocolId == null || protocolId.isEmpty()) {
+            protocolId = "MYSQL";
+        }
+        try {
+            frontendProtocol = FrontendProtocols.load(protocolId);
+        } catch (IllegalArgumentException e) {
+            log.error("Failed to load frontend protocol '{}'", protocolId);
+            throw e;
+        }
+        log.info(
+                "Using frontend protocol: {} (id={}, port={})",
+                frontendProtocol.getClass().getSimpleName(),
+                frontendProtocol.id(),
+                frontendProtocol.defaultPort());
+
+        // 将连接级参数（最大包大小）下发给前端协议，由其自行决定如何应用：
+        // MySQL 会写入自身系统变量表，PG 等无此概念则忽略。
+        // 这样通用启动类不再直接依赖 MySQL 专属的 MySQLSystemCatalogProvider。
+        frontendProtocol.applyMaxPacketSize(config.getMaxAllowedPacket());
 
         bossGroup = new NioEventLoopGroup(1);
         workerGroup = new NioEventLoopGroup();
 
+        // todo 这个地方取最大值比较好，还是用累计求和比较好
         int bizThreads = 4;
         for (ProxyConfig.TargetConfig tcBackend : config.getBackends()) {
             bizThreads = Math.max(bizThreads, tcBackend.getMaxPoolSize());
         }
-        bizExecutorGroup = new DefaultEventExecutorGroup(bizThreads);
-
-        String cachedAuthUser = config.getAuth().getUser();
-        String cachedAuthPassword = config.getAuth().getPassword();
+        bizExecutorGroup = new DefaultEventLoopGroup(bizThreads);
 
         // 构建翻译配置（全局默认）
         ProxyConfig.TranslationConf trc = config.getTranslation();
@@ -89,17 +98,22 @@ public class ProxyBootstrap {
                 .withIdentifierCase(TranslationConfig.IdentifierCase.valueOf(trc.getIdentifierCase()));
 
         // 将 ProxyConfig.TargetConfig 转换为 BackendEntry 列表
-        List<BackendEntry> backends = new ArrayList<>();
+        List<BackendEntry> backends = new ArrayList<BackendEntry>();
         for (ProxyConfig.TargetConfig tc : config.getBackends()) {
             backends.add(ConfigWatcher.toBackendEntry(tc));
         }
 
-        // 初始化多后端连接池管理器（传入 reload 参数）
+        // 初始化多后端连接池管理器
         backendPoolManager = new BackendPoolManager(
                 backends, defaultTranslationConfig, config.getReloadQueueCapacity(), config.getReloadDrainTimeoutMs());
 
-        // 将路由器注入 CommandHandler
-        CommandHandler.setBackendRouter(backendPoolManager);
+        // 注入前端协议的结果集编码器（SPI 可插拔）：
+        // PG 等前端按各自线协议编码结果；MySQL 前端沿用内置默认实现（responseWriter 保持 null）。
+        if (!"MYSQL".equalsIgnoreCase(frontendProtocol.id())) {
+            ResultSetEncoder.setResponseWriter(frontendProtocol.newResponseWriter());
+            ResultSetEncoder.setTypeMapper(frontendProtocol.newTypeMapper());
+        }
+
         // 初始化指标模块
         ProxyConfig.MetricsConf mc = config.getMetrics();
         if (mc.isEnabled()) {
@@ -111,6 +125,9 @@ public class ProxyBootstrap {
             metricsModule = new MetricsModule(metricsConfig);
             metricsModule.start();
         }
+
+        // 创建 AuthConfig 适配器
+        final AuthConfig authConfigAdapter = new ProxyAuthConfig(config);
 
         try {
             ServerBootstrap bootstrap = new ServerBootstrap();
@@ -125,21 +142,29 @@ public class ProxyBootstrap {
                         protected void initChannel(SocketChannel ch) {
                             ChannelPipeline pipeline = ch.pipeline();
 
+                            // todo 这个地方addLast，最后一个是最新执行的么，bizExecutorGroup为什么给handshakeHandler
                             pipeline.addLast("nettyMetrics", new NettyMetricsHandler());
-                            pipeline.addLast("decoder", new MySQLPacketDecoder(config.getMaxAllowedPacket()));
-                            pipeline.addLast("encoder", new MySQLPacketEncoder());
+                            pipeline.addLast("decoder", frontendProtocol.newDecoder(config.getMaxAllowedPacket()));
+                            pipeline.addLast("encoder", frontendProtocol.newEncoder());
 
                             pipeline.addLast("idleHandler", new IdleStateHandler(28800, 28800, 0));
 
                             pipeline.addLast(
                                     "handshakeHandler",
-                                    new HandshakeHandler(cachedAuthUser, cachedAuthPassword, bizExecutorGroup));
+                                    frontendProtocol.newHandshakeHandler(
+                                            authConfigAdapter, bizExecutorGroup, backendPoolManager));
                         }
                     });
 
-            ChannelFuture future = bootstrap.bind(config.getPort()).sync();
+            // 使用配置端口或协议默认端口
+            int port = config.getPort();
+            if (port <= 0 || port == 3306) {
+                port = frontendProtocol.defaultPort();
+            }
+
+            ChannelFuture future = bootstrap.bind(port).sync();
             log.info("========================================");
-            log.info("  MySQL Proxy started on port {}", config.getPort());
+            log.info("  SDT Proxy started (frontend: {}) on port {}", frontendProtocol.id(), port);
             log.info(
                     "  Backends: {} configured",
                     backendPoolManager.getBackendNames().size());
@@ -179,7 +204,6 @@ public class ProxyBootstrap {
     }
 
     public void shutdown() {
-        // 先停止 watcher，避免 reload 干扰 shutdown
         if (metricsModule != null) {
             metricsModule.stop();
         }
@@ -198,12 +222,36 @@ public class ProxyBootstrap {
         if (workerGroup != null) {
             workerGroup.shutdownGracefully();
         }
-        log.info("MySQL Proxy stopped.");
+        log.info("SDT Proxy stopped.");
     }
 
     public static void main(String[] args) throws Exception {
         ProxyConfig config = ConfigLoader.load();
         ProxyBootstrap bootstrap = new ProxyBootstrap(config);
         bootstrap.start();
+    }
+
+    /**
+     * todo 只有一个实现，还需要抽象么？这个地方为什么要抽象出AuthConfig？
+     * AuthConfig 适配器 —— 从 ProxyConfig 获取认证信息，
+     * 实现 {@link com.translator.proxy.protocol.frontend.AuthConfig} 接口。
+     */
+    private static class ProxyAuthConfig implements AuthConfig {
+
+        private final ProxyConfig proxyConfig;
+
+        ProxyAuthConfig(ProxyConfig proxyConfig) {
+            this.proxyConfig = proxyConfig;
+        }
+
+        @Override
+        public String getUsername() {
+            return proxyConfig.getAuth().getUser();
+        }
+
+        @Override
+        public String getPassword() {
+            return proxyConfig.getAuth().getPassword();
+        }
     }
 }

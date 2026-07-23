@@ -2,7 +2,7 @@ package com.translator.proxy.backend.mapper;
 
 import java.sql.Types;
 
-import com.translator.proxy.protocol.constant.ColumnType;
+import com.translator.proxy.protocol.mysql.constant.ColumnType;
 
 /**
  * JDBC Types → MySQL ColumnType 映射器。

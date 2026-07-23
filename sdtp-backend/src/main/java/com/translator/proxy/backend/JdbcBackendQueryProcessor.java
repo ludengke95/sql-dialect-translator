@@ -7,28 +7,25 @@ import org.slf4j.LoggerFactory;
 
 import com.translator.metrics.BackendMetrics;
 import com.translator.proxy.backend.mapper.ResultSetEncoder;
-import com.translator.proxy.core.handler.AuthHandler;
-import com.translator.proxy.core.handler.CommandHandler;
+import com.translator.proxy.core.handler.QueryProcessor;
 import com.translator.proxy.core.handler.SessionAttribute;
 import com.translator.proxy.core.handler.SqlTranslationContext;
 import com.translator.proxy.core.session.FrontendSession;
 import com.translator.proxy.metrics.HikariMetricsTrackerFactory;
-import com.translator.proxy.protocol.codec.MySQLPacketEncoder;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
-import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 
 /**
  * 基于 JDBC 的后端查询处理器。
  *
- * <p>实现 CommandHandler.QueryProcessor 接口，管理 HikariCP 连接池，
+ * <p>实现 QueryProcessor 接口，管理 HikariCP 连接池，
  * 在独立线程中执行 SQL 并通过 ResultSetEncoder 将结果流式回传。
  *
  * <p>线程安全：连接池本身是线程安全的，每个查询从池中获取连接后独立执行。
  */
-public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor {
+public class JdbcBackendQueryProcessor implements QueryProcessor {
     private static final Logger log = LoggerFactory.getLogger(JdbcBackendQueryProcessor.class);
     /** 专属的 SQL 翻译审计日志 Logger */
     private static final Logger transRecordLog = LoggerFactory.getLogger("sql-translate-record");
@@ -106,7 +103,6 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
                 conn = dataSource.getConnection();
                 isNewConnection = true;
             }
-            log.debug("Executing SQL [isTx={}, isNew={}]: {}", isTx, isNewConnection, formatSqlForLog(sql));
             try (Statement stmt = createStatement(conn)) {
                 boolean isResultSet = stmt.execute(sql);
                 if (isResultSet) {
@@ -114,7 +110,6 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
                         ResultSetEncoder.encodeAndWrite(ctx, rs, new ResultSetEncoder.SeqGenerator(), backendName);
                     }
                 } else {
-                    // UPDATE/INSERT/DELETE 等
                     int updateCount = stmt.getUpdateCount();
                     ResultSetEncoder.encodeEmpty(ctx, Math.max(updateCount, 0), 0);
                     BackendMetrics.observeAffectedRows(backendName, Math.max(updateCount, 0));
@@ -185,8 +180,7 @@ public class JdbcBackendQueryProcessor implements CommandHandler.QueryProcessor 
     }
 
     private void writeError(ChannelHandlerContext ctx, int errorCode, String sqlState, String message) {
-        ByteBuf err = AuthHandler.buildErrPacket(ctx.alloc(), errorCode, sqlState, message);
-        ctx.writeAndFlush(new MySQLPacketEncoder.OutgoingPacket(err, (byte) 1));
+        ResultSetEncoder.writeError(ctx, errorCode, sqlState, message);
     }
 
     @Override

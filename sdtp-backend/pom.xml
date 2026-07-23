@@ -12,6 +12,11 @@
     <dependencies>
         <dependency>
             <groupId>com.draven.sql.translator</groupId>
+            <artifactId>sdtp-protocol-mysql</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.draven.sql.translator</groupId>
             <artifactId>sdtp-core</artifactId>
             <version>${project.version}</version>
         </dependency>
