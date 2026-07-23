@@ -269,25 +269,46 @@ jobs:
           done
           docker logs sdtp --tail 30
 
-          # 通过 Docker 容器做真实 MySQL 握手探测，路径与测试脚本完全一致
-          echo "等待 SDTP MySQL 握手层就绪..."
-          PROBE_IMAGE="mysql:8.0"
-          for i in $(seq 1 40); do
-            if docker run --rm \
-                 --add-host host.docker.internal:host-gateway \
-                 "$PROBE_IMAGE" \
-                 mysqladmin ping \
-                   -h host.docker.internal \
-                   -P ${SDTP_PORT} \
-                   -u ${SDTP_USER} \
-                   -p${SDTP_PASS} \
-                   --connect-timeout=3 > /dev/null 2>&1; then
-              echo "  ✅ SDTP MySQL handshake ready (attempt $i)"
-              break
-            fi
-            echo "  ⏳ 等待 SDTP 握手就绪... (attempt $i/40)"
-            sleep 3
-          done
+          # 根据前端协议 (FRONTEND_PROTO) 选择对应的测试连通性策略
+          if [ "$FRONTEND_PROTO" = "POSTGRESQL" ]; then
+            echo "等待 SDTP PostgreSQL 握手层就绪..."
+            PROBE_IMAGE="postgres:15-alpine"
+            for i in $(seq 1 40); do
+              if docker run --rm \
+                   --add-host host.docker.internal:host-gateway \
+                   "$PROBE_IMAGE" \
+                   pg_isready \
+                     -h host.docker.internal \
+                     -p ${SDTP_PORT} \
+                     -U ${SDTP_USER} \
+                     -d ${BE_DB} \
+                     -t 3 > /dev/null 2>&1; then
+                echo "  ✅ SDTP PostgreSQL handshake ready (attempt $i)"
+                break
+              fi
+              echo "  ⏳ 等待 SDTP PostgreSQL 握手就绪... (attempt $i/40)"
+              sleep 3
+            done
+          else
+            echo "等待 SDTP MySQL 握手层就绪..."
+            PROBE_IMAGE="mysql:8.0"
+            for i in $(seq 1 40); do
+              if docker run --rm \
+                   --add-host host.docker.internal:host-gateway \
+                   "$PROBE_IMAGE" \
+                   mysqladmin ping \
+                     -h host.docker.internal \
+                     -P ${SDTP_PORT} \
+                     -u ${SDTP_USER} \
+                     -p${SDTP_PASS} \
+                     --connect-timeout=3 > /dev/null 2>&1; then
+                echo "  ✅ SDTP MySQL handshake ready (attempt $i)"
+                break
+              fi
+              echo "  ⏳ 等待 SDTP MySQL 握手就绪... (attempt $i/40)"
+              sleep 3
+            done
+          fi
 
       # ====================================================================
       # 7. 执行集成测试
