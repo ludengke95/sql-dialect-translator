@@ -59,7 +59,7 @@ jobs:
           mvn clean test-compile -pl sdt-core -am -DskipTests
 
       # ====================================================================
-      # 5. 下载或准备 PARROT 官方数据集
+      # 5. 下载 PARROT 官方数据集
       # ====================================================================
       - name: Cache or Download PARROT Dataset
         run: |
@@ -68,12 +68,11 @@ jobs:
           if [ -z "$DATA_URL" ]; then
             DATA_URL="https://huggingface.co/datasets/weizhoudb/PARROT/resolve/main/parrot_diverse.json"
           fi
-          echo "Attempting to download dataset from: $DATA_URL"
-          curl -L -s --max-time 30 -o benchmark/parrot-data/parrot_dataset.json "$DATA_URL" || true
+          echo "Downloading dataset from: $DATA_URL"
+          curl -L -s -o benchmark/parrot-data/parrot_dataset.json "$DATA_URL" || true
           
-          # 检查文件合法性：若为空，或者仅包含 Git LFS 指针字符串 (oid sha256)，说明未获取到真实数据，自动退回使用项目内置全量用例集
-          if [ ! -s benchmark/parrot-data/parrot_dataset.json ] || grep -q "git-lfs.github.com" benchmark/parrot-data/parrot_dataset.json; then
-            echo "⚠️ 远程文件为 Git LFS 指针或下载超时，自动退回使用 SDT 内置全量评测数据集"
+          if [ ! -s benchmark/parrot-data/parrot_dataset.json ]; then
+            echo "⚠️ 下载远程数据集失败，退回使用本地内置样本数据集"
             cp sdt-core/src/test/resources/parrot/parrot_full_cases.json benchmark/parrot-data/parrot_dataset.json
           fi
           echo "Dataset ready. File size: $(wc -c < benchmark/parrot-data/parrot_dataset.json) bytes"
@@ -102,17 +101,11 @@ jobs:
             if [ -f "requirements.txt" ]; then
               pip install -r requirements.txt || true
             fi
-            echo "Running PARROT official validator suite..."
-            python -c "
-import sys, os
-sys.path.append('.')
-try:
-    import validator
-    print('✅ PARROT Validator module loaded successfully.')
-    print('Available validator components:', [f for f in os.listdir('validator') if not f.startswith('__')])
-except Exception as e:
-    print('Validator load error:', e)
-" | tee ../parrot-data/official_eval.log || true
+            echo "Running PARROT official evaluation module..."
+            python -m validator.evaluate \
+              --dataset ../parrot-data/parrot_dataset.json \
+              --predictions ../parrot-data/sdt_predictions.json \
+              | tee ../parrot-data/official_eval.log || true
           else
             echo "⚠️ 克隆 PARROT 官方评估仓库失败，跳过官方评估打分步骤"
           fi

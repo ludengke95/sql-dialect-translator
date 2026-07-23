@@ -3,6 +3,7 @@ package com.translator.core.benchmark;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -12,7 +13,7 @@ public class ParrotBenchmarkTest {
 
     @Test
     public void testParrotBenchmarkSampleDataset() throws Exception {
-        // 1. 加载示例测试数据集
+        // 1. 加载示例测试数据集（Legacy 格式，自动嗅探）
         List<ParrotTestCase> testCases = ParrotDataLoader.loadFromResource("parrot/parrot_sample_cases.json");
         Assert.assertNotNull(testCases);
         Assert.assertFalse("测试用例集不能为空", testCases.isEmpty());
@@ -31,7 +32,7 @@ public class ParrotBenchmarkTest {
 
     @Test
     public void testParrotBenchmarkFullDataset() throws Exception {
-        // 1. 加载全量/扩展测试数据集
+        // 1. 加载全量/扩展测试数据集（Legacy 格式，自动嗅探）
         List<ParrotTestCase> testCases = ParrotDataLoader.loadFromResource("parrot/parrot_full_cases.json");
         Assert.assertNotNull(testCases);
         Assert.assertFalse("全量测试用例集不能为空", testCases.isEmpty());
@@ -46,5 +47,109 @@ public class ParrotBenchmarkTest {
 
         Assert.assertTrue("全量 PARROT 转换成功率应在 50% 以上", report.getSuccessRate() >= 50.0);
         Assert.assertTrue("全量平均转换延迟应小于 50ms (50000μs)", report.getAverageLatencyUs() < 50000.0);
+    }
+
+    @Test
+    public void testNativeFormatParsing() throws Exception {
+        // 验证 Native 格式解析：模拟官方 PARROT 数据集的一行
+        String nativeJson = "[\n"
+                + "  {\n"
+                + "    \"id\": \"native_test_001\",\n"
+                + "    \"norm\": \"SELECT id FROM users\",\n"
+                + "    \"mysql\": \"SELECT id FROM users\",\n"
+                + "    \"postgres\": \"SELECT id FROM users\",\n"
+                + "    \"oracle\": \"SELECT id FROM users\",\n"
+                + "    \"tsql\": \"SELECT id FROM users\",\n"
+                + "    \"sqlite\": \"SELECT id FROM users\"\n"
+                + "  }\n"
+                + "]";
+
+        List<ParrotTestCase> cases = ParrotDataLoader.parse(nativeJson);
+
+        // 4 种方言支持：MYSQL, POSTGRESQL, ORACLE, SQLSERVER
+        // 全排列对数 = 4 * 3 = 12
+        Assert.assertFalse("Native 格式应能解析出测试用例", cases.isEmpty());
+        Assert.assertEquals("一行 native row 含 4 种支持方言，应展开为 12 个翻译对", 12, cases.size());
+
+        // 验证字段格式
+        for (ParrotTestCase tc : cases) {
+            Assert.assertNotNull("id 不能为空", tc.getId());
+            Assert.assertTrue("id 应含原始 row id", tc.getId().startsWith("native_test_001"));
+            Assert.assertNotNull("sourceDialect 不能为空", tc.getSourceDialect());
+            Assert.assertNotNull("targetDialect 不能为空", tc.getTargetDialect());
+            Assert.assertNotNull("sourceSql 不能为空", tc.getSourceSql());
+            Assert.assertNotNull("expectedSql 不能为空", tc.getExpectedSql());
+            Assert.assertNotEquals("sourceDialect 和 targetDialect 不能相同",
+                    tc.getSourceDialect(), tc.getTargetDialect());
+        }
+    }
+
+    @Test
+    public void testNativeFormatWithPartialDialects() throws Exception {
+        // 验证：若某行只有 mysql 和 postgres 两种方言
+        String nativeJson = "[\n"
+                + "  {\n"
+                + "    \"id\": \"partial_001\",\n"
+                + "    \"norm\": \"SELECT 1\",\n"
+                + "    \"mysql\": \"SELECT 1\",\n"
+                + "    \"postgres\": \"SELECT 1\"\n"
+                + "  }\n"
+                + "]";
+
+        List<ParrotTestCase> cases = ParrotDataLoader.parse(nativeJson);
+
+        // 2 种方言，展开 2*1=2 个翻译对
+        Assert.assertEquals("两种方言应展开为 2 个翻译对", 2, cases.size());
+
+        List<String> directions = Arrays.asList(
+                cases.get(0).getSourceDialect() + "->" + cases.get(0).getTargetDialect(),
+                cases.get(1).getSourceDialect() + "->" + cases.get(1).getTargetDialect());
+        Assert.assertTrue("应包含 MYSQL->POSTGRESQL", directions.contains("MYSQL->POSTGRESQL"));
+        Assert.assertTrue("应包含 POSTGRESQL->MYSQL", directions.contains("POSTGRESQL->MYSQL"));
+    }
+
+    @Test
+    public void testNativeFormatRunBenchmark() throws Exception {
+        // 端到端验证：Native 格式加载 + 翻译运行
+        String nativeJson = "[\n"
+                + "  {\n"
+                + "    \"id\": \"e2e_001\",\n"
+                + "    \"norm\": \"SELECT COALESCE(x, 0) FROM t\",\n"
+                + "    \"mysql\": \"SELECT IFNULL(x, 0) FROM t\",\n"
+                + "    \"postgres\": \"SELECT COALESCE(x, 0) FROM t\"\n"
+                + "  }\n"
+                + "]";
+
+        List<ParrotTestCase> cases = ParrotDataLoader.parse(nativeJson);
+        Assert.assertEquals(2, cases.size());
+
+        ParrotBenchmarkRunner runner = new ParrotBenchmarkRunner();
+        ParrotBenchmarkRunner.BenchmarkReport report = runner.runBenchmark(cases);
+
+        System.out.println("=== Native Format E2E Report ===");
+        System.out.println(report.toMarkdownReport());
+
+        Assert.assertEquals("总用例数应为 2", 2, report.getTotalCases());
+        Assert.assertTrue("平均延迟应在合理范围内", report.getAverageLatencyUs() < 100000.0);
+    }
+
+    @Test
+    public void testFormatSniffing() throws Exception {
+        // 验证格式嗅探：Legacy 格式
+        String legacyJson = "[\n"
+                + "  {\n"
+                + "    \"id\": \"L001\",\n"
+                + "    \"sourceDialect\": \"MYSQL\",\n"
+                + "    \"targetDialect\": \"POSTGRESQL\",\n"
+                + "    \"sourceSql\": \"SELECT IFNULL(x, 0) FROM t\",\n"
+                + "    \"expectedSql\": \"SELECT COALESCE(x, 0) FROM t\",\n"
+                + "    \"category\": \"test\"\n"
+                + "  }\n"
+                + "]";
+
+        List<ParrotTestCase> cases = ParrotDataLoader.parse(legacyJson);
+        Assert.assertEquals("Legacy 格式应解析出 1 条用例", 1, cases.size());
+        Assert.assertEquals("MYSQL", cases.get(0).getSourceDialect());
+        Assert.assertEquals("POSTGRESQL", cases.get(0).getTargetDialect());
     }
 }
