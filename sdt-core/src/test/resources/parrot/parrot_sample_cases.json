@@ -1,0 +1,34 @@
+[
+  {
+    "id": "PARROT_PG_MY_001",
+    "sourceDialect": "POSTGRESQL",
+    "targetDialect": "MYSQL",
+    "sourceSql": "SELECT COALESCE(user_id, 0) FROM users WHERE created_at >= NOW() - INTERVAL '7 days';",
+    "expectedSql": "SELECT IFNULL(user_id, 0) FROM users WHERE created_at >= NOW() - INTERVAL 7 DAY;",
+    "category": "date_and_coalesce"
+  },
+  {
+    "id": "PARROT_PG_MY_002",
+    "sourceDialect": "POSTGRESQL",
+    "targetDialect": "MYSQL",
+    "sourceSql": "SELECT id, name FROM products LIMIT 10 OFFSET 20;",
+    "expectedSql": "SELECT id, name FROM products LIMIT 20, 10;",
+    "category": "pagination"
+  },
+  {
+    "id": "PARROT_MY_PG_001",
+    "sourceDialect": "MYSQL",
+    "targetDialect": "POSTGRESQL",
+    "sourceSql": "SELECT IFNULL(score, 0) AS final_score FROM exam_results WHERE status = 'PASSED';",
+    "expectedSql": "SELECT COALESCE(score, 0) AS final_score FROM exam_results WHERE status = 'PASSED';",
+    "category": "function_mapping"
+  },
+  {
+    "id": "PARROT_MY_PG_002",
+    "sourceDialect": "MYSQL",
+    "targetDialect": "POSTGRESQL",
+    "sourceSql": "SELECT DATE_ADD(order_date, INTERVAL 30 DAY) FROM orders;",
+    "expectedSql": "SELECT order_date + INTERVAL '30 DAY' FROM orders;",
+    "category": "date_arithmetic"
+  }
+]
