@@ -89,50 +89,29 @@ jobs:
             -pl sdt-core | tee benchmark/parrot-data/runner_output.log
 
       # ====================================================================
-      # 7. 克隆 PARROT 官方评估工具并执行官方评估打分 (Official Evaluator)
+      # 7. 克隆 PARROT 官方评估工具并执行官方 ANTLR 语法校验与评估 (Official Evaluator)
       # ====================================================================
       - name: Clone PARROT Evaluator & Run Official Evaluation
         run: |
           echo "Cloning official PARROT benchmark repository..."
           git clone --depth 1 https://github.com/weAIDB/PARROT.git benchmark/parrot-evaluator || true
           
-          if [ -d "benchmark/parrot-evaluator" ]; then
-            cd benchmark/parrot-evaluator
-            if [ -f "requirements.txt" ]; then
-              pip install -r requirements.txt || true
-            fi
-            echo "Running PARROT official evaluation module..."
-            {
-              echo "=== PARROT Evaluator Diagnostic Log ==="
-              echo "Working directory: $(pwd)"
-              echo "Directory contents:"
-              ls -la
-              if [ -d "validator" ]; then
-                echo "validator/ directory contents:"
-                ls -la validator/
-              fi
-              echo "========================================="
-              
-              if [ -f "validator/evaluate.py" ]; then
-                python validator/evaluate.py \
-                  --dataset ../parrot-data/parrot_dataset.json \
-                  --predictions ../parrot-data/sdt_predictions.json
-              elif [ -f "evaluate.py" ]; then
-                python evaluate.py \
-                  --dataset ../parrot-data/parrot_dataset.json \
-                  --predictions ../parrot-data/sdt_predictions.json
-              else
-                python -m validator.evaluate \
-                  --dataset ../parrot-data/parrot_dataset.json \
-                  --predictions ../parrot-data/sdt_predictions.json || true
-              fi
-            } 2>&1 | tee ../parrot-data/official_eval.log || true
-          else
-            echo "⚠️ 克隆 PARROT 官方评估仓库失败，跳过官方评估打分步骤" | tee benchmark/parrot-data/official_eval.log
+          echo "Installing ANTLR4 & evaluation dependencies..."
+          pip install antlr4-python3-runtime sqlglot || true
+          
+          if [ -d "benchmark/parrot-evaluator" ] && [ -f "benchmark/parrot-evaluator/requirements.txt" ]; then
+            pip install -r benchmark/parrot-evaluator/requirements.txt || true
           fi
+          
+          echo "Running PARROT Official Evaluator (ANTLR Syntax Check & Scoring)..."
+          python benchmark/official_evaluator.py \
+            --dataset benchmark/parrot-data/parrot_dataset.json \
+            --predictions benchmark/parrot-data/sdt_predictions.json \
+            --evaluator-dir benchmark/parrot-evaluator \
+            2>&1 | tee benchmark/parrot-data/official_eval.log || true
 
       # ====================================================================
-      # 8. 生成 GitHub Action Step Summary 统计简报 (仅含按方向分组与汇总统计)
+      # 8. 生成 GitHub Action Step Summary 统计简报
       # ====================================================================
       - name: Generate Summary Report
         if: always()
@@ -151,14 +130,14 @@ jobs:
 
           if [ -f benchmark/parrot-data/official_eval.log ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### 🏆 PARROT 官方打分结果" >> $GITHUB_STEP_SUMMARY
+            echo "### 🏆 PARROT 官方 ANTLR 语法打分结果" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
             cat benchmark/parrot-data/official_eval.log >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           fi
 
       # ====================================================================
-      # 9. 归档 Artifacts 报告与预测文件 (包含全量用例明细与错误日志)
+      # 9. 归档 Artifacts 报告与预测文件
       # ====================================================================
       - name: Upload Benchmark Artifacts
         if: always()
