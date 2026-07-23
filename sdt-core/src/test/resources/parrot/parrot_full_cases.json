@@ -1,0 +1,130 @@
+[
+  {
+    "id": "PARROT_PG_MY_001",
+    "sourceDialect": "POSTGRESQL",
+    "targetDialect": "MYSQL",
+    "sourceSql": "SELECT COALESCE(user_id, 0) FROM users WHERE created_at >= NOW() - INTERVAL '7 days';",
+    "expectedSql": "SELECT IFNULL(user_id, 0) FROM users WHERE created_at >= NOW() - INTERVAL 7 DAY;",
+    "category": "date_and_coalesce"
+  },
+  {
+    "id": "PARROT_PG_MY_002",
+    "sourceDialect": "POSTGRESQL",
+    "targetDialect": "MYSQL",
+    "sourceSql": "SELECT id, name FROM products LIMIT 10 OFFSET 20;",
+    "expectedSql": "SELECT id, name FROM products LIMIT 20, 10;",
+    "category": "pagination"
+  },
+  {
+    "id": "PARROT_PG_MY_003",
+    "sourceDialect": "POSTGRESQL",
+    "targetDialect": "MYSQL",
+    "sourceSql": "SELECT first_name || ' ' || last_name AS full_name FROM employees;",
+    "expectedSql": "SELECT CONCAT(first_name, ' ', last_name) AS full_name FROM employees;",
+    "category": "string_concat"
+  },
+  {
+    "id": "PARROT_PG_MY_004",
+    "sourceDialect": "POSTGRESQL",
+    "targetDialect": "MYSQL",
+    "sourceSql": "SELECT id, score, ROW_NUMBER() OVER (PARTITION BY dept_id ORDER BY score DESC) AS rank FROM student_scores;",
+    "expectedSql": "SELECT id, score, ROW_NUMBER() OVER (PARTITION BY dept_id ORDER BY score DESC) AS rank FROM student_scores;",
+    "category": "window_function"
+  },
+  {
+    "id": "PARROT_PG_MY_005",
+    "sourceDialect": "POSTGRESQL",
+    "targetDialect": "MYSQL",
+    "sourceSql": "SELECT order_id, amount FROM orders WHERE order_date >= CURRENT_DATE - INTERVAL '1 month';",
+    "expectedSql": "SELECT order_id, amount FROM orders WHERE order_date >= CURRENT_DATE - INTERVAL 1 MONTH;",
+    "category": "date_arithmetic"
+  },
+  {
+    "id": "PARROT_PG_MY_006",
+    "sourceDialect": "POSTGRESQL",
+    "targetDialect": "MYSQL",
+    "sourceSql": "SELECT id, EXTRACT(YEAR FROM hire_date) AS hire_year FROM staff;",
+    "expectedSql": "SELECT id, EXTRACT(YEAR FROM hire_date) AS hire_year FROM staff;",
+    "category": "date_extract"
+  },
+  {
+    "id": "PARROT_PG_MY_007",
+    "sourceDialect": "POSTGRESQL",
+    "targetDialect": "MYSQL",
+    "sourceSql": "SELECT category, COUNT(*) AS cnt FROM items GROUP BY category HAVING COUNT(*) > 5 ORDER BY cnt DESC;",
+    "expectedSql": "SELECT category, COUNT(*) AS cnt FROM items GROUP BY category HAVING COUNT(*) > 5 ORDER BY cnt DESC;",
+    "category": "aggregation"
+  },
+  {
+    "id": "PARROT_PG_MY_008",
+    "sourceDialect": "POSTGRESQL",
+    "targetDialect": "MYSQL",
+    "sourceSql": "SELECT a.id, b.detail FROM table_a a LEFT JOIN table_b b ON a.id = b.a_id WHERE b.status IS NOT NULL;",
+    "expectedSql": "SELECT a.id, b.detail FROM table_a a LEFT JOIN table_b b ON a.id = b.a_id WHERE b.status IS NOT NULL;",
+    "category": "join_query"
+  },
+  {
+    "id": "PARROT_MY_PG_001",
+    "sourceDialect": "MYSQL",
+    "targetDialect": "POSTGRESQL",
+    "sourceSql": "SELECT IFNULL(score, 0) AS final_score FROM exam_results WHERE status = 'PASSED';",
+    "expectedSql": "SELECT COALESCE(score, 0) AS final_score FROM exam_results WHERE status = 'PASSED';",
+    "category": "function_mapping"
+  },
+  {
+    "id": "PARROT_MY_PG_002",
+    "sourceDialect": "MYSQL",
+    "targetDialect": "POSTGRESQL",
+    "sourceSql": "SELECT DATE_ADD(order_date, INTERVAL 30 DAY) FROM orders;",
+    "expectedSql": "SELECT order_date + INTERVAL '30 DAY' FROM orders;",
+    "category": "date_arithmetic"
+  },
+  {
+    "id": "PARROT_MY_PG_003",
+    "sourceDialect": "MYSQL",
+    "targetDialect": "POSTGRESQL",
+    "sourceSql": "SELECT id, name FROM users LIMIT 10, 50;",
+    "expectedSql": "SELECT id, name FROM users LIMIT 50 OFFSET 10;",
+    "category": "pagination"
+  },
+  {
+    "id": "PARROT_MY_PG_004",
+    "sourceDialect": "MYSQL",
+    "targetDialect": "POSTGRESQL",
+    "sourceSql": "SELECT CONCAT(city, ', ', country) AS location FROM addresses;",
+    "expectedSql": "SELECT city || ', ' || country AS location FROM addresses;",
+    "category": "string_concat"
+  },
+  {
+    "id": "PARROT_MY_PG_005",
+    "sourceDialect": "MYSQL",
+    "targetDialect": "POSTGRESQL",
+    "sourceSql": "SELECT DATE_SUB(NOW(), INTERVAL 7 DAY) AS last_week;",
+    "expectedSql": "SELECT NOW() - INTERVAL '7 DAY' AS last_week;",
+    "category": "date_arithmetic"
+  },
+  {
+    "id": "PARROT_MY_PG_006",
+    "sourceDialect": "MYSQL",
+    "targetDialect": "POSTGRESQL",
+    "sourceSql": "SELECT department_id, AVG(salary) AS avg_sal FROM employees GROUP BY department_id HAVING avg_sal > 5000;",
+    "expectedSql": "SELECT department_id, AVG(salary) AS avg_sal FROM employees GROUP BY department_id HAVING avg_sal > 5000;",
+    "category": "aggregation"
+  },
+  {
+    "id": "PARROT_MY_PG_007",
+    "sourceDialect": "MYSQL",
+    "targetDialect": "POSTGRESQL",
+    "sourceSql": "SELECT * FROM sales WHERE sale_date BETWEEN '2026-01-01' AND '2026-12-31' ORDER BY amount DESC;",
+    "expectedSql": "SELECT * FROM sales WHERE sale_date BETWEEN '2026-01-01' AND '2026-12-31' ORDER BY amount DESC;",
+    "category": "range_query"
+  },
+  {
+    "id": "PARROT_MY_PG_008",
+    "sourceDialect": "MYSQL",
+    "targetDialect": "POSTGRESQL",
+    "sourceSql": "SELECT u.id, u.username, o.total_amount FROM users u INNER JOIN (SELECT user_id, SUM(amount) AS total_amount FROM orders GROUP BY user_id) o ON u.id = o.user_id;",
+    "expectedSql": "SELECT u.id, u.username, o.total_amount FROM users u INNER JOIN (SELECT user_id, SUM(amount) AS total_amount FROM orders GROUP BY user_id) o ON u.id = o.user_id;",
+    "category": "subquery"
+  }
+]
