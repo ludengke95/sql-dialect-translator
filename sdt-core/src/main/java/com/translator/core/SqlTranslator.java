@@ -226,7 +226,7 @@ public class SqlTranslator {
             return sql;
         }
         // 预处理 PostgreSQL 等方言中 INTERVAL 'N UNIT' 为 Calcite 兼容的 INTERVAL 'N' UNIT 格式
-        sql = sql.replaceAll("(?i)\\bINTERVAL\\s+'(-?\\d+)\\s+(DAY|MONTH|YEAR|HOUR|MINUTE|SECOND)S?'", "INTERVAL '$1' $2");
+        sql = sql.replaceAll("(?i)\\bINTERVAL\\s+'?(-?\\d+)'?\\s+(DAY|MONTH|YEAR|HOUR|MINUTE|SECOND)S?", "INTERVAL '$1' $2");
 
         // 去掉 -- 行注释，防止注释内容被 normalizeUnquotedIdentifiers 错误加引号
         String result = stripLineComments(sql);
@@ -271,6 +271,8 @@ public class SqlTranslator {
      * 规整 MySQL 特有语法表达。
      * 1. GROUP_CONCAT(expr SEPARATOR ',') -> GROUP_CONCAT(expr, ',')
      * 2. LIMIT offset, count -> LIMIT count OFFSET offset
+     * 3. UPDATE t1 INNER JOIN t2 ON cond SET ... -> UPDATE t1 SET ... FROM t2 WHERE cond
+     * 4. UPDATE t1, t2 SET ... -> UPDATE t1 SET ... FROM t2
      */
     private static String normalizeMySqlSyntax(String sql) {
         if (sql == null || sql.isEmpty()) {
@@ -278,6 +280,17 @@ public class SqlTranslator {
         }
         String result = sql.replaceAll("(?i)\\bGROUP_CONCAT\\s*\\(\\s*(.+?)\\s+SEPARATOR\\s+([^)]+)\\)", "GROUP_CONCAT($1, $2)");
         result = result.replaceAll("(?i)\\bLIMIT\\s+(\\d+)\\s*,\\s*(\\d+)", "LIMIT $2 OFFSET $1");
+
+        // 处理 UPDATE t1 JOIN t2 ON cond SET assignments -> UPDATE t1 SET assignments FROM t2 WHERE cond
+        result = result.replaceAll(
+                "(?i)\\bUPDATE\\s+([a-zA-Z0-9_\"`]+)\\s+(?:AS\\s+([a-zA-Z0-9_\"`]+)\\s+)?(?:INNER|LEFT|RIGHT|CROSS)?\\s*JOIN\\s+([a-zA-Z0-9_\"`]+)\\s+(?:AS\\s+([a-zA-Z0-9_\"`]+)\\s+)?ON\\s+(.+?)\\s+SET\\s+(.+)",
+                "UPDATE $1 SET $6 FROM $3 WHERE $5");
+
+        // 处理 UPDATE t1, t2 SET assignments -> UPDATE t1 SET assignments FROM t2
+        result = result.replaceAll(
+                "(?i)\\bUPDATE\\s+([a-zA-Z0-9_\"`]+)\\s*,\\s*([a-zA-Z0-9_\"`]+)\\s+SET\\s+(.+)",
+                "UPDATE $1 SET $3 FROM $2");
+
         return result;
     }
     /**
@@ -476,7 +489,6 @@ public class SqlTranslator {
             "WINDOW",
             "OVER",
             "PARTITION",
-            "RANGE",
             "UNBOUNDED",
             "PRECEDING",
             "FOLLOWING",
