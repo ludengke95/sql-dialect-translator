@@ -26,6 +26,63 @@ public class ParrotDataLoader {
     }
 
     /**
+     * 从绝对文件路径加载 JSON 测试数据集
+     */
+    public static List<ParrotTestCase> loadFromFile(String filePath) throws Exception {
+        java.io.File file = new java.io.File(filePath);
+        if (!file.exists()) {
+            throw new IllegalArgumentException("File not found: " + filePath);
+        }
+        try (InputStream is = new java.io.FileInputStream(file)) {
+            return parseJsonStream(is);
+        }
+    }
+
+    /**
+     * 导出评测结果为 JSON 文件 (PARROT 评估格式)
+     */
+    public static void exportToJsonFile(ParrotBenchmarkRunner.BenchmarkReport report, String outputPath) throws Exception {
+        StringBuilder sb = new StringBuilder();
+        sb.append("[\n");
+        List<ParrotResult> results = report.getResults();
+        for (int i = 0; i < results.size(); i++) {
+            ParrotResult r = results.get(i);
+            ParrotTestCase tc = r.getTestCase();
+            sb.append("  {\n");
+            sb.append(String.format("    \"id\": \"%s\",\n", escapeJson(tc.getId())));
+            sb.append(String.format("    \"sourceDialect\": \"%s\",\n", escapeJson(tc.getSourceDialect())));
+            sb.append(String.format("    \"targetDialect\": \"%s\",\n", escapeJson(tc.getTargetDialect())));
+            sb.append(String.format("    \"sourceSql\": \"%s\",\n", escapeJson(tc.getSourceSql())));
+            sb.append(String.format("    \"translatedSql\": \"%s\",\n", escapeJson(r.getTranslatedSql() != null ? r.getTranslatedSql() : "")));
+            sb.append(String.format("    \"success\": %b,\n", r.isTranslationSuccess()));
+            sb.append(String.format("    \"latencyUs\": %.2f\n", r.getLatencyUs()));
+            sb.append("  }");
+            if (i < results.size() - 1) {
+                sb.append(",");
+            }
+            sb.append("\n");
+        }
+        sb.append("]\n");
+
+        java.io.File outFile = new java.io.File(outputPath);
+        if (outFile.getParentFile() != null) {
+            outFile.getParentFile().mkdirs();
+        }
+        try (java.io.FileOutputStream fos = new java.io.FileOutputStream(outFile)) {
+            fos.write(sb.toString().getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
+    private static String escapeJson(String input) {
+        if (input == null) return "";
+        return input.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
+    }
+
+    /**
      * 解析包含 JSON 数组的输入流
      */
     public static List<ParrotTestCase> parseJsonStream(InputStream is) throws Exception {

@@ -19,6 +19,38 @@ public class ParrotBenchmarkRunner {
     }
 
     /**
+     * CLI 批量评估与导出入口
+     * Usage: java -cp ... com.translator.core.benchmark.ParrotBenchmarkRunner <inputJsonPath> <outputJsonPath>
+     */
+    public static void main(String[] args) {
+        if (args.length < 2) {
+            System.err.println("Usage: ParrotBenchmarkRunner <inputJsonPath> <outputJsonPath>");
+            System.exit(1);
+        }
+
+        String inputPath = args[0];
+        String outputPath = args[1];
+
+        try {
+            System.out.println("Loading test cases from: " + inputPath);
+            List<ParrotTestCase> testCases = ParrotDataLoader.loadFromFile(inputPath);
+            System.out.println("Loaded " + testCases.size() + " test cases.");
+
+            ParrotBenchmarkRunner runner = new ParrotBenchmarkRunner();
+            BenchmarkReport report = runner.runBenchmark(testCases);
+
+            System.out.println(report.toMarkdownReport());
+
+            System.out.println("Exporting results to: " + outputPath);
+            ParrotDataLoader.exportToJsonFile(report, outputPath);
+            System.out.println("Export completed successfully!");
+        } catch (Exception e) {
+            log.error("Failed to run benchmark", e);
+            System.exit(1);
+        }
+    }
+
+    /**
      * 运行批量的 PARROT 测试用例并返回聚合报告
      */
     public BenchmarkReport runBenchmark(List<ParrotTestCase> testCases) {
