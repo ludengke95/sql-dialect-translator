@@ -48,6 +48,7 @@ import com.translator.core.config.SqlDialectFactory;
 import com.translator.core.config.TranslationConfig;
 import com.translator.core.metadata.CalciteMetadataSchema;
 import com.translator.core.metadata.MetadataProvider;
+import com.translator.core.operator.SdtOperatorTable;
 import com.translator.core.postprocessor.PostProcessorRegistry;
 import com.translator.core.preprocessor.PreProcessorRegistry;
 import com.translator.core.rewrite.SqlRewriteEngine;
@@ -280,152 +281,8 @@ public class SqlTranslator {
             CalciteConnectionConfig connectionConfig = CalciteConnectionConfig.DEFAULT;
             CalciteCatalogReader catalogReader =
                     new CalciteCatalogReader(calciteSchema, defaultSchemaPath, typeFactory, connectionConfig);
-            // 4. 构建联合算子表（标准 SQL 函数 + 方言专属函数 + 自定义方言函数如 IFNULL）
-            SqlOperatorTable stdOpTable = SqlStdOperatorTable.instance();
-            SqlOperatorTable libraryOpTable = SqlLibraryOperatorTableFactory.INSTANCE.getOperatorTable(
-                    SqlLibrary.MYSQL, SqlLibrary.ORACLE, SqlLibrary.POSTGRESQL);
-            SqlOperatorTable customOpTable = new SqlOperatorTable() {
-                private final List<SqlOperator> list = Arrays.asList(
-                        new SqlFunction(
-                                "IFNULL",
-                                SqlKind.OTHER_FUNCTION,
-                                ReturnTypes.ARG0_NULLABLE,
-                                null,
-                                OperandTypes.family(SqlTypeFamily.ANY, SqlTypeFamily.ANY),
-                                SqlFunctionCategory.SYSTEM),
-                        new SqlFunction(
-                                "DATE_ADD",
-                                SqlKind.OTHER_FUNCTION,
-                                ReturnTypes.ARG0,
-                                null,
-                                OperandTypes.family(SqlTypeFamily.ANY, SqlTypeFamily.ANY),
-                                SqlFunctionCategory.SYSTEM),
-                        new SqlFunction(
-                                "ADDDATE",
-                                SqlKind.OTHER_FUNCTION,
-                                ReturnTypes.ARG0,
-                                null,
-                                OperandTypes.family(SqlTypeFamily.ANY, SqlTypeFamily.ANY),
-                                SqlFunctionCategory.SYSTEM),
-                        new SqlFunction(
-                                "DATE_SUB",
-                                SqlKind.OTHER_FUNCTION,
-                                ReturnTypes.ARG0,
-                                null,
-                                OperandTypes.family(SqlTypeFamily.ANY, SqlTypeFamily.ANY),
-                                SqlFunctionCategory.SYSTEM),
-                        new SqlFunction(
-                                "SUBDATE",
-                                SqlKind.OTHER_FUNCTION,
-                                ReturnTypes.ARG0,
-                                null,
-                                OperandTypes.family(SqlTypeFamily.ANY, SqlTypeFamily.ANY),
-                                SqlFunctionCategory.SYSTEM),
-                        new SqlFunction(
-                                "DATE_FORMAT",
-                                SqlKind.OTHER_FUNCTION,
-                                ReturnTypes.ARG0,
-                                null,
-                                OperandTypes.VARIADIC,
-                                SqlFunctionCategory.SYSTEM),
-                        new SqlFunction(
-                                "STR_TO_DATE",
-                                SqlKind.OTHER_FUNCTION,
-                                ReturnTypes.ARG0,
-                                null,
-                                OperandTypes.VARIADIC,
-                                SqlFunctionCategory.SYSTEM),
-                        new SqlFunction(
-                                "SUBSTRING_INDEX",
-                                SqlKind.OTHER_FUNCTION,
-                                ReturnTypes.ARG0,
-                                null,
-                                OperandTypes.VARIADIC,
-                                SqlFunctionCategory.SYSTEM),
-                        new SqlFunction(
-                                "GROUP_CONCAT",
-                                SqlKind.OTHER_FUNCTION,
-                                ReturnTypes.ARG0,
-                                null,
-                                OperandTypes.VARIADIC,
-                                SqlFunctionCategory.SYSTEM),
-                        new SqlFunction(
-                                "JSON_EXTRACT",
-                                SqlKind.OTHER_FUNCTION,
-                                ReturnTypes.ARG0,
-                                null,
-                                OperandTypes.VARIADIC,
-                                SqlFunctionCategory.SYSTEM),
-                        new SqlFunction(
-                                "JSON_UNQUOTE",
-                                SqlKind.OTHER_FUNCTION,
-                                ReturnTypes.ARG0,
-                                null,
-                                OperandTypes.VARIADIC,
-                                SqlFunctionCategory.SYSTEM),
-                        new SqlFunction(
-                                "JSON_OBJECTAGG",
-                                SqlKind.OTHER_FUNCTION,
-                                ReturnTypes.ARG0,
-                                null,
-                                OperandTypes.VARIADIC,
-                                SqlFunctionCategory.SYSTEM),
-                        new SqlFunction(
-                                "JSON_AGG",
-                                SqlKind.OTHER_FUNCTION,
-                                ReturnTypes.ARG0,
-                                null,
-                                OperandTypes.VARIADIC,
-                                SqlFunctionCategory.SYSTEM),
-                        new SqlFunction(
-                                "JSON_BUILD_OBJECT",
-                                SqlKind.OTHER_FUNCTION,
-                                ReturnTypes.ARG0,
-                                null,
-                                OperandTypes.VARIADIC,
-                                SqlFunctionCategory.SYSTEM),
-                        new SqlFunction(
-                                "FIELD",
-                                SqlKind.OTHER_FUNCTION,
-                                ReturnTypes.INTEGER,
-                                null,
-                                OperandTypes.VARIADIC,
-                                SqlFunctionCategory.SYSTEM),
-                        new SqlFunction(
-                                "INSTR",
-                                SqlKind.OTHER_FUNCTION,
-                                ReturnTypes.INTEGER,
-                                null,
-                                OperandTypes.VARIADIC,
-                                SqlFunctionCategory.SYSTEM),
-                        new SqlFunction(
-                                "TIMESTAMPDIFF",
-                                SqlKind.OTHER_FUNCTION,
-                                ReturnTypes.INTEGER,
-                                null,
-                                OperandTypes.VARIADIC,
-                                SqlFunctionCategory.SYSTEM));
-
-                @Override
-                public void lookupOperatorOverloads(
-                        SqlIdentifier opName,
-                        SqlFunctionCategory category,
-                        SqlSyntax syntax,
-                        List<SqlOperator> operatorList,
-                        SqlNameMatcher nameMatcher) {
-                    for (SqlOperator op : list) {
-                        if (nameMatcher.matches(op.getName(), opName.getSimple())) {
-                            operatorList.add(op);
-                        }
-                    }
-                }
-
-                @Override
-                public List<SqlOperator> getOperatorList() {
-                    return list;
-                }
-            };
-            SqlOperatorTable chainOpTable = SqlOperatorTables.chain(stdOpTable, libraryOpTable, customOpTable);
+            // 4. 构建联合算子表（包含 Calcite 标准算子表 + SqlLibrary 算子表 + SPI 扩展算子）
+            SqlOperatorTable chainOpTable = SdtOperatorTable.instance().getChainedTable();
             // 5. 设置符合度 Conformance 级别
             SqlConformance conformance = getConformanceForSource(sourceDialect);
             // 6. 创建验证器配置，支持标示符大小写敏感（Calcite 默认与 Conformance 相关，这里支持标识符展开）
