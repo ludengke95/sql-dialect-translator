@@ -53,7 +53,7 @@ public class ParrotDialectMapping {
      * 将单行 {@link ParrotNativeRow} 展开为所有可翻译方言对的测试用例列表。
      *
      * <p>对于每一对不同的受支持方言 (src, tgt)，若该行在 src 和 tgt 列均有非空 SQL，
-     * 则生成一条 {@link ParrotTestCase}。
+     * 且属于 DML 语句（若开启 DML 过滤），则生成一条 {@link ParrotTestCase}。
      *
      * <p>生成的用例 id 格式：{@code <原id>_<srcDialect>_<tgtDialect>}，例如
      * {@code row_001_MYSQL_POSTGRESQL}。
@@ -66,19 +66,24 @@ public class ParrotDialectMapping {
             return Collections.emptyList();
         }
 
+        boolean dmlOnly = ParrotDataLoader.isDmlOnlyEnabled();
+
         // 收集该行中有值的方言 -> SQL 映射
         Map<String, String> availableDialects = new LinkedHashMap<String, String>();
         String[] columns = {"mysql", "postgres", "oracle", "tsql"};
         for (String col : columns) {
             String sql = getSqlByColumn(row, col);
             if (sql != null && !sql.trim().isEmpty()) {
+                if (dmlOnly && !ParrotDataLoader.isDmlQuery(sql)) {
+                    continue; // 过滤非 DML 方言 SQL
+                }
                 String dialectName = COLUMN_TO_DIALECT.get(col);
                 availableDialects.put(dialectName, sql);
             }
         }
 
         if (availableDialects.size() < 2) {
-            // 不足两种方言，无法生成翻译对
+            // 不足两种符合条件的方言，无法生成翻译对
             return Collections.emptyList();
         }
 

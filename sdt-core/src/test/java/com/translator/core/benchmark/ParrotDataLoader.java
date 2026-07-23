@@ -103,6 +103,46 @@ public class ParrotDataLoader {
     }
 
     // =========================================================================
+    // DML 校验与过滤辅助方法
+    // =========================================================================
+
+    /**
+     * 判断是否仅加载 DML 语句 (可通过 System Property `-Dsdt.benchmark.dmlOnly=false` 禁用)
+     */
+    public static boolean isDmlOnlyEnabled() {
+        return Boolean.parseBoolean(System.getProperty("sdt.benchmark.dmlOnly", "true"));
+    }
+
+    /**
+     * 判断给定的 SQL 语句是否属于 DML (SELECT, INSERT, UPDATE, DELETE, WITH)
+     */
+    public static boolean isDmlQuery(String sql) {
+        if (sql == null || sql.trim().isEmpty()) {
+            return false;
+        }
+        String clean = stripCommentsAndWhitespace(sql).toUpperCase();
+        return clean.startsWith("SELECT")
+                || clean.startsWith("INSERT")
+                || clean.startsWith("UPDATE")
+                || clean.startsWith("DELETE")
+                || clean.startsWith("WITH");
+    }
+
+    /**
+     * 清除前置多行注释、单行注释及空白字符
+     */
+    public static String stripCommentsAndWhitespace(String sql) {
+        if (sql == null) return "";
+        // 移除 /* ... */
+        String s = sql.replaceAll("(?s)/\\*.*?\\*/", "");
+        // 移除 -- ...
+        s = s.replaceAll("--.*?\n", "");
+        // 移除 # ...
+        s = s.replaceAll("#.*?\n", "");
+        return s.trim();
+    }
+
+    // =========================================================================
     // Native 格式解析（官方 PARROT 数据集，使用 Jackson）
     // =========================================================================
 
@@ -137,6 +177,7 @@ public class ParrotDataLoader {
      */
     static List<ParrotTestCase> parseLegacyJson(String json) {
         List<ParrotTestCase> testCases = new ArrayList<ParrotTestCase>();
+        boolean dmlOnly = isDmlOnlyEnabled();
 
         // 正则提取 JSON 对象块 {...}
         Pattern objectPattern = Pattern.compile(
@@ -156,6 +197,11 @@ public class ParrotDataLoader {
             String sourceSql = unescapeJson(matcher.group(4));
             String expectedSql = unescapeJson(matcher.group(5));
             String category = matcher.group(6) != null ? matcher.group(6) : "general";
+
+            if (dmlOnly && !isDmlQuery(sourceSql)) {
+                continue; // 自动过滤非 DML SQL
+            }
+
             testCases.add(new ParrotTestCase(id, srcDialect, targetDialect, sourceSql, expectedSql, category));
         }
 

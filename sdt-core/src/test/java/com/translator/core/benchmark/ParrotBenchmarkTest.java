@@ -88,6 +88,39 @@ public class ParrotBenchmarkTest {
     }
 
     @Test
+    public void testDmlFiltering() throws Exception {
+        // 验证 DML 工具检测函数
+        Assert.assertTrue("SELECT 应识别为 DML", ParrotDataLoader.isDmlQuery("SELECT * FROM users"));
+        Assert.assertTrue("带注释的 SELECT 应识别为 DML", ParrotDataLoader.isDmlQuery("/* comment */ SELECT 1"));
+        Assert.assertTrue("INSERT 应识别为 DML", ParrotDataLoader.isDmlQuery("INSERT INTO t VALUES(1)"));
+        Assert.assertTrue("UPDATE 应识别为 DML", ParrotDataLoader.isDmlQuery("UPDATE t SET a = 1"));
+        Assert.assertTrue("DELETE 应识别为 DML", ParrotDataLoader.isDmlQuery("DELETE FROM t"));
+        Assert.assertTrue("WITH 应识别为 DML", ParrotDataLoader.isDmlQuery("WITH cte AS (SELECT 1) SELECT * FROM cte"));
+
+        Assert.assertFalse("CREATE TABLE 应被排除", ParrotDataLoader.isDmlQuery("CREATE TABLE t (id INT)"));
+        Assert.assertFalse("ALTER TABLE 应被排除", ParrotDataLoader.isDmlQuery("ALTER TABLE t ADD COLUMN c INT"));
+        Assert.assertFalse("DROP TABLE 应被排除", ParrotDataLoader.isDmlQuery("DROP TABLE t"));
+
+        // 测试加载 DDL 和 DML 混合的 Native JSON
+        String mixedJson = "[\n"
+                + "  {\n"
+                + "    \"id\": \"dml_row\",\n"
+                + "    \"mysql\": \"SELECT 1\",\n"
+                + "    \"postgres\": \"SELECT 1\"\n"
+                + "  },\n"
+                + "  {\n"
+                + "    \"id\": \"ddl_row\",\n"
+                + "    \"mysql\": \"CREATE TABLE t (x int)\",\n"
+                + "    \"postgres\": \"CREATE TABLE t (x int)\"\n"
+                + "  }\n"
+                + "]";
+
+        List<ParrotTestCase> cases = ParrotDataLoader.parse(mixedJson);
+        Assert.assertEquals("DDL 行应被自动过滤，仅保留 1 行 DML (2 个方言对)", 2, cases.size());
+        Assert.assertTrue("保留的用例应为 DML", cases.get(0).getId().startsWith("dml_row"));
+    }
+
+    @Test
     public void testNativeFormatParsing() throws Exception {
         // 验证 Native 格式解析：模拟官方 PARROT 数据集的一行
         String nativeJson = "[\n"
