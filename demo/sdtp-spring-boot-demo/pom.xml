@@ -8,9 +8,6 @@
     </parent>
     <artifactId>sdtp-spring-boot-demo</artifactId>
     <name>SDT Proxy Spring Boot Demo</name>
-    <properties>
-        <spring-boot.version>2.7.18</spring-boot.version>
-    </properties>
     <dependencyManagement>
         <dependencies>
             <dependency>
@@ -19,6 +16,14 @@
                 <version>${spring-boot.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <!-- CVE-2025-22235: Exclude actuator-autoconfigure (not used by this module) -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-actuator-autoconfigure</artifactId>
+                <version>${spring-boot.version}</version>
+                <scope>provided</scope>
+                <optional>true</optional>
             </dependency>
         </dependencies>
     </dependencyManagement>
