@@ -13,20 +13,10 @@
     <packaging>pom</packaging>
     <properties>
         <spring-framework.version>5.3.39</spring-framework.version>
-        <!-- Override Tomcat version to fix CVE-2025-31651 (CVSS 9.8) -->
         <tomcat.version>9.0.104</tomcat.version>
-        <!--
-            Spring Boot version. 2.7.18 is the final public OSS release for 2.7.x.
-            CVE-2025-22235: The vulnerable EndpointRequest.to() resides in
-            spring-boot-actuator-autoconfigure which is NOT used by any demo module.
-            Spring Boot 3.x requires Java 17, while this project targets Java 8.
-        -->
         <spring-boot.version>2.7.18</spring-boot.version>
     </properties>
     <modules>
         <module>sdt-spring-boot-jdbc-demo</module>
-        <module>sdtp-spring-boot-demo</module>
-        <module>sdtp-business-simulator</module>
     </modules>
-
 </project>
