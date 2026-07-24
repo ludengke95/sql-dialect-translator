@@ -1,25 +1,18 @@
 # MySQL Proxy 默认配置
 proxy:
-  frontend-protocol: POSTGRESQL
-  port: 5432
+#  frontend-protocol: POSTGRESQL
+  port: 7788
   auth:
     user: root
     password: proxy_password
 backends:
   - name: tpch
-    dialect: MYSQL
-    jdbc-url: jdbc:mysql://127.0.0.1:3306/tpch?useSSL=false
-    username: root
-    password: "123456"
+    dialect: POSTGRESQL
+    jdbc-url: jdbc:postgresql://127.0.0.1:5432/mydb?currentSchema=tpch
+    username: sdtpu
+    password: pg_password
     max-pool-size: 10
     min-idle: 2
-#  - name: tpch
-#    dialect: POSTGRESQL
-#    jdbc-url: jdbc:postgresql://127.0.0.1:5432/mydb?currentSchema=tpch
-#    username: sdtpu
-#    password: pg_password
-#    max-pool-size: 10
-#    min-idle: 2
 #  - name: tpcc
 #    dialect: POSTGRESQL
 #    jdbc-url: jdbc:postgresql://127.0.0.1:5432/mydb?currentSchema=tpcc

@@ -4,25 +4,11 @@ FROM maven:3.9-eclipse-temurin-8 AS builder
 
 WORKDIR /workspace
 
-# 先复制 pom 文件，利用 Docker 层缓存加速依赖下载
-COPY pom.xml pom.xml
-COPY sdt-core/pom.xml       sdt-core/pom.xml
-COPY sdt-jdbc/pom.xml       sdt-jdbc/pom.xml
-COPY sdt-metrics/pom.xml    sdt-metrics/pom.xml
-COPY sdtp-protocol/pom.xml  sdtp-protocol/pom.xml
-COPY sdtp-protocol-mysql/pom.xml sdtp-protocol-mysql/pom.xml
-COPY sdtp-protocol-pg/pom.xml   sdtp-protocol-pg/pom.xml
-COPY sdtp-core/pom.xml      sdtp-core/pom.xml
-COPY sdtp-backend/pom.xml   sdtp-backend/pom.xml
-COPY sdtp-metrics/pom.xml   sdtp-metrics/pom.xml
-COPY sdtp-server/pom.xml    sdtp-server/pom.xml
-
-# 预下载依赖（go-offline），只有 pom 变化时才重新触发
-RUN mvn dependency:go-offline -B -q
-
-# 复制全部源码并执行打包
+# 复制项目所有文件
 COPY . .
-RUN mvn clean package -DskipTests -B -q
+
+# 编译并打包 sdtp-server 模块及其依赖 (-pl sdtp-server -am)
+RUN mvn clean package -pl sdtp-server -am -DskipTests -B -q
 
 # -------------------------------------------------------------------
 # Stage 2: 运行阶段（仅 JRE 8 镜像）
@@ -42,7 +28,7 @@ WORKDIR /opt/sdtp
 # 日志目录
 RUN mkdir -p logs
 
-EXPOSE 3306
+EXPOSE 7788
 
 # JVM 参数优化
 ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseG1GC"
