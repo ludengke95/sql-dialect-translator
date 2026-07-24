@@ -9,6 +9,7 @@
     <formats>
         <format>tar.gz</format>
         <format>zip</format>
+        <format>dir</format>
     </formats>
 
     <!-- 不包含基础目录层级 -->
