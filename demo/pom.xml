@@ -11,6 +11,9 @@
     <artifactId>sdt-demo</artifactId>
     <name>SDT Demo</name>
     <packaging>pom</packaging>
+    <properties>
+        <spring-framework.version>5.3.39</spring-framework.version>
+    </properties>
     <modules>
         <module>sdt-spring-boot-jdbc-demo</module>
         <module>sdtp-spring-boot-demo</module>
