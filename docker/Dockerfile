@@ -1,14 +1,10 @@
 # SDT Proxy Docker Image — 多阶段构建
-# Stage 1: 编译阶段（使用 Maven + JDK 8）
-FROM eclipse-temurin:8-jdk AS builder
+# Stage 1: 编译阶段（使用 Maven 3.9 + JDK 8 官方镜像）
+FROM maven:3.9-eclipse-temurin-8 AS builder
 
 WORKDIR /workspace
 
-# 先复制 Maven Wrapper 及 pom 文件，利用 Docker 层缓存加速依赖下载
-COPY .mvn/ .mvn/
-COPY mvnw mvnw
-RUN chmod +x mvnw
-
+# 先复制 pom 文件，利用 Docker 层缓存加速依赖下载
 COPY pom.xml pom.xml
 COPY sdt-core/pom.xml       sdt-core/pom.xml
 COPY sdt-jdbc/pom.xml       sdt-jdbc/pom.xml
@@ -22,14 +18,14 @@ COPY sdtp-metrics/pom.xml   sdtp-metrics/pom.xml
 COPY sdtp-server/pom.xml    sdtp-server/pom.xml
 
 # 预下载依赖（go-offline），只有 pom 变化时才重新触发
-RUN ./mvnw dependency:go-offline -B -q
+RUN mvn dependency:go-offline -B -q
 
 # 复制全部源码并执行打包
 COPY . .
-RUN ./mvnw clean package -DskipTests -B -q
+RUN mvn clean package -DskipTests -B -q
 
 # -------------------------------------------------------------------
-# Stage 2: 运行阶段（仅 JRE 8，镜像更小）
+# Stage 2: 运行阶段（仅 JRE 8 镜像）
 FROM eclipse-temurin:8-jre
 
 LABEL maintainer="sql-dialect-translator"
