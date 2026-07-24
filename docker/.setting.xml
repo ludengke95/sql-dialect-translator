@@ -1,0 +1,25 @@
+<settings>
+    <servers>
+        <server>
+            <id>dravenlu-dravenlu</id>
+            <username>cnb</username>
+            <!-- 与触发构建的用户权限一致 -->
+            <password>${env.CNB_TOKEN}</password>
+        </server>
+    </servers>
+    <profiles>
+        <profile>
+            <id>dravenlu-dravenlu-profile</id>
+            <repositories>
+                <repository>
+                    <!-- 须与 server 的 id 一致 -->
+                    <id>dravenlu-dravenlu</id>
+                    <url>https://maven.cnb.cool/dravenlu/dravenlu/-/packages/</url>
+                </repository>
+            </repositories>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+        </profile>
+    </profiles>
+</settings>

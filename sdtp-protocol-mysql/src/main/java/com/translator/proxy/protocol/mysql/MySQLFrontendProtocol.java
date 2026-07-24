@@ -77,6 +77,6 @@ public class MySQLFrontendProtocol implements FrontendProtocol {
 
     @Override
     public int defaultPort() {
-        return 3306;
+        return 7788;
     }
 }

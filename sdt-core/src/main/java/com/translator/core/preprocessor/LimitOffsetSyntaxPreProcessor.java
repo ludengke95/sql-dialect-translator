@@ -27,8 +27,6 @@ public class LimitOffsetSyntaxPreProcessor implements SourceDialectPreProcessor 
         if (sql == null || sql.isEmpty()) {
             return sql;
         }
-        return sql.replaceAll(
-                "(?i)\\bLIMIT\\s+(\\d+)\\s*,\\s*(\\d+)",
-                "LIMIT $2 OFFSET $1");
+        return sql.replaceAll("(?i)\\bLIMIT\\s+(\\d+)\\s*,\\s*(\\d+)", "LIMIT $2 OFFSET $1");
     }
 }

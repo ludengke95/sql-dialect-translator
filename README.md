@@ -48,14 +48,14 @@ ResultSet rs = conn.createStatement()
 mvn clean package -DskipTests
 tar -xzf sdtp-server/target/sdtp-server-*-SNAPSHOT.tar.gz && cd sdtp-*
 
-# 2. 启动（默认监听 3306，配置见 config/proxy-config.yml）
+# 2. 启动（默认监听 7788，配置见 config/proxy-config.yml）
 ./bin/start.sh start          # Linux 后台
 # bin\start.bat               # Windows 前台
 ```
 
 ```bash
 # 3. 客户端完全无感，跟连普通 MySQL 一模一样
-mysql -h 127.0.0.1 -P 3306 -u root -pproxy_password mydb
+mysql -h 127.0.0.1 -P 7788 -u root -pproxy_password mydb
 ```
 
 ---

@@ -7,7 +7,7 @@
 
 proxy:
   # Proxy 监听的端口（客户端连接此端口）
-  port: 3306
+  port: 7788
 
   # 客户端认证信息（客户端用此账密连接 Proxy）
   auth:

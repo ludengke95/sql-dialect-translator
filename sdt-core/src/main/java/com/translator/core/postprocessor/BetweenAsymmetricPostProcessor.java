@@ -12,8 +12,7 @@ import com.translator.core.DialectType;
 public class BetweenAsymmetricPostProcessor implements TargetDialectPostProcessor {
 
     private static final Set<DialectType> TARGET_DIALECTS = new HashSet<>(
-            Arrays.asList(DialectType.MYSQL, DialectType.POSTGRESQL, DialectType.ORACLE, DialectType.SQLSERVER)
-    );
+            Arrays.asList(DialectType.MYSQL, DialectType.POSTGRESQL, DialectType.ORACLE, DialectType.SQLSERVER));
 
     @Override
     public Set<DialectType> getTargetDialects() {

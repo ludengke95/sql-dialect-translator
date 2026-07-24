@@ -2,7 +2,6 @@ package com.translator.core.postprocessor;
 
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.List;
 import java.util.Set;
 
 import com.translator.core.DialectType;
@@ -14,8 +13,7 @@ import com.translator.core.DialectType;
 public class MysqlTargetPostProcessor implements TargetDialectPostProcessor {
 
     private final PostProcessorChain chain = new PostProcessorChain(
-            DialectType.MYSQL,
-            Arrays.asList(new IntervalSyntaxPostProcessor(), new BetweenAsymmetricPostProcessor()));
+            DialectType.MYSQL, Arrays.asList(new IntervalSyntaxPostProcessor(), new BetweenAsymmetricPostProcessor()));
 
     @Override
     public Set<DialectType> getTargetDialects() {

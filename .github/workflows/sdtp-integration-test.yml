@@ -167,7 +167,7 @@ jobs:
       backend_port: '5432'
       sdtp_user: root
       sdtp_password: proxy_password
-      sdtp_port: '3306'
+      sdtp_port: '7788'
       report_name: mysql-client-5-reports
       summary_title: "MySQL Client 5 (FE: MySQL -> BE: PG) 测试结果"
 
@@ -185,7 +185,7 @@ jobs:
       backend_port: '5432'
       sdtp_user: root
       sdtp_password: proxy_password
-      sdtp_port: '3306'
+      sdtp_port: '7788'
       report_name: mysql-client-8-reports
       summary_title: "MySQL Client 8 (FE: MySQL -> BE: PG) 测试结果"
 
@@ -203,7 +203,7 @@ jobs:
       backend_port: '5432'
       sdtp_user: root
       sdtp_password: proxy_password
-      sdtp_port: '3306'
+      sdtp_port: '7788'
       extra_docker_image_artifact: mysql5-sqlline-docker-image
       extra_docker_image_file: mysql5-sqlline.tar.gz
       report_name: mysql-jdbc-5-reports
@@ -223,7 +223,7 @@ jobs:
       backend_port: '5432'
       sdtp_user: root
       sdtp_password: proxy_password
-      sdtp_port: '3306'
+      sdtp_port: '7788'
       extra_docker_image_artifact: mysql8-sqlline-docker-image
       extra_docker_image_file: mysql8-sqlline.tar.gz
       report_name: mysql-jdbc-8-reports
@@ -243,7 +243,7 @@ jobs:
       backend_port: '5432'
       sdtp_user: root
       sdtp_password: proxy_password
-      sdtp_port: '3306'
+      sdtp_port: '7788'
       extra_docker_image_artifact: python-mysql-docker-image
       extra_docker_image_file: python-mysql.tar.gz
       report_name: python-mysql-reports

@@ -25,7 +25,7 @@ WORKDIR /opt/sdtp
 # 日志目录
 RUN mkdir -p logs
 
-EXPOSE 3306
+EXPOSE 7788
 
 # JVM 参数优化
 ENV JAVA_OPTS="-Xms256m -Xms512m -XX:+UseG1GC"

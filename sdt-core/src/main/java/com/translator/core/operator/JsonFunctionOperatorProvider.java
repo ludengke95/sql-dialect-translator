@@ -50,8 +50,7 @@ public class JsonFunctionOperatorProvider implements CustomOperatorProvider {
                     ReturnTypes.ARG0,
                     null,
                     OperandTypes.VARIADIC,
-                    SqlFunctionCategory.SYSTEM)
-    );
+                    SqlFunctionCategory.SYSTEM));
 
     @Override
     public List<SqlOperator> getOperators() {

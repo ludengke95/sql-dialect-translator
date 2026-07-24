@@ -49,7 +49,8 @@ public class PreProcessorTest {
     public void testSqlServerTopPreProcessor() {
         SqlServerTopPreProcessor processor = new SqlServerTopPreProcessor();
         String sql = "SELECT TOP 10 * FROM users";
-        String result = processor.process(sql, DialectType.SQLSERVER, DialectType.POSTGRESQL, TranslationConfig.DEFAULT);
+        String result =
+                processor.process(sql, DialectType.SQLSERVER, DialectType.POSTGRESQL, TranslationConfig.DEFAULT);
         assertEquals("SELECT * FROM users LIMIT 10", result);
     }
 
@@ -72,7 +73,8 @@ public class PreProcessorTest {
     @Test
     public void testPreProcessorRegistry() {
         String sql = "SELECT `name` FROM `users` LIMIT 10, 5";
-        String result = PreProcessorRegistry.process(sql, DialectType.MYSQL, DialectType.POSTGRESQL, TranslationConfig.DEFAULT);
+        String result =
+                PreProcessorRegistry.process(sql, DialectType.MYSQL, DialectType.POSTGRESQL, TranslationConfig.DEFAULT);
         assertNotNull(result);
         assertEquals("SELECT \"name\" FROM \"users\" LIMIT 5 OFFSET 10", result);
     }

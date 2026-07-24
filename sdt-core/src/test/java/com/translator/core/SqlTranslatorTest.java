@@ -654,7 +654,9 @@ public class SqlTranslatorTest {
     public void testPgIntervalToMysql() {
         String pgSql = "SELECT DATE '1998-12-01' - INTERVAL '90 DAY'";
         String mysqlResult = SqlTranslator.translate(pgSql, DialectType.POSTGRESQL, DialectType.MYSQL);
-        Assert.assertTrue("应归一化为 INTERVAL 90 DAY 语法: " + mysqlResult, mysqlResult.toUpperCase().contains("INTERVAL 90 DAY"));
+        Assert.assertTrue(
+                "应归一化为 INTERVAL 90 DAY 语法: " + mysqlResult,
+                mysqlResult.toUpperCase().contains("INTERVAL 90 DAY"));
     }
 
     @Test
@@ -674,7 +676,8 @@ public class SqlTranslatorTest {
         for (int i = 0; i < pgQueries.length; i++) {
             String res = SqlTranslator.translate(pgQueries[i], DialectType.POSTGRESQL, DialectType.MYSQL);
             Assert.assertNotNull("翻译结果不应为空", res);
-            Assert.assertFalse("不应包含 PG 特有的单引号包覆 Interval 单位: " + res, res.toUpperCase().contains("INTERVAL '"));
+            Assert.assertFalse(
+                    "不应包含 PG 特有的单引号包覆 Interval 单位: " + res, res.toUpperCase().contains("INTERVAL '"));
         }
     }
 }

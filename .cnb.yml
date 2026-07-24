@@ -8,3 +8,9 @@ main:
           script: docker build -t ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:latest -f docker/Dockerfile .
         - name: Docker push
           script: docker push ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}:latest
+#    - docker:
+#        image: maven:3.9-eclipse-temurin-8
+#      stages:
+#        - name: Build & Push Maven
+#          script:
+#            mvn spotless:apply && mvn clean deploy -DskipTests -s ./settings.xml

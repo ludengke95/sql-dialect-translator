@@ -1,6 +1,6 @@
 # SDT Proxy — Docker Compose 环境配置
 proxy:
-  port: 3306
+  port: 7788
   auth:
     user: root
     password: proxy_password

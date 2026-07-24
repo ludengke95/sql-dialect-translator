@@ -239,7 +239,8 @@ public class MySQLAuthHandler extends ChannelInboundHandlerAdapter {
 
     private void writeErrorAndClose(
             ChannelHandlerContext ctx, int errorCode, String sqlState, String message, byte seq) {
-        responseWriter.writeErr(seq, ctx, errorCode, sqlState, message)
+        responseWriter
+                .writeErr(seq, ctx, errorCode, sqlState, message)
                 .addListener(io.netty.channel.ChannelFutureListener.CLOSE);
     }
 

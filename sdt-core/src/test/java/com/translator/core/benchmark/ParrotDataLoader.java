@@ -1,8 +1,5 @@
 package com.translator.core.benchmark;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -14,6 +11,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * PARROT 测试数据集加载工具。
@@ -157,8 +157,7 @@ public class ParrotDataLoader {
      * @throws Exception Jackson 解析异常
      */
     static List<ParrotTestCase> parseNativeJson(String json) throws Exception {
-        List<ParrotNativeRow> rows = OBJECT_MAPPER.readValue(
-                json, new TypeReference<List<ParrotNativeRow>>() {});
+        List<ParrotNativeRow> rows = OBJECT_MAPPER.readValue(json, new TypeReference<List<ParrotNativeRow>>() {});
         return ParrotDialectMapping.expandAllRows(rows);
     }
 
@@ -277,7 +276,8 @@ public class ParrotDataLoader {
             sb.append(escapeCsv(tc.getSourceDialect())).append(",");
             sb.append(escapeCsv(tc.getTargetDialect())).append(",");
             sb.append(escapeCsv(tc.getSourceSql())).append(",");
-            sb.append(escapeCsv(r.getTranslatedSql() != null ? r.getTranslatedSql() : "")).append(",");
+            sb.append(escapeCsv(r.getTranslatedSql() != null ? r.getTranslatedSql() : ""))
+                    .append(",");
             sb.append(r.isTranslationSuccess()).append(",");
             sb.append(r.isTranslationSuccess()).append("\n"); // 默认与 success 占位一致，Python Evaluator 打分后精细更新
         }

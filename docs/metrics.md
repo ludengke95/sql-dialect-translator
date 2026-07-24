@@ -26,7 +26,7 @@
 
 ```yaml
 proxy:
-  port: 3306       # Proxy 监听端口
+  port: 7788       # Proxy 监听端口
 
 metrics:
   enabled: true    # 是否启用（默认 true）
@@ -40,14 +40,14 @@ metrics:
 | 不写 `metrics` 段 | `proxy.port + 10000` |
 | 写了 `metrics` 但不写 `port` | `proxy.port + 10000` |
 | `port: 0` | `proxy.port + 10000` |
-| `port: 13306` | `13306` |
+| `port: 17788` | `17788` |
 
-默认情况下 proxy 监听 `3306`，metrics 就是 `13306`。
+默认情况下 proxy 监听 `7788`，metrics 就是 `17788`。
 
 ### 验证
 
 ```bash
-curl http://localhost:13306/metrics
+curl http://localhost:17788/metrics
 ```
 
 ---
@@ -212,7 +212,7 @@ scrape_configs:
   - job_name: 'sdt-proxy'
     scrape_interval: 15s
     static_configs:
-      - targets: ['proxy-host:13306']   # Proxy 模式：proxy 端口 + 10000
+      - targets: ['proxy-host:17788']   # Proxy 模式：proxy 端口 + 10000
 
   - job_name: 'sdt-jdbc-app'
     scrape_interval: 15s
@@ -252,9 +252,9 @@ scrape_configs:
 
 启动 SDT（Proxy 或 JDBC 应用）后，用 curl 验证：
 
-**Proxy 模式**（假设 proxy 端口 3306）：
+**Proxy 模式**（假设 proxy 端口 7788）：
 ```bash
-curl http://localhost:13306/metrics | grep "sdt_"
+curl http://localhost:17788/metrics | grep "sdt_"
 ```
 
 **Spring Boot 模式**：

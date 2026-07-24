@@ -43,7 +43,7 @@ vim config/proxy-config.yml
 
 ```yaml
 proxy:
-  port: 3306
+  port: 7788
   auth:
     user: root
     password: proxy_password
@@ -71,10 +71,10 @@ bin\start.bat start          # 后台启动
 
 ```bash
 # 和连接普通 MySQL 完全一样
-mysql -h 127.0.0.1 -P 3306 -u root -pproxy_password mydb
+mysql -h 127.0.0.1 -P 7788 -u root -pproxy_password mydb
 
 # 或 JDBC URL
-jdbc:mysql://127.0.0.1:3306/mydb
+jdbc:mysql://127.0.0.1:7788/mydb
 ```
 
 ---
@@ -85,8 +85,8 @@ jdbc:mysql://127.0.0.1:3306/mydb
 
 ```yaml
 proxy:
-  # 监听端口（默认 3306）
-  port: 3306
+  # 监听端口（默认 7788）
+  port: 7788
 
   # 客户端认证——客户端用此账密连接 Proxy
   auth:
@@ -494,7 +494,7 @@ docker compose -f docker/docker-compose.yml up -d
 docker logs -f sdtp-proxy
 
 # 客户端连接
-mysql -h 127.0.0.1 -P 3306 -u root -pproxy_password
+mysql -h 127.0.0.1 -P 7788 -u root -pproxy_password
 ```
 
 `docker-compose.yml`（位于 `docker/` 目录）包含：
@@ -505,7 +505,7 @@ mysql -h 127.0.0.1 -P 3306 -u root -pproxy_password
 - **IvorySQL 3.1** 目标库（端口 5435，兼容 Oracle 协议的 PostgreSQL 分支）
 - **达梦数据库 (dm8)** 目标库（端口 5236，Oracle 方言组国产数据库）
 - **Apache Doris 2.0.0** 目标库（端口 9030，MySQL 协议分析型数据库）
-- **SDT Proxy**（端口 3306）
+- **SDT Proxy**（端口 7788）
 - **init-drivers**（动态自动从阿里云镜像源下载上述所有的数据库 JDBC 驱动包并挂载给 Proxy 代理）
 
 Docker 专用配置：`sdtp-server/src/main/resources/proxy-config-docker.yml`

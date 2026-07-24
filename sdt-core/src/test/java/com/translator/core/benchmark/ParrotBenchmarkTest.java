@@ -1,13 +1,13 @@
 package com.translator.core.benchmark;
 
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.io.File;
 import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+
+import org.junit.Assert;
+import org.junit.Test;
 
 /**
  * PARROT Benchmark 单元测试套件
@@ -150,8 +150,7 @@ public class ParrotBenchmarkTest {
             Assert.assertNotNull("targetDialect 不能为空", tc.getTargetDialect());
             Assert.assertNotNull("sourceSql 不能为空", tc.getSourceSql());
             Assert.assertNotNull("expectedSql 不能为空", tc.getExpectedSql());
-            Assert.assertNotEquals("sourceDialect 和 targetDialect 不能相同",
-                    tc.getSourceDialect(), tc.getTargetDialect());
+            Assert.assertNotEquals("sourceDialect 和 targetDialect 不能相同", tc.getSourceDialect(), tc.getTargetDialect());
         }
     }
 

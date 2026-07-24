@@ -39,7 +39,8 @@ public interface CustomOperatorProvider {
      */
     default boolean supports(DialectType source, DialectType target) {
         Set<DialectType> set = getDialects();
-        return set == null || set.isEmpty()
+        return set == null
+                || set.isEmpty()
                 || (source != null && set.contains(source))
                 || (target != null && set.contains(target));
     }

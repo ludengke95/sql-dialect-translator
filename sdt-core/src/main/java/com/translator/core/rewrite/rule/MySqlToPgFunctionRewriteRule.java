@@ -1,7 +1,10 @@
 package com.translator.core.rewrite.rule;
 
-import com.translator.core.DialectType;
-import com.translator.core.rewrite.FunctionRewriteRule;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+
 import org.apache.calcite.sql.SqlBasicCall;
 import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlFunction;
@@ -13,10 +16,8 @@ import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.util.NlsString;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
+import com.translator.core.DialectType;
+import com.translator.core.rewrite.FunctionRewriteRule;
 
 /**
  * MySQL -> PostgreSQL 特有函数与表达式 AST 改写规则。
@@ -56,8 +57,7 @@ public class MySqlToPgFunctionRewriteRule extends FunctionRewriteRule {
             SqlFunctionCategory.SYSTEM);
 
     private static final Set<String> TARGET_FUNC_NAMES = Collections.unmodifiableSet(
-            new HashSet<>(Arrays.asList("DATE_FORMAT", "SUBSTRING_INDEX", "GROUP_CONCAT", "JSON_EXTRACT"))
-    );
+            new HashSet<>(Arrays.asList("DATE_FORMAT", "SUBSTRING_INDEX", "GROUP_CONCAT", "JSON_EXTRACT")));
 
     @Override
     protected Set<String> getFunctionNames() {
@@ -112,33 +112,27 @@ public class MySqlToPgFunctionRewriteRule extends FunctionRewriteRule {
             }
         }
 
-        return new SqlBasicCall(
-                TO_CHAR_FUNC,
-                new SqlNode[]{dateNode, convertedFormatNode},
-                call.getParserPosition());
+        return new SqlBasicCall(TO_CHAR_FUNC, new SqlNode[] {dateNode, convertedFormatNode}, call.getParserPosition());
     }
 
     private SqlNode rewriteSubstringIndex(SqlCall call) {
         if (call.operandCount() < 2) return call;
         SqlNode str = call.operand(0);
         SqlNode delim = call.operand(1);
-        SqlNode count = call.operandCount() > 2 ? call.operand(2) : SqlLiteral.createExactNumeric("1", call.getParserPosition());
+        SqlNode count = call.operandCount() > 2
+                ? call.operand(2)
+                : SqlLiteral.createExactNumeric("1", call.getParserPosition());
 
-        return new SqlBasicCall(
-                SPLIT_PART_FUNC,
-                new SqlNode[]{str, delim, count},
-                call.getParserPosition());
+        return new SqlBasicCall(SPLIT_PART_FUNC, new SqlNode[] {str, delim, count}, call.getParserPosition());
     }
 
     private SqlNode rewriteGroupConcat(SqlCall call) {
         if (call.operandCount() == 0) return call;
         SqlNode expr = call.operand(0);
-        SqlNode delim = call.operandCount() > 1 ? call.operand(1) : SqlLiteral.createCharString(",", call.getParserPosition());
+        SqlNode delim =
+                call.operandCount() > 1 ? call.operand(1) : SqlLiteral.createCharString(",", call.getParserPosition());
 
-        return new SqlBasicCall(
-                STRING_AGG_FUNC,
-                new SqlNode[]{expr, delim},
-                call.getParserPosition());
+        return new SqlBasicCall(STRING_AGG_FUNC, new SqlNode[] {expr, delim}, call.getParserPosition());
     }
 
     private SqlNode rewriteJsonExtract(SqlCall call) {
@@ -159,15 +153,12 @@ public class MySqlToPgFunctionRewriteRule extends FunctionRewriteRule {
         }
 
         return new SqlBasicCall(
-                JSON_EXTRACT_PATH_TEXT_FUNC,
-                new SqlNode[]{doc, cleanPathNode},
-                call.getParserPosition());
+                JSON_EXTRACT_PATH_TEXT_FUNC, new SqlNode[] {doc, cleanPathNode}, call.getParserPosition());
     }
 
     private static String convertDateFormatPattern(String mysqlFmt) {
         if (mysqlFmt == null) return "";
-        return mysqlFmt
-                .replace("%Y", "YYYY")
+        return mysqlFmt.replace("%Y", "YYYY")
                 .replace("%y", "YY")
                 .replace("%m", "MM")
                 .replace("%d", "DD")

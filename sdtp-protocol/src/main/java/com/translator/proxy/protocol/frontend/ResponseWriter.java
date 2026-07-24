@@ -44,7 +44,8 @@ public interface ResponseWriter {
      * @param message        错误消息
      * @return 写入操作的 ChannelFuture
      */
-    io.netty.channel.ChannelFuture writeErr(byte sequenceNumber, ChannelHandlerContext ctx, int errorCode, String sqlState, String message);
+    io.netty.channel.ChannelFuture writeErr(
+            byte sequenceNumber, ChannelHandlerContext ctx, int errorCode, String sqlState, String message);
 
     /**
      * 写入 ColumnDefinition 包。

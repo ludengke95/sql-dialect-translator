@@ -21,13 +21,11 @@ public class IntervalSyntaxPreProcessor implements SourceDialectPreProcessor {
         }
         // 1. 处理 INTERVAL '90 DAY' -> INTERVAL '90' DAY
         String result = sql.replaceAll(
-                "(?i)\\bINTERVAL\\s+'(-?\\d+)\\s+(DAY|MONTH|YEAR|HOUR|MINUTE|SECOND)S?'",
-                "INTERVAL '$1' $2");
+                "(?i)\\bINTERVAL\\s+'(-?\\d+)\\s+(DAY|MONTH|YEAR|HOUR|MINUTE|SECOND)S?'", "INTERVAL '$1' $2");
 
         // 2. 处理 INTERVAL 90 DAY -> INTERVAL '90' DAY
         result = result.replaceAll(
-                "(?i)\\bINTERVAL\\s+(\\d+)\\s+(DAY|MONTH|YEAR|HOUR|MINUTE|SECOND)S?",
-                "INTERVAL '$1' $2");
+                "(?i)\\bINTERVAL\\s+(\\d+)\\s+(DAY|MONTH|YEAR|HOUR|MINUTE|SECOND)S?", "INTERVAL '$1' $2");
 
         return result;
     }

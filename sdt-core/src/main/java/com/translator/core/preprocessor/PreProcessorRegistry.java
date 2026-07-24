@@ -89,7 +89,8 @@ public class PreProcessorRegistry {
      * @param config        翻译配置
      * @return 前置处理后的 SQL
      */
-    public static String process(String sql, DialectType sourceDialect, DialectType targetDialect, TranslationConfig config) {
+    public static String process(
+            String sql, DialectType sourceDialect, DialectType targetDialect, TranslationConfig config) {
         if (sql == null || sql.isEmpty()) {
             return sql;
         }

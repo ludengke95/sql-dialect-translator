@@ -26,8 +26,6 @@ public class GroupConcatSeparatorPreProcessor implements SourceDialectPreProcess
         if (sql == null || sql.isEmpty()) {
             return sql;
         }
-        return sql.replaceAll(
-                "(?i)\\bGROUP_CONCAT\\s*\\(\\s*(.+?)\\s+SEPARATOR\\s+([^)]+)\\)",
-                "GROUP_CONCAT($1, $2)");
+        return sql.replaceAll("(?i)\\bGROUP_CONCAT\\s*\\(\\s*(.+?)\\s+SEPARATOR\\s+([^)]+)\\)", "GROUP_CONCAT($1, $2)");
     }
 }

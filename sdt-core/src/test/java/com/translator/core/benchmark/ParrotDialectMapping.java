@@ -95,12 +95,7 @@ public class ParrotDialectMapping {
                 if (!src.equals(tgt)) {
                     String caseId = row.getId() + "_" + src + "_TO_" + tgt;
                     cases.add(new ParrotTestCase(
-                            caseId,
-                            src,
-                            tgt,
-                            availableDialects.get(src),
-                            availableDialects.get(tgt),
-                            "native"));
+                            caseId, src, tgt, availableDialects.get(src), availableDialects.get(tgt), "native"));
                 }
             }
         }

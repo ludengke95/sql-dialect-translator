@@ -52,7 +52,8 @@ public class PgResponseWriter implements ResponseWriter {
     }
 
     @Override
-    public io.netty.channel.ChannelFuture writeErr(byte sequenceNumber, ChannelHandlerContext ctx, int errorCode, String sqlState, String message) {
+    public io.netty.channel.ChannelFuture writeErr(
+            byte sequenceNumber, ChannelHandlerContext ctx, int errorCode, String sqlState, String message) {
         // sequenceNumber 在 PG 协议中无对应语义，忽略
         sendError(ctx, "ERROR", sqlState, message);
         ByteBuf payload = ctx.alloc().buffer(1);
@@ -118,7 +119,7 @@ public class PgResponseWriter implements ResponseWriter {
             String typeName = meta.getColumnTypeName(i);
             int pgOid = typeMapper.jdbcToProtocolType(jdbcType, typeName);
             int typeSize = PgTypeMapper.getTypeSize(pgOid);
-            
+
             int colLen = meta.getColumnDisplaySize(i);
             int typeModifier = (colLen > 0) ? (colLen + 4) : -1;
 

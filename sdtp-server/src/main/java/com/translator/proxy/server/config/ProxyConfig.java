@@ -12,7 +12,7 @@ import java.util.Objects;
  */
 public class ProxyConfig {
 
-    private int port = 3306;
+    private int port = 7788;
 
     /** MySQL 协议单包最大限制，默认 64MB */
     private int maxAllowedPacket = 67108864;

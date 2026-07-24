@@ -11,10 +11,15 @@ public class ParrotTestCase {
     private String expectedSql;
     private String category;
 
-    public ParrotTestCase() {
-    }
+    public ParrotTestCase() {}
 
-    public ParrotTestCase(String id, String sourceDialect, String targetDialect, String sourceSql, String expectedSql, String category) {
+    public ParrotTestCase(
+            String id,
+            String sourceDialect,
+            String targetDialect,
+            String sourceSql,
+            String expectedSql,
+            String category) {
         this.id = id;
         this.sourceDialect = sourceDialect;
         this.targetDialect = targetDialect;
@@ -73,11 +78,10 @@ public class ParrotTestCase {
 
     @Override
     public String toString() {
-        return "ParrotTestCase{" +
-                "id='" + id + '\'' +
-                ", sourceDialect='" + sourceDialect + '\'' +
-                ", targetDialect='" + targetDialect + '\'' +
-                ", category='" + category + '\'' +
-                '}';
+        return "ParrotTestCase{" + "id='"
+                + id + '\'' + ", sourceDialect='"
+                + sourceDialect + '\'' + ", targetDialect='"
+                + targetDialect + '\'' + ", category='"
+                + category + '\'' + '}';
     }
 }

@@ -16,7 +16,9 @@ public class PostProcessorChain implements TargetDialectPostProcessor {
 
     public PostProcessorChain(DialectType targetDialect, List<TargetDialectPostProcessor> processors) {
         this.targetDialect = targetDialect;
-        this.processors = processors != null ? Collections.unmodifiableList(new ArrayList<>(processors)) : Collections.emptyList();
+        this.processors = processors != null
+                ? Collections.unmodifiableList(new ArrayList<>(processors))
+                : Collections.emptyList();
     }
 
     @Override

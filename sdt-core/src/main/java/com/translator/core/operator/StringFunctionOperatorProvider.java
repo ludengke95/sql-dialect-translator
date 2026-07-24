@@ -44,8 +44,7 @@ public class StringFunctionOperatorProvider implements CustomOperatorProvider {
                     ReturnTypes.INTEGER,
                     null,
                     OperandTypes.VARIADIC,
-                    SqlFunctionCategory.SYSTEM)
-    );
+                    SqlFunctionCategory.SYSTEM));
 
     @Override
     public List<SqlOperator> getOperators() {

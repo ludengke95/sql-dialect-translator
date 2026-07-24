@@ -9,14 +9,13 @@ import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlIntervalLiteral;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlNode;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 
 import com.translator.core.DialectType;
 import com.translator.core.rewrite.SqlRewriteRule;
 
 /**
  * PostgreSQL 日期算术表达式改写规则 (POSTGRESQL → MYSQL)。
- * 
+ *
  * <p>拦截 AST 中的二元 +/- 运算符：
  * <ul>
  *   <li>date '1998-12-01' - interval '90 day'  → DATE_SUB('1998-12-01', INTERVAL 90 DAY)</li>
@@ -63,20 +62,10 @@ public class PgDateArithmeticRewriteRule implements SqlRewriteRule {
     }
 
     private static final SqlFunction DATE_ADD_FUNC = new SqlFunction(
-            "DATE_ADD",
-            SqlKind.OTHER_FUNCTION,
-            null,
-            null,
-            null,
-            org.apache.calcite.sql.SqlFunctionCategory.TIMEDATE);
+            "DATE_ADD", SqlKind.OTHER_FUNCTION, null, null, null, org.apache.calcite.sql.SqlFunctionCategory.TIMEDATE);
 
     private static final SqlFunction DATE_SUB_FUNC = new SqlFunction(
-            "DATE_SUB",
-            SqlKind.OTHER_FUNCTION,
-            null,
-            null,
-            null,
-            org.apache.calcite.sql.SqlFunctionCategory.TIMEDATE);
+            "DATE_SUB", SqlKind.OTHER_FUNCTION, null, null, null, org.apache.calcite.sql.SqlFunctionCategory.TIMEDATE);
 
     /**
      * 针对匹配到的 SqlNode 执行改写逻辑。

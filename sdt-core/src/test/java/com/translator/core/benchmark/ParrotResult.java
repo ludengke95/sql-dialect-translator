@@ -10,7 +10,12 @@ public class ParrotResult {
     private final String errorMessage;
     private final long latencyNs; // 翻译耗时（纳秒）
 
-    public ParrotResult(ParrotTestCase testCase, boolean translationSuccess, String translatedSql, String errorMessage, long latencyNs) {
+    public ParrotResult(
+            ParrotTestCase testCase,
+            boolean translationSuccess,
+            String translatedSql,
+            String errorMessage,
+            long latencyNs) {
         this.testCase = testCase;
         this.translationSuccess = translationSuccess;
         this.translatedSql = translatedSql;

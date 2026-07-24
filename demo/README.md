@@ -23,7 +23,7 @@ docker compose -f docker/docker-compose.yml up -d
 ```
 这会拉起：
 - **PostgreSQL**：监听本地 `5432` 端口，数据库名为 `mydb`，用户名 `sdtpu`，密码 `pg_password`。
-- **SDT Proxy**：监听本地 `3306` 端口，后端指向该 Postgres 库。
+- **SDT Proxy**：监听本地 `7788` 端口，后端指向该 Postgres 库。
 
 ### 2. 初始化测试数据（手动）
 因为 Demo 中去除了自动建表的操作，为了使查询能正常运行，您需要在 PostgreSQL 数据库中创建 `demo_users` 测试表。
@@ -71,7 +71,7 @@ mvn clean package -DskipTests
 ---
 
 ### 实例 2：SDT Proxy 代理模式 (`sdtp-spring-boot-demo`)
-该模式下，应用完全不需要引入任何 SDT 的专有 JAR 包或驱动。它只使用普通的 `mysql-connector-java` 驱动连接到本地的 `3306` 代理端口。
+该模式下，应用完全不需要引入任何 SDT 的专有 JAR 包或驱动。它只使用普通的 `mysql-connector-java` 驱动连接到本地的 `7788` 代理端口。
 
 1. 确认第一步中的 `docker compose`（含 Proxy）已正常运行。
 2. 进入模块目录并启动 Spring Boot 应用：

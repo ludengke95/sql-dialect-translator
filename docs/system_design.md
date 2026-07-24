@@ -231,7 +231,7 @@ classDiagram
     class MySQLFrontendProtocol {
         +id() "MYSQL"
         +getSourceDialect() "MYSQL"
-        +defaultPort() 3306
+        +defaultPort() 7788
     }
 
     class MySQLResponseWriter {

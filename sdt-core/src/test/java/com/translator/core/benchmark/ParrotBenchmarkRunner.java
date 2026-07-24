@@ -1,10 +1,5 @@
 package com.translator.core.benchmark;
 
-import com.translator.core.DialectType;
-import com.translator.core.SqlTranslator;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -14,14 +9,19 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.translator.core.DialectType;
+import com.translator.core.SqlTranslator;
+
 /**
  * PARROT Benchmark 评测执行器
  */
 public class ParrotBenchmarkRunner {
     private static final Logger log = LoggerFactory.getLogger(ParrotBenchmarkRunner.class);
 
-    public ParrotBenchmarkRunner() {
-    }
+    public ParrotBenchmarkRunner() {}
 
     /**
      * CLI 批量评估与导出入口
@@ -260,7 +260,8 @@ public class ParrotBenchmarkRunner {
             for (ParrotResult r : results) {
                 String src = r.getTestCase().getSourceDialect();
                 String tgt = r.getTestCase().getTargetDialect();
-                String dir = (src != null ? src.toUpperCase() : "UNKNOWN") + " -> " + (tgt != null ? tgt.toUpperCase() : "UNKNOWN");
+                String dir = (src != null ? src.toUpperCase() : "UNKNOWN") + " -> "
+                        + (tgt != null ? tgt.toUpperCase() : "UNKNOWN");
                 grouped.computeIfAbsent(dir, k -> new ArrayList<>()).add(r);
             }
 
@@ -279,8 +280,10 @@ public class ParrotBenchmarkRunner {
             sb.append("# 🦜 SDT - PARROT Benchmark 评测汇总报告\n\n");
             sb.append(String.format("- **总用例数**: %d\n", totalCases));
             sb.append(String.format("- **翻译成功数**: %d (%.2f%%)\n", getSuccessCases(), getSuccessRate()));
-            sb.append(String.format("- **平均转换延迟**: %.2f μs (%.3f ms)\n", getAverageLatencyUs(), getAverageLatencyUs() / 1000.0));
-            sb.append(String.format("- **P95 转换延迟**: %.2f μs (%.3f ms)\n", getP95LatencyUs(), getP95LatencyUs() / 1000.0));
+            sb.append(String.format(
+                    "- **平均转换延迟**: %.2f μs (%.3f ms)\n", getAverageLatencyUs(), getAverageLatencyUs() / 1000.0));
+            sb.append(String.format(
+                    "- **P95 转换延迟**: %.2f μs (%.3f ms)\n", getP95LatencyUs(), getP95LatencyUs() / 1000.0));
             sb.append(String.format("- **总评估耗时**: %d ms\n\n", totalDurationMs));
 
             sb.append("### 📊 方言方向分组统计\n\n");
@@ -290,12 +293,19 @@ public class ParrotBenchmarkRunner {
             Map<String, DirectionStats> dirMap = getDirectionStatsMap();
             for (Map.Entry<String, DirectionStats> entry : dirMap.entrySet()) {
                 DirectionStats s = entry.getValue();
-                sb.append(String.format("| %s | %d | %d | %.2f%% | %.1f | %.1f |\n",
-                        s.getDirection(), s.getTotalCases(), s.getSuccessCases(), s.getSuccessRate(), s.getAvgLatencyUs(), s.getP95LatencyUs()));
+                sb.append(String.format(
+                        "| %s | %d | %d | %.2f%% | %.1f | %.1f |\n",
+                        s.getDirection(),
+                        s.getTotalCases(),
+                        s.getSuccessCases(),
+                        s.getSuccessRate(),
+                        s.getAvgLatencyUs(),
+                        s.getP95LatencyUs()));
             }
 
             // 最后一行为全量汇总行
-            sb.append(String.format("| **全量汇总 (TOTAL)** | **%d** | **%d** | **%.2f%%** | **%.1f** | **%.1f** |\n",
+            sb.append(String.format(
+                    "| **全量汇总 (TOTAL)** | **%d** | **%d** | **%.2f%%** | **%.1f** | **%.1f** |\n",
                     totalCases, getSuccessCases(), getSuccessRate(), getAverageLatencyUs(), getP95LatencyUs()));
 
             return sb.toString();
@@ -314,11 +324,13 @@ public class ParrotBenchmarkRunner {
             for (ParrotResult r : results) {
                 ParrotTestCase tc = r.getTestCase();
                 String status = r.isTranslationSuccess() ? "✅ 成功" : "❌ 失败";
-                String errMsg = r.getErrorMessage() != null ? r.getErrorMessage().replace("\n", " ") : "-";
+                String errMsg =
+                        r.getErrorMessage() != null ? r.getErrorMessage().replace("\n", " ") : "-";
                 if (errMsg.length() > 50) {
                     errMsg = errMsg.substring(0, 47) + "...";
                 }
-                sb.append(String.format("| %s | %s -> %s | %s | %.1f | %s |\n",
+                sb.append(String.format(
+                        "| %s | %s -> %s | %s | %.1f | %s |\n",
                         tc.getId(), tc.getSourceDialect(), tc.getTargetDialect(), status, r.getLatencyUs(), errMsg));
             }
 
