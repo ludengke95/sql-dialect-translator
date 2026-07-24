@@ -32,7 +32,7 @@
         <testcontainers.version>1.19.3</testcontainers.version>
         <mysql.driver.version>8.0.33</mysql.driver.version>
         <postgresql.driver.version>42.5.4</postgresql.driver.version>
-        <netty.version>4.1.100.Final</netty.version>
+        <netty.version>4.1.136.Final</netty.version>
         <hikaricp.version>4.0.3</hikaricp.version>
         <snakeyaml.version>1.33</snakeyaml.version>
         <logback.version>1.2.13</logback.version>
