@@ -11,10 +11,18 @@
     <artifactId>sdt-demo</artifactId>
     <name>SDT Demo</name>
     <packaging>pom</packaging>
+    <properties>
+        <spring-framework.version>5.3.39</spring-framework.version>
+    </properties>
     <modules>
         <module>sdt-spring-boot-jdbc-demo</module>
         <module>sdtp-spring-boot-demo</module>
         <module>sdtp-business-simulator</module>
     </modules>
+
+    <properties>
+        <!-- Override Tomcat version to fix CVE-2025-31651 (CVSS 9.8) -->
+        <tomcat.version>9.0.104</tomcat.version>
+    </properties>
 
 </project>
