@@ -1,0 +1,9 @@
+com.translator.core.preprocessor.LineCommentPreProcessor
+com.translator.core.preprocessor.IntervalSyntaxPreProcessor
+com.translator.core.preprocessor.BacktickQuotingPreProcessor
+com.translator.core.preprocessor.BracketQuotingPreProcessor
+com.translator.core.preprocessor.GroupConcatSeparatorPreProcessor
+com.translator.core.preprocessor.SqlServerTopPreProcessor
+com.translator.core.preprocessor.LimitOffsetSyntaxPreProcessor
+com.translator.core.preprocessor.UpdateJoinSyntaxPreProcessor
+com.translator.core.preprocessor.UnquotedIdentifierPreProcessor

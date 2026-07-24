@@ -7,3 +7,4 @@ com.translator.core.rewrite.rule.DecodeToCaseRule
 com.translator.core.rewrite.rule.SubstrCastRule
 com.translator.core.rewrite.rule.DateAddRewriteRule
 com.translator.core.rewrite.rule.PgDateArithmeticRewriteRule
+com.translator.core.rewrite.rule.MySqlToPgFunctionRewriteRule
